@@ -1,0 +1,138 @@
+import { vi } from "vitest";
+
+import type { BackendClient } from "@/lib/backend/client";
+import type { AppSettings, BackendError, ConflictSnapshot } from "@/lib/backend/types";
+
+function unexpected(message: string): BackendError {
+  return { code: "unexpected", message };
+}
+
+export function createTestSettings(
+  overrides: Partial<AppSettings> = {},
+): AppSettings {
+  return {
+    schemaVersion: 1,
+    theme: "system",
+    fontFamily: "",
+    codeFontFamily: "",
+    launchAtLogin: false,
+    lastRepoPath: null,
+    recentRepoPaths: [],
+    reviewRuleFiles: [],
+    reviewSkillDirectory: "",
+    useReviewRuleFilesInReview: false,
+    aiDrawerOpen: false,
+    aiDrawerWidth: 360,
+    aiProvider: "openAi",
+    aiApiFormat: "chatCompletions",
+    apiKey: "",
+    baseUrl: "https://api.openai.com/v1/chat/completions",
+    model: "gpt-4o-mini",
+    ...overrides,
+  };
+}
+
+export function createBackendFixture(
+  overrides: Partial<BackendClient> = {},
+): BackendClient {
+  const notConfigured = () =>
+    Promise.reject(unexpected("Test backend method is not configured."));
+  const defaults: BackendClient = {
+    activityList: vi.fn(async () => []),
+    activityRollback: vi.fn(notConfigured),
+    repositoryWatchSnapshot: vi.fn(async () => ({ watchId: "test-watch", worktreeVersion: 0, metadataVersion: 0 })),
+    repositoryWatchStop: vi.fn(async () => undefined),
+    aiChat: vi.fn(notConfigured),
+    terminalStart: vi.fn(notConfigured),
+    terminalWrite: vi.fn(async () => undefined),
+    terminalResize: vi.fn(async () => undefined),
+    terminalTerminate: vi.fn(async () => undefined),
+    terminalAck: vi.fn(async () => undefined),
+    terminalComplete: vi.fn(async (_path, _command, cursor) => ({ start: cursor, end: cursor, items: [], hasMore: false })),
+    terminalListen: vi.fn(async () => () => undefined),
+    taskBranchesSnapshot: vi.fn(async () => []),
+    taskBranchesUnlink: vi.fn(notConfigured),
+    taskBranchesCreate: vi.fn(notConfigured),
+    taskBranchesRun: vi.fn(notConfigured),
+    consoleStart: vi.fn(notConfigured),
+    consoleCancel: vi.fn(async () => undefined),
+    consoleListen: vi.fn(async () => () => undefined),
+    filesList: vi.fn(async (_path, relativeDir) => ({ relativeDir, token: "empty", entries: [], nextCursor: null, totalEntries: 0 })),
+    filesPreview: vi.fn(notConfigured),
+    filesPrepare: vi.fn(notConfigured),
+    filesExecute: vi.fn(notConfigured),
+    conflictsSnapshot: vi.fn(async (): Promise<ConflictSnapshot> => ({ operationState: { kind: "none", conflicts: [], abortAction: null }, operationToken: "idle", files: [], continueAction: null, stagedFiles: [] })),
+    conflictsDetail: vi.fn(notConfigured),
+    conflictsResolve: vi.fn(notConfigured),
+    conflictsContinue: vi.fn(notConfigured),
+    stashSnapshot: vi.fn(async () => ({ entries: [] })),
+    stashDetail: vi.fn(notConfigured),
+    stashFileDiff: vi.fn(notConfigured),
+    stashCreate: vi.fn(notConfigured),
+    stashApply: vi.fn(notConfigured),
+    stashPop: vi.fn(notConfigured),
+    aiReviewSkillStatus: vi.fn(async () => ({ state: "ready" as const, info: { directory: "code-review-expert", name: "code-review-expert", version: "v2.2.1", fingerprint: "fixture-rules", files: ["SKILL.md", "references/severity-guide.md", "references/false-positive-rules.md", "references/output-format.md"] }, error: null })),
+    aiStartReview: vi.fn(notConfigured),
+    aiStartConflictSuggestion: vi.fn(notConfigured),
+    aiStartCommitMessage: vi.fn(notConfigured),
+    aiCancel: vi.fn(async () => undefined),
+    aiTestConnection: vi.fn(notConfigured),
+    aiListen: vi.fn(async () => () => undefined),
+    repositoryOpen: vi.fn(notConfigured),
+    repositoryInit: vi.fn(notConfigured),
+    repositoryClone: vi.fn(notConfigured),
+    repositoryRefresh: vi.fn(notConfigured),
+    changesSnapshot: vi.fn(async () => ({
+      files: [],
+      stagedCount: 0,
+      unstagedCount: 0,
+    })),
+    changesFileDiff: vi.fn(notConfigured),
+    changesStageFile: vi.fn(notConfigured),
+    changesStageFiles: vi.fn(notConfigured),
+    changesUnstageFiles: vi.fn(notConfigured),
+    changesUnstageFile: vi.fn(notConfigured),
+    changesStageHunk: vi.fn(notConfigured),
+    changesUnstageHunk: vi.fn(notConfigured),
+    changesStageLines: vi.fn(notConfigured),
+    changesUnstageLines: vi.fn(notConfigured),
+    changesDiscardFile: vi.fn(notConfigured),
+    changesScanNoise: vi.fn(notConfigured),
+    changesLineStats: vi.fn(async () => []),
+    changesRestoreNoise: vi.fn(notConfigured),
+    changesCommit: vi.fn(notConfigured),
+    refsSnapshot: vi.fn(async () => ({
+      localBranches: [],
+      remoteBranches: [],
+      tags: [],
+    })),
+    refsCreate: vi.fn(notConfigured),
+    refsSwitch: vi.fn(notConfigured),
+    refsDelete: vi.fn(notConfigured),
+    refsMerge: vi.fn(notConfigured),
+    refsRebase: vi.fn(notConfigured),
+    refsAbort: vi.fn(notConfigured),
+    remotesSnapshot: vi.fn(async () => ({ remotes: [] })),
+    remoteStartFetch: vi.fn(notConfigured),
+    remoteStartPull: vi.fn(notConfigured),
+    remoteStartPush: vi.fn(notConfigured),
+    gitRunCancel: vi.fn(async () => undefined),
+    gitRunListen: vi.fn(async () => () => undefined),
+    historyPage: vi.fn(async () => ({
+      commits: [],
+      nextCursor: null,
+      queryFingerprint: "empty",
+      continuationLanes: [],
+    })),
+    historyDetail: vi.fn(notConfigured),
+    historyFileDiff: vi.fn(notConfigured),
+    historyCheckout: vi.fn(notConfigured),
+    historyRevert: vi.fn(notConfigured),
+    historyCherryPick: vi.fn(notConfigured),
+    historyReset: vi.fn(notConfigured),
+    settingsLoad: vi.fn(async () => ({ settings: createTestSettings() })),
+    settingsSave: vi.fn(async (settings) => settings),
+  };
+
+  return { ...defaults, ...overrides };
+}

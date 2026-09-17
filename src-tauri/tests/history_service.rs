@@ -1,0 +1,862 @@
+use std::path::Path;
+
+use hq_git_lib::application::history_service::HistoryService;
+use hq_git_lib::application::refs_service::RefsService;
+use hq_git_lib::domain::changes::{DiffLineKind, DiffScope};
+use hq_git_lib::domain::error::ErrorCode;
+use hq_git_lib::domain::history::{
+    CherryPickRequest, HistoryQuery, ResetMode, ResetRequest, RevertRequest,
+};
+use hq_git_lib::domain::operation::{AbortAction, RepositoryOperationKind};
+use hq_git_lib::infrastructure::git_runner::GitCommandRunner;
+use tempfile::TempDir;
+
+async fn run_git(root: &Path, args: &[&str]) {
+    GitCommandRunner::default()
+        .run(Some(root), args)
+        .await
+        .unwrap();
+}
+
+async fn repository_fixture() -> TempDir {
+    let directory = tempfile::tempdir().unwrap();
+    run_git(directory.path(), &["init", "-b", "main"]).await;
+    run_git(directory.path(), &["config", "user.name", "HQ Test"]).await;
+    run_git(
+        directory.path(),
+        &["config", "user.email", "hq@example.test"],
+    )
+    .await;
+    run_git(directory.path(), &["config", "core.autocrlf", "false"]).await;
+    directory
+}
+
+async fn commit_file(root: &Path, contents: &str, subject: &str) {
+    std::fs::write(root.join("history.txt"), contents).unwrap();
+    run_git(root, &["add", "history.txt"]).await;
+    run_git(root, &["commit", "-m", subject]).await;
+}
+
+async fn head_hash(root: &Path) -> String {
+    GitCommandRunner::default()
+        .run(Some(root), ["rev-parse", "HEAD"])
+        .await
+        .unwrap()
+        .stdout
+        .trim()
+        .to_owned()
+}
+
+#[tokio::test]
+async fn merge_detail_lists_files_against_first_parent() {
+    let directory = repository_fixture().await;
+    let root = directory.path();
+    commit_file(root, "base\n", "base").await;
+    run_git(root, &["switch", "-c", "feature"]).await;
+    commit_file(root, "feature\n", "feature change").await;
+    run_git(root, &["switch", "main"]).await;
+    run_git(
+        root,
+        &["merge", "--no-ff", "feature", "-m", "merge feature"],
+    )
+    .await;
+    let detail = HistoryService::default()
+        .detail(root, "HEAD")
+        .await
+        .unwrap();
+    assert_eq!(detail.parent_hashes.len(), 2);
+    assert_eq!(detail.files.len(), 1);
+    assert_eq!(detail.files[0].path, "history.txt");
+    assert_eq!(detail.files[0].additions, Some(1));
+    assert_eq!(detail.files[0].deletions, Some(1));
+    let diff = HistoryService::default()
+        .file_diff(root, "HEAD", "history.txt")
+        .await
+        .unwrap();
+    assert!(!diff.hunks.is_empty());
+}
+
+#[tokio::test]
+async fn revert_older_commit_preserves_history_and_later_unrelated_changes() {
+    let fixture = repository_fixture().await;
+    let root = fixture.path();
+    commit_file(root, "one\n", "base").await;
+    commit_file(root, "two\n", "target").await;
+    let target = head_hash(root).await;
+    std::fs::write(root.join("later.txt"), "keep me\n").unwrap();
+    run_git(root, &["add", "later.txt"]).await;
+    run_git(root, &["commit", "-m", "later"]).await;
+    let previous_head = head_hash(root).await;
+    let result = HistoryService::default()
+        .revert(
+            root,
+            RevertRequest {
+                commit: target.clone(),
+                mainline: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert!(result.history.commits[0].subject.starts_with("Revert"));
+    assert_eq!(result.history.commits[0].parent_hashes, vec![previous_head]);
+    assert!(
+        result
+            .history
+            .commits
+            .iter()
+            .any(|commit| commit.hash == target)
+    );
+    assert_eq!(
+        std::fs::read_to_string(root.join("history.txt")).unwrap(),
+        "one\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(root.join("later.txt")).unwrap(),
+        "keep me\n"
+    );
+    assert!(result.workspace.repository.is_clean);
+}
+
+#[tokio::test]
+async fn revert_rejects_dirty_worktree_and_can_revert_root_commit() {
+    let fixture = repository_fixture().await;
+    let root = fixture.path();
+    commit_file(root, "one\n", "initial").await;
+    let target = head_hash(root).await;
+    std::fs::write(root.join("history.txt"), "unsaved\n").unwrap();
+    let error = HistoryService::default()
+        .revert(
+            root,
+            RevertRequest {
+                commit: target.clone(),
+                mainline: None,
+            },
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, ErrorCode::DirtyWorktree);
+    assert_eq!(head_hash(root).await, target);
+    assert_eq!(
+        std::fs::read_to_string(root.join("history.txt")).unwrap(),
+        "unsaved\n"
+    );
+    std::fs::write(root.join("history.txt"), "one\n").unwrap();
+    let result = HistoryService::default()
+        .revert(
+            root,
+            RevertRequest {
+                commit: target,
+                mainline: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert!(!root.join("history.txt").exists());
+    assert_eq!(result.history.commits.len(), 2);
+}
+
+#[tokio::test]
+async fn revert_merge_requires_mainline_and_reverses_only_selected_parent_delta() {
+    let fixture = repository_fixture().await;
+    let root = fixture.path();
+    commit_file(root, "base\n", "base").await;
+    run_git(root, &["switch", "-c", "feature"]).await;
+    commit_file(root, "feature\n", "feature change").await;
+    run_git(root, &["switch", "main"]).await;
+    std::fs::write(root.join("main.txt"), "main stays\n").unwrap();
+    run_git(root, &["add", "main.txt"]).await;
+    run_git(root, &["commit", "-m", "main change"]).await;
+    run_git(root, &["merge", "--no-ff", "--no-edit", "feature"]).await;
+    let target = head_hash(root).await;
+    for mainline in [None, Some(0), Some(3)] {
+        let error = HistoryService::default()
+            .revert(
+                root,
+                RevertRequest {
+                    commit: target.clone(),
+                    mainline,
+                },
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(error.code, ErrorCode::InvalidReference);
+        assert_eq!(head_hash(root).await, target);
+    }
+    HistoryService::default()
+        .revert(
+            root,
+            RevertRequest {
+                commit: target,
+                mainline: Some(1),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        std::fs::read_to_string(root.join("history.txt")).unwrap(),
+        "base\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(root.join("main.txt")).unwrap(),
+        "main stays\n"
+    );
+}
+
+#[tokio::test]
+async fn revert_conflict_can_be_aborted_or_resolved_and_continued() {
+    use hq_git_lib::application::conflict_service::ConflictService;
+    let fixture = repository_fixture().await;
+    let root = fixture.path();
+    commit_file(root, "one\n", "base").await;
+    commit_file(root, "two\n", "target").await;
+    let target = head_hash(root).await;
+    commit_file(root, "three\n", "later").await;
+    let previous = head_hash(root).await;
+    let result = HistoryService::default()
+        .revert(
+            root,
+            RevertRequest {
+                commit: target.clone(),
+                mainline: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(result.operation_state.kind, RepositoryOperationKind::Revert);
+    assert_eq!(
+        result.operation_state.abort_action,
+        Some(AbortAction::Revert)
+    );
+    assert_eq!(result.operation_state.conflicts.len(), 1);
+    let blocked = HistoryService::default()
+        .revert(
+            root,
+            RevertRequest {
+                commit: target.clone(),
+                mainline: None,
+            },
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(blocked.code, ErrorCode::GitOperationInProgress);
+    RefsService::default()
+        .abort(root, AbortAction::Revert)
+        .await
+        .unwrap();
+    assert_eq!(head_hash(root).await, previous);
+    assert_eq!(
+        std::fs::read_to_string(root.join("history.txt")).unwrap(),
+        "three\n"
+    );
+    HistoryService::default()
+        .revert(
+            root,
+            RevertRequest {
+                commit: target,
+                mainline: None,
+            },
+        )
+        .await
+        .unwrap();
+    std::fs::write(root.join("history.txt"), "resolved\n").unwrap();
+    run_git(root, &["add", "history.txt"]).await;
+    let conflicts = ConflictService::default();
+    let snapshot = conflicts.snapshot(root).await.unwrap();
+    let continued = conflicts
+        .continue_operation(root, &snapshot.operation_token)
+        .await
+        .unwrap();
+    assert_eq!(
+        continued.operation_state.kind,
+        RepositoryOperationKind::None
+    );
+    assert!(continued.workspace.repository.is_clean);
+    assert_ne!(head_hash(root).await, previous);
+}
+
+#[tokio::test]
+#[ignore = "manual history detail timing; excludes fixture setup"]
+async fn history_many_files_timing() {
+    let fixture = repository_fixture().await;
+    let service = HistoryService::default();
+    for count in [1, 100] {
+        for index in 0..count {
+            std::fs::write(
+                fixture.path().join(format!("document-{index:04}.md")),
+                format!("version {count}\nsecond line\n"),
+            )
+            .unwrap();
+        }
+        run_git(fixture.path(), &["add", "."]).await;
+        run_git(fixture.path(), &["commit", "-m", "many documents"]).await;
+        let hash = head_hash(fixture.path()).await;
+        let started = std::time::Instant::now();
+        let detail = service.detail(fixture.path(), &hash).await.unwrap();
+        println!(
+            "history detail files={count} elapsed_ms={}",
+            started.elapsed().as_millis()
+        );
+        assert_eq!(detail.files.len(), count);
+        assert!(detail.files.iter().all(|file| file.additions.is_some()));
+    }
+}
+
+#[tokio::test]
+async fn detail_batch_stats_cover_mixed_files() {
+    let fixture = repository_fixture().await;
+    let root = fixture.path();
+    std::fs::write(root.join("deleted.md"), "removed\n").unwrap();
+    std::fs::write(root.join("modified.md"), "before\nkeep\n").unwrap();
+    run_git(root, &["add", "."]).await;
+    run_git(root, &["commit", "-m", "initial"]).await;
+    std::fs::remove_file(root.join("deleted.md")).unwrap();
+    std::fs::write(root.join("modified.md"), "after\nkeep\nextra\n").unwrap();
+    std::fs::write(root.join("中文 文档.md"), "new document\nsecond line\n").unwrap();
+    std::fs::write(root.join("image.bin"), [0, 1, 2, 0, 3]).unwrap();
+    run_git(root, &["add", "-A"]).await;
+    run_git(root, &["commit", "-m", "mixed changes"]).await;
+    let detail = HistoryService::default()
+        .detail(root, &head_hash(root).await)
+        .await
+        .unwrap();
+    assert_eq!(detail.files.len(), 4);
+    for (path, status, additions, deletions) in [
+        ("deleted.md", "D", Some(0), Some(1)),
+        ("modified.md", "M", Some(2), Some(1)),
+        ("中文 文档.md", "A", Some(2), Some(0)),
+        ("image.bin", "A", None, None),
+    ] {
+        let file = detail.files.iter().find(|file| file.path == path).unwrap();
+        assert_eq!(file.status, status);
+        assert_eq!(
+            (file.additions, file.deletions),
+            (additions, deletions),
+            "{path}"
+        );
+    }
+}
+
+async fn three_commit_fixture() -> (TempDir, Vec<String>) {
+    let directory = repository_fixture().await;
+    let mut hashes = Vec::new();
+    for (contents, subject) in [
+        ("one\n", "first"),
+        ("two\n", "second"),
+        ("three\n", "third"),
+    ] {
+        commit_file(directory.path(), contents, subject).await;
+        hashes.push(head_hash(directory.path()).await);
+    }
+    (directory, hashes)
+}
+
+#[tokio::test]
+async fn history_pages_two_hundred_and_preserves_selected_order() {
+    let fixture = repository_fixture().await;
+    for index in 0..205 {
+        commit_file(
+            fixture.path(),
+            &format!("commit {index}\n"),
+            &format!("commit {index:03}"),
+        )
+        .await;
+    }
+    let service = HistoryService::default();
+
+    let first = service
+        .page(fixture.path(), HistoryQuery::default())
+        .await
+        .unwrap();
+    let second = service
+        .page(
+            fixture.path(),
+            HistoryQuery {
+                cursor: first.next_cursor.clone(),
+                ..HistoryQuery::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(first.commits.len(), 200);
+    assert_eq!(first.commits[0].subject, "commit 204");
+    assert_eq!(first.commits[199].subject, "commit 005");
+    assert!(first.next_cursor.is_some());
+    assert!(!first.query_fingerprint.is_empty());
+    assert_eq!(second.commits.len(), 5);
+    assert_eq!(second.commits[0].subject, "commit 004");
+    assert_eq!(second.commits[4].subject, "commit 000");
+    assert!(second.next_cursor.is_none());
+    assert_eq!(first.query_fingerprint, second.query_fingerprint);
+}
+
+#[tokio::test]
+async fn search_merges_message_author_and_hash_matches_in_history_order() {
+    let fixture = repository_fixture().await;
+    commit_file(fixture.path(), "oldest\n", "oldest body match").await;
+    run_git(
+        fixture.path(),
+        &[
+            "commit",
+            "--amend",
+            "-m",
+            "oldest body match",
+            "-m",
+            "needle",
+        ],
+    )
+    .await;
+    run_git(fixture.path(), &["config", "user.name", "Needle Author"]).await;
+    commit_file(fixture.path(), "authored\n", "authored match").await;
+    run_git(fixture.path(), &["config", "user.name", "HQ Test"]).await;
+    commit_file(fixture.path(), "newest\n", "newest needle").await;
+    let hash_prefix = GitCommandRunner::default()
+        .run(Some(fixture.path()), ["rev-parse", "--short=10", "HEAD~1"])
+        .await
+        .unwrap()
+        .stdout;
+    let service = HistoryService::default();
+
+    let page = service
+        .page(
+            fixture.path(),
+            HistoryQuery {
+                search: "needle".into(),
+                ..HistoryQuery::default()
+            },
+        )
+        .await
+        .unwrap();
+    let hash_page = service
+        .page(
+            fixture.path(),
+            HistoryQuery {
+                search: hash_prefix.trim().into(),
+                ..HistoryQuery::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        page.commits
+            .iter()
+            .map(|commit| commit.subject.as_str())
+            .collect::<Vec<_>>(),
+        ["newest needle", "authored match", "oldest body match"]
+    );
+    assert_eq!(hash_page.commits.len(), 1);
+    assert_eq!(hash_page.commits[0].subject, "authored match");
+}
+
+#[tokio::test]
+async fn detail_reports_root_and_rename_stats_and_commit_file_diff() {
+    let fixture = repository_fixture().await;
+    std::fs::write(fixture.path().join("old name.txt"), "one\ntwo\n").unwrap();
+    run_git(fixture.path(), &["add", "old name.txt"]).await;
+    run_git(
+        fixture.path(),
+        &["commit", "-m", "root subject", "-m", "root body"],
+    )
+    .await;
+    let root_hash = GitCommandRunner::default()
+        .run(Some(fixture.path()), ["rev-parse", "HEAD"])
+        .await
+        .unwrap()
+        .stdout;
+    run_git(fixture.path(), &["mv", "old name.txt", "new name.txt"]).await;
+    std::fs::write(fixture.path().join("new name.txt"), "one\nchanged\nthree\n").unwrap();
+    run_git(fixture.path(), &["add", "new name.txt"]).await;
+    run_git(
+        fixture.path(),
+        &["commit", "-m", "rename subject", "-m", "rename body"],
+    )
+    .await;
+    let rename_hash = GitCommandRunner::default()
+        .run(Some(fixture.path()), ["rev-parse", "HEAD"])
+        .await
+        .unwrap()
+        .stdout;
+    let service = HistoryService::default();
+
+    let root = service
+        .detail(fixture.path(), root_hash.trim())
+        .await
+        .unwrap();
+    let renamed = service
+        .detail(fixture.path(), rename_hash.trim())
+        .await
+        .unwrap();
+    let diff = service
+        .file_diff(fixture.path(), rename_hash.trim(), "new name.txt")
+        .await
+        .unwrap();
+
+    assert!(root.parent_hashes.is_empty());
+    assert_eq!(root.message, "root subject\n\nroot body");
+    assert_eq!(root.files.len(), 1);
+    assert_eq!(root.files[0].status, "A");
+    assert_eq!(root.files[0].additions, Some(2));
+    assert_eq!(renamed.parent_hashes.len(), 1);
+    assert_eq!(renamed.files.len(), 1);
+    assert_eq!(renamed.files[0].path, "new name.txt");
+    assert_eq!(renamed.files[0].old_path.as_deref(), Some("old name.txt"));
+    assert!(renamed.files[0].status.starts_with('R'));
+    assert_eq!(renamed.files[0].additions, Some(2));
+    assert_eq!(renamed.files[0].deletions, Some(1));
+    assert_eq!(diff.scope, DiffScope::Commit);
+    assert!(
+        diff.hunks
+            .iter()
+            .flat_map(|hunk| &hunk.lines)
+            .any(|line| { line.kind == DiffLineKind::Addition && line.content == "changed" })
+    );
+}
+
+#[tokio::test]
+async fn empty_history_is_valid_and_cursor_rejects_reference_changes() {
+    let empty = repository_fixture().await;
+    let service = HistoryService::default();
+    let page = service
+        .page(empty.path(), HistoryQuery::default())
+        .await
+        .unwrap();
+    assert!(page.commits.is_empty());
+    assert!(page.next_cursor.is_none());
+
+    for index in 0..201 {
+        commit_file(
+            empty.path(),
+            &format!("commit {index}\n"),
+            &format!("commit {index:03}"),
+        )
+        .await;
+    }
+    let first = service
+        .page(empty.path(), HistoryQuery::default())
+        .await
+        .unwrap();
+    commit_file(empty.path(), "moved\n", "reference moved").await;
+    let error = service
+        .page(
+            empty.path(),
+            HistoryQuery {
+                cursor: first.next_cursor,
+                ..HistoryQuery::default()
+            },
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code, ErrorCode::InvalidHistoryCursor);
+}
+
+#[tokio::test]
+async fn checkout_resolves_a_commit_and_enters_detached_head() {
+    let (fixture, hashes) = three_commit_fixture().await;
+    let target = &hashes[0];
+
+    let result = HistoryService::default()
+        .checkout(fixture.path(), target)
+        .await
+        .unwrap();
+
+    assert_eq!(result.workspace.repository.current_branch, None);
+    assert_eq!(
+        result.workspace.repository.head_short_hash.as_deref(),
+        Some(&target[..7])
+    );
+    assert_eq!(result.operation_state.kind, RepositoryOperationKind::None);
+    assert_eq!(result.history.commits[0].hash, *target);
+}
+
+#[tokio::test]
+async fn soft_reset_preserves_the_index_and_worktree() {
+    let (fixture, hashes) = three_commit_fixture().await;
+    std::fs::write(fixture.path().join("history.txt"), "local\n").unwrap();
+
+    let result = HistoryService::default()
+        .reset(
+            fixture.path(),
+            ResetRequest {
+                target: hashes[1].clone(),
+                mode: ResetMode::Soft,
+                confirmation: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(head_hash(fixture.path()).await, hashes[1]);
+    assert_eq!(
+        std::fs::read_to_string(fixture.path().join("history.txt")).unwrap(),
+        "local\n"
+    );
+    assert_eq!(result.workspace.changes.staged_count, 1);
+    assert_eq!(result.workspace.changes.unstaged_count, 1);
+}
+
+#[tokio::test]
+async fn mixed_reset_clears_the_index_and_preserves_the_worktree() {
+    let (fixture, hashes) = three_commit_fixture().await;
+    std::fs::write(fixture.path().join("history.txt"), "local\n").unwrap();
+
+    let result = HistoryService::default()
+        .reset(
+            fixture.path(),
+            ResetRequest {
+                target: hashes[1].clone(),
+                mode: ResetMode::Mixed,
+                confirmation: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(head_hash(fixture.path()).await, hashes[1]);
+    assert_eq!(
+        std::fs::read_to_string(fixture.path().join("history.txt")).unwrap(),
+        "local\n"
+    );
+    assert_eq!(result.workspace.changes.staged_count, 0);
+    assert_eq!(result.workspace.changes.unstaged_count, 1);
+}
+
+#[tokio::test]
+async fn hard_reset_requires_the_resolved_short_hash_and_replaces_local_changes() {
+    let (fixture, hashes) = three_commit_fixture().await;
+    let target = &hashes[0];
+    std::fs::write(fixture.path().join("history.txt"), "local\n").unwrap();
+    let service = HistoryService::default();
+
+    let error = service
+        .reset(
+            fixture.path(),
+            ResetRequest {
+                target: target.clone(),
+                mode: ResetMode::Hard,
+                confirmation: Some("wrong".into()),
+            },
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, ErrorCode::InvalidReference);
+    assert_eq!(head_hash(fixture.path()).await, hashes[2]);
+
+    let result = service
+        .reset(
+            fixture.path(),
+            ResetRequest {
+                target: target.clone(),
+                mode: ResetMode::Hard,
+                confirmation: Some(target[..7].into()),
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(head_hash(fixture.path()).await, *target);
+    assert_eq!(
+        std::fs::read_to_string(fixture.path().join("history.txt")).unwrap(),
+        "one\n"
+    );
+    assert!(result.workspace.repository.is_clean);
+    assert_eq!(result.history.commits[0].hash, *target);
+}
+
+#[tokio::test]
+async fn checkout_and_reset_reject_invalid_or_blocked_targets() {
+    let (fixture, hashes) = three_commit_fixture().await;
+    let service = HistoryService::default();
+
+    let invalid = service
+        .checkout(fixture.path(), "missing-commit")
+        .await
+        .unwrap_err();
+    assert_eq!(invalid.code, ErrorCode::InvalidReference);
+
+    run_git(fixture.path(), &["switch", "-c", "topic"]).await;
+    std::fs::write(fixture.path().join("history.txt"), "topic\n").unwrap();
+    run_git(fixture.path(), &["commit", "-am", "topic change"]).await;
+    run_git(fixture.path(), &["switch", "main"]).await;
+    std::fs::write(fixture.path().join("history.txt"), "main\n").unwrap();
+    run_git(fixture.path(), &["commit", "-am", "main change"]).await;
+    GitCommandRunner::default()
+        .run_allowing_failure(Some(fixture.path()), ["merge", "--no-edit", "topic"])
+        .await
+        .unwrap();
+
+    let checkout_error = service
+        .checkout(fixture.path(), &hashes[0])
+        .await
+        .unwrap_err();
+    assert_eq!(checkout_error.code, ErrorCode::GitOperationInProgress);
+    let reset_error = service
+        .reset(
+            fixture.path(),
+            ResetRequest {
+                target: hashes[0].clone(),
+                mode: ResetMode::Mixed,
+                confirmation: None,
+            },
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(reset_error.code, ErrorCode::GitOperationInProgress);
+}
+
+#[tokio::test]
+async fn cherry_pick_applies_to_the_current_branch() {
+    let fixture = repository_fixture().await;
+    commit_file(fixture.path(), "base\n", "base").await;
+    run_git(fixture.path(), &["switch", "-c", "topic"]).await;
+    std::fs::write(fixture.path().join("topic.txt"), "topic\n").unwrap();
+    run_git(fixture.path(), &["add", "topic.txt"]).await;
+    run_git(fixture.path(), &["commit", "-m", "topic change"]).await;
+    let topic_commit = head_hash(fixture.path()).await;
+    run_git(fixture.path(), &["switch", "main"]).await;
+
+    let result = HistoryService::default()
+        .cherry_pick(
+            fixture.path(),
+            CherryPickRequest {
+                commit: topic_commit,
+                target_branch: None,
+                return_after_success: false,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        result.workspace.repository.current_branch.as_deref(),
+        Some("main")
+    );
+    assert_eq!(result.history.commits[0].subject, "topic change");
+    assert!(fixture.path().join("topic.txt").exists());
+}
+
+#[tokio::test]
+async fn cherry_pick_selected_branch_returns_only_after_clean_success() {
+    let fixture = repository_fixture().await;
+    commit_file(fixture.path(), "base\n", "base").await;
+    run_git(fixture.path(), &["branch", "release"]).await;
+    run_git(fixture.path(), &["switch", "-c", "topic"]).await;
+    std::fs::write(fixture.path().join("topic.txt"), "topic\n").unwrap();
+    run_git(fixture.path(), &["add", "topic.txt"]).await;
+    run_git(fixture.path(), &["commit", "-m", "topic change"]).await;
+    let topic_commit = head_hash(fixture.path()).await;
+    run_git(fixture.path(), &["switch", "main"]).await;
+
+    let result = HistoryService::default()
+        .cherry_pick(
+            fixture.path(),
+            CherryPickRequest {
+                commit: topic_commit,
+                target_branch: Some("release".into()),
+                return_after_success: true,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        result.workspace.repository.current_branch.as_deref(),
+        Some("main")
+    );
+    let release_tip = GitCommandRunner::default()
+        .run(
+            Some(fixture.path()),
+            ["log", "-1", "--format=%s", "release"],
+        )
+        .await
+        .unwrap();
+    assert_eq!(release_tip.stdout.trim(), "topic change");
+    assert_eq!(result.history.commits[0].subject, "base");
+}
+
+#[tokio::test]
+async fn cherry_pick_conflict_stays_on_target_and_exposes_abort() {
+    let fixture = repository_fixture().await;
+    commit_file(fixture.path(), "base\n", "base").await;
+    run_git(fixture.path(), &["branch", "release"]).await;
+    run_git(fixture.path(), &["switch", "-c", "topic"]).await;
+    commit_file(fixture.path(), "topic\n", "topic change").await;
+    let topic_commit = head_hash(fixture.path()).await;
+    run_git(fixture.path(), &["switch", "release"]).await;
+    commit_file(fixture.path(), "release\n", "release change").await;
+    run_git(fixture.path(), &["switch", "main"]).await;
+
+    let result = HistoryService::default()
+        .cherry_pick(
+            fixture.path(),
+            CherryPickRequest {
+                commit: topic_commit,
+                target_branch: Some("release".into()),
+                return_after_success: true,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        result.workspace.repository.current_branch.as_deref(),
+        Some("release")
+    );
+    assert_eq!(
+        result.operation_state.kind,
+        RepositoryOperationKind::CherryPick
+    );
+    assert_eq!(
+        result.operation_state.abort_action,
+        Some(AbortAction::CherryPick)
+    );
+    assert_eq!(result.workspace.repository.conflict_count, 1);
+
+    let aborted = RefsService::default()
+        .abort(fixture.path(), AbortAction::CherryPick)
+        .await
+        .unwrap();
+    assert_eq!(aborted.operation_state.kind, RepositoryOperationKind::None);
+    assert_eq!(
+        aborted.workspace.repository.current_branch.as_deref(),
+        Some("release")
+    );
+    assert_eq!(
+        std::fs::read_to_string(fixture.path().join("history.txt")).unwrap(),
+        "release\n"
+    );
+}
+
+#[tokio::test]
+async fn cherry_pick_rejects_invalid_commits_and_non_local_target_branches() {
+    let fixture = repository_fixture().await;
+    commit_file(fixture.path(), "base\n", "base").await;
+    let service = HistoryService::default();
+
+    let invalid_commit = service
+        .cherry_pick(
+            fixture.path(),
+            CherryPickRequest {
+                commit: "missing".into(),
+                target_branch: None,
+                return_after_success: false,
+            },
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(invalid_commit.code, ErrorCode::InvalidReference);
+
+    let invalid_target = service
+        .cherry_pick(
+            fixture.path(),
+            CherryPickRequest {
+                commit: head_hash(fixture.path()).await,
+                target_branch: Some("missing".into()),
+                return_after_success: false,
+            },
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(invalid_target.code, ErrorCode::BranchUnavailable);
+}

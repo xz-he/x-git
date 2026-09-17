@@ -1,0 +1,26 @@
+<script setup lang="ts">
+import { computed } from "vue";
+import { FileText, Pencil, Trash2, RefreshCw } from "@lucide/vue";
+import ConflictEditor from "@/features/conflicts/ConflictEditor.vue";
+import { useFilesStore } from "@/stores/files";
+import { useConflictsStore } from "@/stores/conflicts";
+import { useOperationStore } from "@/stores/operation";
+const files = useFilesStore(); const conflicts = useConflictsStore(); const operation = useOperationStore();
+const selected = computed(() => files.selectedEntry);
+const notices = { binary: "二进制文件仅展示元数据。", unsupportedEncoding: "文件不是有效 UTF-8 文本，无法预览。", tooLarge: "文件超过 2 MiB 预览上限。", unsupported: "此文件仅支持查看元数据。", text: "" };
+</script>
+<template>
+  <section class="file-detail" aria-label="文件详情">
+    <header><div><span>工作目录 · 只读预览</span><strong>{{ selected?.relativePath ?? '仓库根目录' }}</strong></div><div v-if="selected && selected.kind !== 'restricted'" class="actions"><button aria-label="重命名选中项" title="重命名" :disabled="!files.canMutate" @click="files.requestOperation({ kind: 'rename', relativePath: selected.relativePath, newName: selected.name })"><Pencil :size="14" /><span>重命名</span></button><button aria-label="删除选中项" title="删除到恢复区" :disabled="!files.canMutate" @click="files.requestOperation({ kind: 'delete', relativePath: selected.relativePath })"><Trash2 :size="14" /><span>删除</span></button></div></header>
+    <div v-if="files.result?.applied" class="result" role="status"><strong>文件操作已完成</strong><p v-if="files.result.selectedPath">目标：{{ files.result.selectedPath }}</p><p v-if="files.result.recoveryPath">恢复位置：<code>{{ files.result.recoveryPath }}</code><span>原内容保留在此位置；需要恢复时，在原目标不存在的情况下移回。</span></p></div>
+    <div v-if="files.error && !files.confirmation" class="notice error" role="alert"><p>{{ files.error.message }}</p><details v-if="files.error.diagnostics"><summary>诊断信息</summary><pre>{{ files.error.diagnostics }}</pre></details><button v-if="files.result?.applied" aria-label="仅重试刷新" :disabled="files.busy" @click="files.retryRefresh"><RefreshCw :size="14" />仅重试刷新</button></div>
+    <p v-if="operation.isBlocked || conflicts.hasDirtyDrafts" class="notice">{{ conflicts.hasDirtyDrafts ? '保留了未保存的冲突草稿，文件管理暂不可用。' : '请先完成当前 Git 操作或解决冲突；仍可浏览文件。' }}</p>
+    <div v-if="files.previewLoading" class="empty" role="status">正在读取文件…</div>
+    <div v-else-if="files.previewError" class="notice error" role="alert"><p>{{ files.previewError.message }}</p><details v-if="files.previewError.diagnostics"><summary>诊断信息</summary><pre>{{ files.previewError.diagnostics }}</pre></details><button :disabled="files.busy" @click="files.selectEntry(selected)">重新读取</button></div>
+    <template v-else-if="files.preview"><div class="metadata">{{ files.preview.byteLength.toLocaleString() }} bytes · {{ files.preview.kind === 'text' ? (files.preview.bom ? 'UTF-8 BOM' : 'UTF-8') : '元数据' }} · {{ files.preview.lineEnding.toUpperCase() }}</div><div v-if="files.preview.kind === 'text' && files.preview.text !== null" class="editor"><ConflictEditor :key="files.preview.token" :model-value="files.preview.text" readonly label="文件只读预览" /></div><div v-else class="empty"><FileText :size="30" /><p>{{ files.preview.reason || notices[files.preview.kind] }}</p></div></template>
+    <div v-else class="empty"><FileText :size="30" /><p>{{ selected?.kind === 'restricted' ? selected.reason || '受限项不允许展开、预览或修改。' : selected?.kind === 'directory' ? '展开目录查看文件，或在当前目录下新建文件和文件夹。' : '从左侧选择文件以预览内容。' }}</p><small v-if="selected?.kind === 'directory'">空目录可见，但 Git 不跟踪空目录。</small></div>
+  </section>
+</template>
+<style scoped>
+.file-detail { grid-row: 1 / -1; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: auto; }header { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--surface-panel); }header > div:first-child { min-width: 0; flex: 1 1 130px; display: grid; gap: 5px; }header strong { overflow-wrap: anywhere; font-size: 14px; }header span { color: var(--text-muted); font-size: 11px; }.actions { display: flex; flex-wrap: wrap; gap: 6px; }button { display: inline-flex; align-items: center; gap: 5px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface-panel); }.actions span { color: var(--text); }.empty { flex: 1; min-height: 140px; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 22px; color: var(--text-muted); text-align: center; overflow-wrap: anywhere; }.empty p { line-height: 1.7; }.metadata { padding: 8px 14px; font-size: 11px; color: var(--text-muted); border-bottom: 1px solid var(--border); }.editor { flex: 1; min-height: 150px; overflow: hidden; }.notice, .result { padding: 10px 14px; margin: 0; border-bottom: 1px solid var(--border); font-size: 12px; overflow-wrap: anywhere; }.result { background: var(--primary-soft); max-height: 180px; overflow: auto; }.result p { margin: 6px 0 0; }.result code { display: block; user-select: text; }.result span { display: block; color: var(--text-muted); margin-top: 4px; font-size: 11px; }.error { color: var(--danger); }pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 120px; overflow: auto; }
+</style>

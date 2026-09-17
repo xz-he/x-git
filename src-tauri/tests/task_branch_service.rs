@@ -1,0 +1,485 @@
+use hq_git_lib::application::mutation_coordinator::RepositoryMutationCoordinator;
+use hq_git_lib::application::task_branch_service::TaskBranchService;
+use hq_git_lib::domain::task_branch::{CreateTaskBranchRequest, TaskBranchRunRequest};
+use hq_git_lib::infrastructure::git_runner::GitCommandRunner;
+use hq_git_lib::infrastructure::task_branch_repository::TaskBranchRepository;
+use serde_json::json;
+use std::path::Path;
+
+async fn git(root: &Path, args: &[&str]) -> String {
+    GitCommandRunner::default()
+        .run(Some(root), args)
+        .await
+        .unwrap()
+        .stdout
+        .trim()
+        .to_owned()
+}
+async fn fixture() -> tempfile::TempDir {
+    let d = tempfile::tempdir().unwrap();
+    git(d.path(), &["init", "-b", "dev"]).await;
+    git(d.path(), &["config", "user.name", "Task Test"]).await;
+    git(d.path(), &["config", "user.email", "task@example.test"]).await;
+    std::fs::write(d.path().join("base.txt"), "base\n").unwrap();
+    git(d.path(), &["add", "."]).await;
+    git(d.path(), &["commit", "-m", "base"]).await;
+    git(d.path(), &["branch", "master"]).await;
+    git(d.path(), &["remote", "add", "origin", "."]).await;
+    d
+}
+fn service(store: &Path) -> TaskBranchService {
+    TaskBranchService::new(
+        GitCommandRunner::default(),
+        RepositoryMutationCoordinator::default(),
+        TaskBranchRepository::new(store.join("task-branches.json")),
+    )
+}
+async fn create(
+    service: &TaskBranchService,
+    root: &Path,
+    mode: &str,
+) -> hq_git_lib::domain::task_branch::TaskBranchBinding {
+    let request: CreateTaskBranchRequest = serde_json::from_value(json!({"kind":"feature", "ticket":"R20260915000012345", "slug":"full-ticket", "description":"完整需求说明", "mode":mode, "remote":"origin", "sourceBranch":"dev", "expectedHead":git(root, &["rev-parse", "HEAD"]).await})).unwrap();
+    let result = service.create(root, request).await;
+    assert!(result.error.is_none(), "{:?}", result.error);
+    result.bindings.into_iter().next().unwrap()
+}
+async fn run(
+    service: &TaskBranchService,
+    root: &Path,
+    id: &str,
+    action: &str,
+    return_after: bool,
+) -> hq_git_lib::domain::task_branch::TaskBranchResult {
+    let request: TaskBranchRunRequest = serde_json::from_value(json!({"id":id,"action":action,"message":"R20260915000012345 完整需求说明","returnAfterSuccess":return_after,"expectedHead":git(root, &["rev-parse", "HEAD"]).await})).unwrap();
+    service.run(root, request).await
+}
+async fn stage(root: &Path) {
+    std::fs::write(root.join("task.txt"), "task\n").unwrap();
+    git(root, &["add", "task.txt"]).await;
+}
+
+#[tokio::test]
+async fn unlink_persists_and_preserves_git_state_and_other_bindings() {
+    let d = fixture().await;
+    let other = fixture().await;
+    let store = tempfile::tempdir().unwrap();
+    let s = service(store.path());
+    let b = create(&s, d.path(), "remoteMaster").await;
+    let other_binding = create(&s, other.path(), "remoteMaster").await;
+    let repository = TaskBranchRepository::new(store.path().join("task-branches.json"));
+    let mut sibling = b.clone();
+    sibling.id = "sibling".into();
+    repository.save(&sibling).unwrap();
+    // The same id in another repository must not be removed.
+    let mut same_id = other_binding.clone();
+    same_id.id = b.id.clone();
+    repository.save(&same_id).unwrap();
+    stage(d.path()).await;
+    std::fs::write(d.path().join("task.txt"), "unstaged changes\n").unwrap();
+    std::fs::write(d.path().join("local.txt"), "untracked\n").unwrap();
+    let refs = git(d.path(), &["show-ref"]).await;
+    let status = git(d.path(), &["status", "--porcelain=v1"]).await;
+    let index = git(d.path(), &["write-tree"]).await;
+    let remaining = s.unlink(d.path(), &b.id).await.unwrap();
+    assert_eq!(remaining.len(), 1);
+    assert_eq!(remaining[0].id, sibling.id);
+    assert_eq!(git(d.path(), &["branch", "--show-current"]).await, "dev");
+    assert_eq!(git(d.path(), &["show-ref"]).await, refs);
+    assert_eq!(git(d.path(), &["status", "--porcelain=v1"]).await, status);
+    assert_eq!(git(d.path(), &["write-tree"]).await, index);
+    assert_eq!(
+        std::fs::read_to_string(d.path().join("task.txt")).unwrap(),
+        "unstaged changes\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(d.path().join("local.txt")).unwrap(),
+        "untracked\n"
+    );
+    let restarted = service(store.path());
+    assert_eq!(
+        restarted.snapshot(d.path()).await.unwrap()[0].id,
+        sibling.id
+    );
+    assert_eq!(restarted.snapshot(other.path()).await.unwrap().len(), 2);
+    assert_eq!(restarted.unlink(d.path(), &b.id).await.unwrap().len(), 1);
+    assert!(
+        restarted
+            .unlink(d.path(), &sibling.id)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        service(store.path())
+            .snapshot(d.path())
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn current_creation_keeps_full_ticket_and_dirty_files() {
+    let d = fixture().await;
+    let store = tempfile::tempdir().unwrap();
+    let s = service(store.path());
+    std::fs::write(d.path().join("local.txt"), "local").unwrap();
+    let b = create(&s, d.path(), "current").await;
+    assert_eq!(b.target_branch, "feature/R20260915000012345-full-ticket");
+    assert_eq!(
+        git(d.path(), &["branch", "--show-current"]).await,
+        b.target_branch
+    );
+    assert_eq!(
+        std::fs::read_to_string(d.path().join("local.txt")).unwrap(),
+        "local"
+    );
+    assert_eq!(
+        service(store.path())
+            .snapshot(d.path())
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+#[tokio::test]
+async fn remote_master_fetches_latest_and_stays_on_source() {
+    let d = fixture().await;
+    let remote = fixture().await;
+    let store = tempfile::tempdir().unwrap();
+    let s = service(store.path());
+    git(
+        d.path(),
+        &[
+            "remote",
+            "set-url",
+            "origin",
+            remote.path().to_str().unwrap(),
+        ],
+    )
+    .await;
+    git(d.path(), &["fetch", "origin"]).await;
+    git(remote.path(), &["switch", "master"]).await;
+    std::fs::write(remote.path().join("new.txt"), "new").unwrap();
+    git(remote.path(), &["add", "."]).await;
+    git(remote.path(), &["commit", "-m", "new remote master"]).await;
+    let b = create(&s, d.path(), "remoteMaster").await;
+    assert_eq!(
+        git(d.path(), &["rev-parse", &b.target_branch]).await,
+        git(remote.path(), &["rev-parse", "master"]).await
+    );
+    assert_eq!(git(d.path(), &["branch", "--show-current"]).await, "dev");
+}
+
+#[tokio::test]
+async fn commit_pick_supports_both_destinations_and_retry_is_idempotent() {
+    for return_after in [true, false] {
+        let d = fixture().await;
+        let store = tempfile::tempdir().unwrap();
+        let s = service(store.path());
+        let b = create(&s, d.path(), "remoteMaster").await;
+        stage(d.path()).await;
+        let expected = git(d.path(), &["rev-parse", "HEAD"]).await;
+        let req: TaskBranchRunRequest=serde_json::from_value(json!({"id":b.id,"action":"commit","message":"任务提交","returnAfterSuccess":return_after,"expectedHead":expected})).unwrap();
+        let result = s.run(d.path(), req.clone()).await;
+        assert!(result.error.is_none(), "{:?}", result.error);
+        assert_eq!(
+            serde_json::to_value(&result.bindings[0]).unwrap()["phase"],
+            "completed"
+        );
+        assert_eq!(
+            git(d.path(), &["branch", "--show-current"]).await,
+            if return_after {
+                "dev"
+            } else {
+                &b.target_branch
+            }
+        );
+        let source = git(d.path(), &["rev-parse", "dev"]).await;
+        let target = git(d.path(), &["rev-parse", &b.target_branch]).await;
+        s.run(d.path(), req).await;
+        assert_eq!(git(d.path(), &["rev-parse", "dev"]).await, source);
+        assert_eq!(
+            git(d.path(), &["rev-parse", &b.target_branch]).await,
+            target
+        );
+    }
+}
+
+#[tokio::test]
+async fn unstaged_work_preserves_commit_and_can_resume_after_restart() {
+    let d = fixture().await;
+    let store = tempfile::tempdir().unwrap();
+    let s = service(store.path());
+    let b = create(&s, d.path(), "remoteMaster").await;
+    stage(d.path()).await;
+    std::fs::write(d.path().join("task.txt"), "unstaged changes\n").unwrap();
+    std::fs::write(d.path().join("local.txt"), "local").unwrap();
+    let result = run(&s, d.path(), &b.id, "commit", true).await;
+    assert_eq!(
+        serde_json::to_value(&result.bindings[0]).unwrap()["phase"],
+        "pendingPick"
+    );
+    let oid = result.bindings[0].source_commit.clone().unwrap();
+    assert_eq!(git(d.path(), &["show", "HEAD:task.txt"]).await, "task");
+    assert_eq!(
+        std::fs::read_to_string(d.path().join("task.txt")).unwrap(),
+        "unstaged changes\n"
+    );
+    assert_eq!(oid.len(), 40);
+    assert_eq!(git(d.path(), &["branch", "--show-current"]).await, "dev");
+    run(&s, d.path(), &b.id, "commit", true).await;
+    assert_eq!(git(d.path(), &["rev-parse", "HEAD"]).await, oid);
+    std::fs::remove_file(d.path().join("local.txt")).unwrap();
+    std::fs::write(d.path().join("task.txt"), "task\n").unwrap();
+    let result = run(&service(store.path()), d.path(), &b.id, "pick", true).await;
+    assert!(result.error.is_none(), "{:?}", result.error);
+    assert_eq!(
+        serde_json::to_value(&result.bindings[0]).unwrap()["phase"],
+        "completed"
+    );
+}
+
+#[tokio::test]
+async fn conflict_stays_on_target_and_abort_reconciles_without_mutation() {
+    let d = fixture().await;
+    let store = tempfile::tempdir().unwrap();
+    let s = service(store.path());
+    git(d.path(), &["switch", "master"]).await;
+    std::fs::write(d.path().join("base.txt"), "master\n").unwrap();
+    git(d.path(), &["add", "."]).await;
+    git(d.path(), &["commit", "-m", "master edit"]).await;
+    git(d.path(), &["switch", "dev"]).await;
+    let b = create(&s, d.path(), "remoteMaster").await;
+    std::fs::write(d.path().join("base.txt"), "dev\n").unwrap();
+    git(d.path(), &["add", "."]).await;
+    let result = run(&s, d.path(), &b.id, "commit", true).await;
+    assert_eq!(
+        serde_json::to_value(&result.bindings[0]).unwrap()["phase"],
+        "conflict"
+    );
+    assert_eq!(
+        git(d.path(), &["branch", "--show-current"]).await,
+        b.target_branch
+    );
+    git(d.path(), &["cherry-pick", "--abort"]).await;
+    let result = run(&service(store.path()), d.path(), &b.id, "reconcile", true).await;
+    assert_eq!(
+        serde_json::to_value(&result.bindings[0]).unwrap()["phase"],
+        "pendingPick"
+    );
+    assert_eq!(
+        git(d.path(), &["branch", "--show-current"]).await,
+        b.target_branch
+    );
+}
+
+#[tokio::test]
+async fn invalid_ticket_and_missing_master_do_not_create() {
+    let d = fixture().await;
+    let store = tempfile::tempdir().unwrap();
+    let s = service(store.path());
+    for (ticket, description, expected) in [
+        ("R12x", "说明", git(d.path(), &["rev-parse", "HEAD"]).await),
+        ("R12", "", git(d.path(), &["rev-parse", "HEAD"]).await),
+        ("R12", "说明", "0000000".into()),
+    ] {
+        let req=serde_json::from_value(json!({"kind":"feature","ticket":ticket,"slug":"task","description":description,"mode":"current","remote":null,"sourceBranch":"dev","expectedHead":expected})).unwrap();
+        assert!(s.create(d.path(), req).await.error.is_some());
+    }
+    git(
+        d.path(),
+        &["update-ref", "refs/remotes/origin/master", "HEAD"],
+    )
+    .await;
+    git(d.path(), &["branch", "-D", "master"]).await;
+    let req=serde_json::from_value(json!({"kind":"hotfix","ticket":"B1","slug":"task","description":"修复问题","mode":"remoteMaster","remote":"origin","sourceBranch":"dev","expectedHead":git(d.path(), &["rev-parse","HEAD"]).await})).unwrap();
+    assert!(s.create(d.path(), req).await.error.is_some());
+    assert!(
+        git(d.path(), &["branch", "--list", "hotfix/B1-task"])
+            .await
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn conflict_continue_recovers_pick_and_failed_return_never_repeats_it() {
+    let d = fixture().await;
+    let store = tempfile::tempdir().unwrap();
+    let worktree = tempfile::tempdir().unwrap();
+    let s = service(store.path());
+    git(d.path(), &["switch", "master"]).await;
+    std::fs::write(d.path().join("base.txt"), "master\n").unwrap();
+    git(d.path(), &["add", "."]).await;
+    git(d.path(), &["commit", "-m", "master edit"]).await;
+    git(d.path(), &["switch", "dev"]).await;
+    let b = create(&s, d.path(), "remoteMaster").await;
+    std::fs::write(d.path().join("base.txt"), "dev\n").unwrap();
+    git(d.path(), &["add", "."]).await;
+    run(&s, d.path(), &b.id, "commit", true).await;
+    std::fs::write(d.path().join("base.txt"), "resolved\n").unwrap();
+    git(d.path(), &["add", "."]).await;
+    git(
+        d.path(),
+        &["-c", "core.editor=true", "cherry-pick", "--continue"],
+    )
+    .await;
+    let result = run(&s, d.path(), &b.id, "reconcile", true).await;
+    assert_eq!(
+        serde_json::to_value(&result.bindings[0]).unwrap()["phase"],
+        "pendingReturn"
+    );
+    let picked = git(d.path(), &["rev-parse", "HEAD"]).await;
+    let checkout = worktree.path().join("checkout");
+    git(
+        d.path(),
+        &["worktree", "add", checkout.to_str().unwrap(), "dev"],
+    )
+    .await;
+    assert!(
+        run(&s, d.path(), &b.id, "return", true)
+            .await
+            .error
+            .is_some()
+    );
+    assert_eq!(git(d.path(), &["rev-parse", "HEAD"]).await, picked);
+    git(
+        d.path(),
+        &["worktree", "remove", checkout.to_str().unwrap()],
+    )
+    .await;
+    let result = run(&service(store.path()), d.path(), &b.id, "return", true).await;
+    assert!(result.error.is_none(), "{:?}", result.error);
+    assert_eq!(
+        serde_json::to_value(&result.bindings[0]).unwrap()["phase"],
+        "completed"
+    );
+    assert_eq!(
+        git(d.path(), &["rev-parse", &b.target_branch]).await,
+        picked
+    );
+}
+
+#[tokio::test]
+async fn persisted_commit_intent_recovers_without_a_second_commit() {
+    use hq_git_lib::domain::task_branch::TaskBranchPhase;
+    let d = fixture().await;
+    let store = tempfile::tempdir().unwrap();
+    let s = service(store.path());
+    let b = create(&s, d.path(), "remoteMaster").await;
+    stage(d.path()).await;
+    std::fs::write(d.path().join("local.txt"), "local").unwrap();
+    let result = run(&s, d.path(), &b.id, "commit", true).await;
+    let mut intent = result.bindings[0].clone();
+    let oid = intent.source_commit.take().unwrap();
+    intent.phase = TaskBranchPhase::Committing;
+    TaskBranchRepository::new(store.path().join("task-branches.json"))
+        .save(&intent)
+        .unwrap();
+    let result = run(&service(store.path()), d.path(), &b.id, "reconcile", true).await;
+    assert_eq!(
+        result.bindings[0].source_commit.as_deref(),
+        Some(oid.as_str())
+    );
+    assert_eq!(
+        serde_json::to_value(&result.bindings[0]).unwrap()["phase"],
+        "pendingPick"
+    );
+    assert_eq!(git(d.path(), &["rev-parse", "HEAD"]).await, oid);
+}
+
+#[tokio::test]
+async fn independent_repositories_keep_separate_bindings() {
+    let a = fixture().await;
+    let b = fixture().await;
+    let store = tempfile::tempdir().unwrap();
+    let s = service(store.path());
+    let first = create(&s, a.path(), "remoteMaster").await;
+    let second = create(&s, b.path(), "remoteMaster").await;
+    assert_ne!(first.id, second.id);
+    assert_eq!(s.snapshot(a.path()).await.unwrap()[0].id, first.id);
+    assert_eq!(s.snapshot(b.path()).await.unwrap()[0].id, second.id);
+}
+
+#[tokio::test]
+async fn failed_fetch_can_retry_the_same_creation_without_duplicate_binding() {
+    let d = fixture().await;
+    let store = tempfile::tempdir().unwrap();
+    let s = service(store.path());
+    git(
+        d.path(),
+        &["remote", "set-url", "origin", "./missing-remote"],
+    )
+    .await;
+    let req: CreateTaskBranchRequest=serde_json::from_value(json!({"kind":"hotfix","ticket":"B12345678901234567890","slug":"fix-task","description":"修复问题","mode":"remoteMaster","remote":"origin","sourceBranch":"dev","expectedHead":git(d.path(), &["rev-parse","HEAD"]).await})).unwrap();
+    let failed = s.create(d.path(), req.clone()).await;
+    assert!(failed.error.is_some());
+    assert_eq!(failed.bindings.len(), 1);
+    git(d.path(), &["remote", "set-url", "origin", "."]).await;
+    let retried = service(store.path()).create(d.path(), req).await;
+    assert!(retried.error.is_none(), "{:?}", retried.error);
+    assert_eq!(retried.bindings.len(), 1);
+    assert_eq!(retried.bindings[0].id, failed.bindings[0].id);
+    assert_eq!(
+        git(d.path(), &["rev-parse", &retried.bindings[0].target_branch]).await,
+        git(d.path(), &["rev-parse", "master"]).await
+    );
+}
+
+#[tokio::test]
+async fn pending_pick_rejects_target_changes_after_the_source_commit() {
+    let d = fixture().await;
+    let store = tempfile::tempdir().unwrap();
+    let s = service(store.path());
+    let b = create(&s, d.path(), "remoteMaster").await;
+    stage(d.path()).await;
+    std::fs::write(d.path().join("local.txt"), "local").unwrap();
+    let result = run(&s, d.path(), &b.id, "commit", true).await;
+    let source = result.bindings[0].source_commit.clone().unwrap();
+    std::fs::remove_file(d.path().join("local.txt")).unwrap();
+    git(d.path(), &["switch", &b.target_branch]).await;
+    std::fs::write(d.path().join("external.txt"), "external").unwrap();
+    git(d.path(), &["add", "."]).await;
+    git(d.path(), &["commit", "-m", "external target commit"]).await;
+    let target = git(d.path(), &["rev-parse", "HEAD"]).await;
+    git(d.path(), &["switch", "dev"]).await;
+    let result = run(&service(store.path()), d.path(), &b.id, "pick", true).await;
+    assert!(
+        result.error.is_some(),
+        "Must reject a target changed since commit intent"
+    );
+    assert_eq!(git(d.path(), &["rev-parse", "dev"]).await, source);
+    assert_eq!(
+        git(d.path(), &["rev-parse", &b.target_branch]).await,
+        target
+    );
+    assert_eq!(git(d.path(), &["branch", "--show-current"]).await, "dev");
+}
+
+#[tokio::test]
+async fn reconcile_return_does_not_complete_after_target_was_reset() {
+    use hq_git_lib::domain::task_branch::TaskBranchPhase;
+    let d = fixture().await;
+    let store = tempfile::tempdir().unwrap();
+    let s = service(store.path());
+    let b = create(&s, d.path(), "remoteMaster").await;
+    stage(d.path()).await;
+    let result = run(&s, d.path(), &b.id, "commit", false).await;
+    assert!(result.error.is_none());
+    let mut intent = result.bindings[0].clone();
+    intent.phase = TaskBranchPhase::PendingReturn;
+    intent.return_after_success = true;
+    TaskBranchRepository::new(store.path().join("task-branches.json"))
+        .save(&intent)
+        .unwrap();
+    git(d.path(), &["switch", "dev"]).await;
+    git(d.path(), &["branch", "-f", &b.target_branch, "master"]).await;
+    let result = run(&service(store.path()), d.path(), &b.id, "reconcile", true).await;
+    assert_eq!(result.bindings[0].phase, TaskBranchPhase::NeedsAttention);
+    git(d.path(), &["branch", "-D", &b.target_branch]).await;
+    let result = run(&service(store.path()), d.path(), &b.id, "reconcile", true).await;
+    assert_eq!(result.bindings[0].phase, TaskBranchPhase::NeedsAttention);
+}
