@@ -1346,7 +1346,7 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "hq-git"
-version = "4.0.3"
+version = "4.0.4"
 dependencies = [
  "base64 0.22.1",
  "futures-util",

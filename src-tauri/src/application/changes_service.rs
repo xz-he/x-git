@@ -648,6 +648,7 @@ fn is_missing_head_error(error: &BackendError) -> bool {
     error.diagnostics.as_deref().is_some_and(|diagnostics| {
         let diagnostics = diagnostics.to_ascii_lowercase();
         diagnostics.contains("could not resolve head")
+            || diagnostics.contains("could not resolve 'head'")
             || diagnostics.contains("needed a single revision")
             || diagnostics.contains("unknown revision")
             || diagnostics.contains("ambiguous argument 'head'")
@@ -1210,6 +1211,26 @@ mod tests {
         assert_eq!(result.changes.staged_count, 0);
         assert_eq!(result.changes.unstaged_count, 1);
         assert_eq!(result.changes.files[0].index_status, "?");
+    }
+
+    #[test]
+    fn missing_head_detection_accepts_quoted_git_diagnostics() {
+        for message in [
+            "fatal: could not resolve HEAD",
+            "fatal: could not resolve 'HEAD'",
+        ] {
+            let error = BackendError::new(ErrorCode::GitCommandFailed, "Git failed")
+                .with_diagnostics(message);
+            assert!(is_missing_head_error(&error), "{message}");
+        }
+        for message in [
+            "fatal: could not resolve 'main'",
+            "fatal: Unable to create '.git/index.lock': File exists",
+        ] {
+            let error = BackendError::new(ErrorCode::GitCommandFailed, "Git failed")
+                .with_diagnostics(message);
+            assert!(!is_missing_head_error(&error), "{message}");
+        }
     }
 
     #[tokio::test]

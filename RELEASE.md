@@ -29,7 +29,7 @@ npm run package:windows
 1. 修改代码并同步版本号（必须递增）：
 
    ```powershell
-   npm run release:version -- 4.0.4
+   npm run release:version -- 4.0.5
    npm run release:version -- --check
    npm test -- --maxWorkers=2
    npm run build
@@ -40,8 +40,8 @@ npm run package:windows
 2. 审查并提交代码及版本文件，推送到仓库。为该提交创建相同版本的标签并推送，例如：
 
    ```powershell
-   git tag v4.0.4
-   git push origin v4.0.4
+   git tag v4.0.5
+   git push origin v4.0.5
    ```
 
 3. 标签触发 `.github/workflows/release.yml`：验证版本一致性，执行测试，构建已签名的安装包，并创建 **Draft Release**。任务失败时先查看 GitHub Actions 日志；不要发布不完整的 Release。
