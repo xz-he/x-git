@@ -1,6 +1,6 @@
 [package]
 name = "hq-git"
-version = "4.0.1"
+version = "4.0.3"
 edition = "2024"
 
 [lib]
