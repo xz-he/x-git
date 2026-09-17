@@ -24,22 +24,24 @@ npm run package:windows
 
 ## 发布后续版本
 
+必须先修改代码中的版本号，再提交、推送标签。GitHub 网页中填写 `v4.0.3` 标签并不会自动把代码里的 `4.0.1` 改成 `4.0.3`；这种情况会在版本校验阶段失败，也不会生成更新文件。以下命令中的版本仅为示例，实际发布时必须高于已经发布的版本。
+
 1. 修改代码并同步版本号（必须递增）：
 
    ```powershell
-   npm run release:version -- 4.0.1
+   npm run release:version -- 4.0.4
    npm run release:version -- --check
    npm test -- --maxWorkers=2
    npm run build
    ```
 
-   脚本同步 `package.json`、`package-lock.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`、`src-tauri/tauri.conf.json`。首次发布也可以使用当前 4.0.0，无需先递增。
+   脚本同步 `package.json`、`package-lock.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`、`src-tauri/tauri.conf.json`。只有尚未对外发布过版本时，首次发布才可以直接使用代码中的当前版本。
 
 2. 审查并提交代码及版本文件，推送到仓库。为该提交创建相同版本的标签并推送，例如：
 
    ```powershell
-   git tag v4.0.1
-   git push origin v4.0.1
+   git tag v4.0.4
+   git push origin v4.0.4
    ```
 
 3. 标签触发 `.github/workflows/release.yml`：验证版本一致性，执行测试，构建已签名的安装包，并创建 **Draft Release**。任务失败时先查看 GitHub Actions 日志；不要发布不完整的 Release。
@@ -47,6 +49,8 @@ npm run package:windows
 5. 在已安装的较低版本中，打开 **设置 → 版本更新 → Check for Updates**，核对版本与说明，下载，确认 **Install & Restart**。测试旧设置保留、重启后版本正确。相同版本不会提示更新。
 
 `latest.json` 中的说明由打包动作生成；若编辑了 Release 正文，需同步修改该资产中的 `notes` 才会改变应用内说明。不要修改签名或安装包地址，不要在发布后替换为未签名安装包。
+
+不要先在 GitHub 网页发布空 Release 再等构建。若已发布空 Release 且构建失败，先查看 Actions 的失败日志；纠正版本或配置后，以更高版本重新走上述流程，不要移动已有发布标签。发布完成后，浏览器访问 `https://github.com/xz-he/x-git/releases/latest/download/latest.json` 应能下载包含新版本的 JSON，这才是客户端可发现更新的入口。
 
 ## 客户端行为与故障排查
 
