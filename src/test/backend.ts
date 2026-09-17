@@ -16,6 +16,7 @@ export function createTestSettings(
     fontFamily: "",
     codeFontFamily: "",
     launchAtLogin: false,
+    checkUpdatesOnStartup: true,
     lastRepoPath: null,
     recentRepoPaths: [],
     reviewRuleFiles: [],

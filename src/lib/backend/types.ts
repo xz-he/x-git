@@ -614,6 +614,7 @@ export interface AppSettings {
   fontFamily: string;
   codeFontFamily: string;
   launchAtLogin: boolean;
+  checkUpdatesOnStartup: boolean;
   lastRepoPath: string | null;
   recentRepoPaths: string[];
   reviewRuleFiles: string[];

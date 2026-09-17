@@ -7,7 +7,7 @@ import {
   Sun,
   X,
 } from "@lucide/vue";
-import { reactive, ref, watch } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 
 import type {
   AiConnectionConfig,
@@ -24,12 +24,13 @@ import {
 } from "@/stores/settings";
 import { useUiStore } from "@/stores/ui";
 import FontSettings from "./FontSettings.vue";
+import UpdateSettings from "./UpdateSettings.vue";
 
 defineEmits<{ close: [] }>();
 const settingsStore = useSettingsStore();
 const ai = useAiStore();
 const ui = useUiStore();
-const activeTab = ref<"appearance" | "ai">("appearance");
+const activeTab = computed({ get: () => ui.settingsTab, set: value => { ui.settingsTab = value; } });
 const revealKey = ref(false);
 const saved = ref(false);
 const aiForm = reactive<AppSettings>({
@@ -100,6 +101,7 @@ async function saveAiSettings(): Promise<void> {
     fontFamily: settingsStore.settings.fontFamily,
     codeFontFamily: settingsStore.settings.codeFontFamily,
     theme: settingsStore.settings.theme,
+    checkUpdatesOnStartup: settingsStore.settings.checkUpdatesOnStartup,
     reviewRuleFiles: [...aiForm.reviewRuleFiles],
   });
   Object.assign(aiForm, {
@@ -121,7 +123,7 @@ async function saveAiSettings(): Promise<void> {
       <header>
         <div>
           <h2 id="settings-title">设置</h2>
-          <p>应用外观与 AI 服务</p>
+          <p>应用外观、AI 服务与版本更新</p>
         </div>
         <button
           class="icon-button"
@@ -148,6 +150,7 @@ async function saveAiSettings(): Promise<void> {
         >
           AI
         </button>
+        <button :class="{ active: activeTab === 'updates' }" @click="activeTab = 'updates'">版本更新</button>
       </nav>
 
       <div v-if="activeTab === 'appearance'" class="panel appearance-panel">
@@ -171,6 +174,7 @@ async function saveAiSettings(): Promise<void> {
         <FontSettings />
       </div>
 
+      <UpdateSettings v-else-if="activeTab === 'updates'" class="panel" />
       <form v-else class="panel ai-panel" @submit.prevent="saveAiSettings">
         <fieldset :disabled="ai.connectionStatus === 'testing'">
           <label>

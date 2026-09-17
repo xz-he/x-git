@@ -9,6 +9,8 @@ import AppStatusbar from "@/components/layout/AppStatusbar.vue";
 import AiDrawerShell from "@/components/layout/AiDrawerShell.vue";
 import SettingsDialog from "@/components/layout/SettingsDialog.vue";
 import GitFeedbackPanel from "@/components/layout/GitFeedbackPanel.vue";
+import UpdateNotice from "@/components/layout/UpdateNotice.vue";
+import { useUpdatesStore } from "@/stores/updates";
 import WelcomeView from "@/features/repository/WelcomeView.vue";
 import ConflictBanner from "@/features/conflicts/ConflictBanner.vue";
 import ConflictDialogs from "@/features/conflicts/ConflictDialogs.vue";
@@ -34,6 +36,7 @@ const settingsStore = useSettingsStore();
 const ui = useUiStore();
 const consoleStore = useConsoleStore();
 const terminal = useTerminalStore();
+const updates = useUpdatesStore();
 const viewportWidth = ref(window.innerWidth);
 const sidebarWidth = computed(() => ui.sidebarCollapsed ? 56 : 200);
 const maxContextWidth = computed(() => Math.max(270, Math.min(1000, Math.max(1100, viewportWidth.value) - sidebarWidth.value - (settingsStore.settings.aiDrawerOpen ? drawerWidth.value : 0) - 280)));
@@ -70,6 +73,7 @@ async function startApplication() {
   await settingsStore.load().catch(() => undefined);
   if (applicationDisposed) return;
   ui.applyTheme(settingsStore.settings.theme);
+  void updates.initialize();
   const lastRepository = settingsStore.settings.lastRepoPath;
   if (!repositories.snapshot && lastRepository) {
     await repositories.open(lastRepository).catch(() => undefined);
@@ -93,6 +97,7 @@ onBeforeUnmount(() => {
 });
 </script>
 <template>
+  <div style="display: contents" :inert="updates.phase === 'installing' || undefined">
   <div v-if="repositories.snapshot && !ui.homeVisible" class="app-shell" :style="{ '--sidebar-width': sidebarWidth + 'px', '--context-width': contextWidth + 'px' }" :inert="switchingRepository || undefined" :aria-busy="switchingRepository">
     <AppSidebar v-show="!ui.diffFullscreen" />
     <AppTopbar v-show="!ui.diffFullscreen" @open-ai="updateDrawer(true)" @open-settings="ui.settingsDialogOpen = true" @refresh="void repositories.refresh()" />
@@ -108,6 +113,8 @@ onBeforeUnmount(() => {
   <ConflictDialogs />
   <FileDialogs />
   <GitFeedbackPanel />
+  </div>
+  <UpdateNotice />
 </template>
 <style scoped>
 .app-shell {

@@ -1,4 +1,4 @@
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { defineStore } from "pinia";
 import { backendClient } from "@/lib/backend/client";
 import { normalizeBackendError } from "@/lib/backend/errors";
@@ -15,8 +15,6 @@ type Exit = Extract<TerminalEvent["event"], { kind: "exited" }>;
 interface Owner { runId: string; root: string; generation: number; command: string; startedAt: number; dispatched: boolean; accepted: boolean; terminal: boolean; sequence: number; output: Promise<void>; input: Promise<void>; cancellation?: Promise<void>; decoder?: TextDecoder; diagnosticOutput?: string }
 const HISTORY_LIMIT = 20;
 const INPUT_CHUNK = 4096;
-// Each command owns a fresh PTY. Restore input/display modes without erasing scrollback.
-const RESTORE_MODES = "\x1b[?1049l\x1b[!p\x1b[?25h\x1b[?1l\x1b>\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?2004l\x1b(B\x1b[0m";
 function sameRoot(a: string, b: string): boolean {
   const normalize = (value: string) => formatDisplayPath(value).replace(/\\/g, "/").replace(/\/$/, "");
   const left = normalize(a), right = normalize(b);
@@ -24,7 +22,7 @@ function sameRoot(a: string, b: string): boolean {
 }
 
 export const useTerminalStore = defineStore("terminal", () => {
-  const draft = ref("git status");
+  const draft = ref("");
   const runId = ref<string>();
   const status = ref<TerminalStatus>("idle");
   const error = ref<BackendError>();
@@ -44,6 +42,13 @@ export const useTerminalStore = defineStore("terminal", () => {
   let listening: Promise<void> | undefined;
   let lifetime = 0;
 
+  function promptLabel(): string {
+    const repository = useRepositoryStore().snapshot;
+    return `[${repository?.name ?? "repository"} ${repository?.currentBranch || "detached"}]$ `;
+  }
+  function syncPrompt(): void { screen?.setPrompt(busy.value ? null : promptLabel(), draft.value); }
+  watch([busy, draft, () => useRepositoryStore().snapshot?.rootPath, () => useRepositoryStore().snapshot?.currentBranch], syncPrompt, { flush: "sync" });
+
   function owns(candidate: Owner): boolean {
     const repo = useRepositoryStore();
     return owner === candidate && candidate.generation === repo.generation && !!repo.snapshot && sameRoot(candidate.root, repo.snapshot.rootPath);
@@ -59,13 +64,24 @@ export const useTerminalStore = defineStore("terminal", () => {
     if (screen) return screen;
     if (creatingScreen) return creatingScreen;
     const epoch = lifetime;
-    const pending = import("@/features/terminal/terminalScreen").then(module => module.createTerminalScreen(data => { void sendInput(data); }, (cols, rows) => { void resize(cols, rows); })).then(value => {
+    const pending = import("@/features/terminal/terminalScreen").then(module => module.createTerminalScreen(data => { void sendInput(data); }, (cols, rows) => { void resize(cols, rows); }, {
+      change: command => { draft.value = command; }, submit: () => { void run(); },
+      blocked: () => busy.value || useRepositoryStore().otherOperationBusy || !useRepositoryStore().snapshot,
+      history: () => history.value.map(entry => entry.command),
+      complete: async (command, cursor) => {
+        const repo = useRepositoryStore(), root = repo.snapshot?.rootPath, generation = repo.generation;
+        if (!root) throw new Error("请先打开仓库。");
+        const completion = await backendClient.terminalComplete(root, command, cursor);
+        if (repo.snapshot?.rootPath !== root || repo.generation !== generation) throw new Error("仓库已切换。");
+        return completion;
+      },
+    })).then(value => {
       if (epoch !== lifetime) { value.dispose(); throw new Error("终端会话已关闭。"); }
-      screen = value; screenReady.value = true; return value;
+      screen = value; screenReady.value = true; syncPrompt(); return value;
     }).finally(() => { if (creatingScreen === pending) creatingScreen = undefined; });
     creatingScreen = pending; return pending;
   }
-  async function attach(host: HTMLElement): Promise<void> { const current = await ensureScreen(); if (host.isConnected) current.attach(host); }
+  async function attach(host: HTMLElement): Promise<void> { const current = await ensureScreen(); if (host.isConnected) { current.attach(host); current.focus(); } }
   function detach(): void { screen?.detach(); }
   function focus(): void { screen?.focus(); }
   function clear(): void { if (!busy.value) screen?.clear(); }
@@ -87,10 +103,11 @@ export const useTerminalStore = defineStore("terminal", () => {
     if (useConflictsStore().hasDirtyDrafts) { error.value = { code: "gitOperationInProgress", message: "请先保存或放弃冲突编辑草稿，再运行 Git 命令。" }; return; }
     const candidate: Owner = { runId: crypto.randomUUID(), root: repo.snapshot.rootPath, generation: repo.generation, command: draft.value, startedAt: Date.now(), dispatched: false, accepted: false, terminal: false, sequence: 0, output: Promise.resolve(), input: Promise.resolve() };
     owner = candidate; runId.value = candidate.runId; status.value = "starting"; error.value = undefined; refreshError.value = undefined; result.value = undefined; cancelRequested.value = false;
+    draft.value = "";
     try {
       await initialize(); const current = await ensureScreen();
       if (!owns(candidate) || candidate.terminal) return;
-      await current.write(`\x1b[0m\r\n$ ${candidate.command.replace(/[\x00-\x1f\x7f]/g, " ")}\r\n`);
+      await current.commitPrompt(promptLabel(), candidate.command);
       if (!owns(candidate) || candidate.terminal) return;
       candidate.dispatched = true;
       const accepted = await backendClient.terminalStart(candidate.root, candidate.runId, candidate.command, current.cols, current.rows);
@@ -133,12 +150,13 @@ export const useTerminalStore = defineStore("terminal", () => {
       candidate.terminal = true;
       candidate.output = candidate.output.then(async () => {
         if (!owns(candidate)) return;
+        refreshing.value = true;
         result.value = event; status.value = event.cancelled ? "cancelled" : event.error || event.exitCode !== 0 ? "failed" : "completed";
         error.value = event.error ?? undefined; cancelRequested.value = false; refreshing.value = true; updateHistory(candidate);
         if (status.value === "failed") reportGitFailure({ root: candidate.root, command: candidate.command,
           error: event.error ?? { code: "gitCommandFailed", message: `Git 命令执行失败，退出码：${event.exitCode ?? '未知'}` },
           output: candidate.diagnosticOutput });
-        await screen?.write(`${RESTORE_MODES}\r\n[${event.cancelled ? "已终止" : "执行结束"}${event.exitCode === null ? "" : ` · 退出码 ${event.exitCode}`} · ${event.durationMs} ms]\r\n`);
+        await screen?.restoreInput();
         if (owns(candidate)) await refreshOwner(candidate);
       }).catch(cause => { if (owns(candidate)) { refreshing.value = false; refreshError.value = normalizeBackendError(cause); } });
     }
@@ -187,10 +205,10 @@ export const useTerminalStore = defineStore("terminal", () => {
       if (previous && !previous.terminal) await terminateOwner(previous);
       owner = undefined; lifetime++; screen?.dispose(); screen = undefined; creatingScreen = undefined; screenReady.value = false;
       unlisten?.(); unlisten = undefined; listening = undefined;
-      status.value = "idle"; runId.value = undefined; result.value = undefined; error.value = undefined; refreshError.value = undefined; history.value = []; draft.value = "git status"; refreshing.value = false; cancelRequested.value = false;
+      status.value = "idle"; runId.value = undefined; result.value = undefined; error.value = undefined; refreshError.value = undefined; history.value = []; draft.value = ""; refreshing.value = false; cancelRequested.value = false;
     } finally { resetting.value = false; }
   }
-  function recall(entry: TerminalHistoryEntry): void { if (!busy.value) draft.value = entry.command; }
+  function recall(entry: TerminalHistoryEntry): void { if (!busy.value) { draft.value = entry.command; focus(); } }
   function clearHistory(): void { if (!busy.value) history.value = []; }
   function dispose(): void { lifetime++; unlisten?.(); unlisten = undefined; listening = undefined; void resetForRepository().catch(cause => { error.value = normalizeBackendError(cause); }); }
   return { draft, runId, status, error, refreshError, result, history, cancelRequested, refreshing, resetting, screenReady, running, busy, initialize, attach, detach, focus, clear, outputText, run, handleEvent, sendInput, resize, terminate, resetForRepository, retryRefresh, recall, clearHistory, dispose };

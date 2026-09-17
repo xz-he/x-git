@@ -39,6 +39,7 @@ export function defaultSettings(
     fontFamily: "",
     codeFontFamily: "",
     launchAtLogin: false,
+    checkUpdatesOnStartup: true,
     lastRepoPath: null,
     recentRepoPaths: [],
     reviewRuleFiles: [],
@@ -67,6 +68,7 @@ export function normalizeSettings(settings: AppSettings): AppSettings {
   );
   return {
     ...settings,
+    checkUpdatesOnStartup: settings.checkUpdatesOnStartup !== false,
     aiApiFormat: settings.aiApiFormat === "responses" ? "responses" : "chatCompletions",
     fontFamily: normalizeFontFamily(settings.fontFamily),
     codeFontFamily: normalizeFontFamily(settings.codeFontFamily),

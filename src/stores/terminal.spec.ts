@@ -8,7 +8,7 @@ import { useTerminalStore } from "./terminal";
 import { useRepositoryStore } from "./repository";
 import { onGitFailure } from "@/lib/gitFailure";
 
-const screen = vi.hoisted(() => ({ write: vi.fn(async (): Promise<void> => {}), attach: vi.fn(), detach: vi.fn(), focus: vi.fn(), reset: vi.fn(), clear: vi.fn(), dispose: vi.fn(), text: vi.fn(() => "output"), cols: 80, rows: 24 }));
+const screen = vi.hoisted(() => ({ restoreInput: vi.fn(async () => {}), setPrompt: vi.fn(), commitPrompt: vi.fn(async () => {}), write: vi.fn(async (): Promise<void> => {}), attach: vi.fn(), detach: vi.fn(), focus: vi.fn(), reset: vi.fn(), clear: vi.fn(), dispose: vi.fn(), text: vi.fn(() => "output"), cols: 80, rows: 24 }));
 vi.mock("@/features/terminal/terminalScreen", () => ({ createTerminalScreen: vi.fn(async () => screen) }));
 function deferred<T>() { let resolve!: (value: T) => void; let reject!: (cause: unknown) => void; const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; }
 const exited: TerminalEvent["event"] = { kind: "exited", exitCode: 0, durationMs: 10, cancelled: false, error: null };
@@ -25,6 +25,7 @@ describe("interactive terminal lifecycle", () => {
     const repo = useRepositoryStore();
     repo.snapshot = { rootPath: "C:/repo", name: "repo", currentBranch: "main", headShortHash: "abc", isClean: true, changedFileCount: 0, conflictCount: 0, remotes: [], upstream: null };
     refresh = vi.spyOn(repo, "refreshAfterTerminal").mockResolvedValue(undefined);
+    useTerminalStore().draft = "git status";
   });
   function send(event: TerminalEvent["event"], sequence = 1, runId = useTerminalStore().runId!, rootPath = "C:/repo") { emit({ event, sequence, runId, rootPath }); }
 

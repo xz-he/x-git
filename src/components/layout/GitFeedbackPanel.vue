@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { CheckCircle2, ChevronDown, ChevronUp, CircleAlert, LoaderCircle, Square, X } from "@lucide/vue";
 import { cancelFeedback, clearCompletedFeedback, dismissFeedback, feedbackExpanded, gitFeedback } from "@/lib/gitFeedback";
+import { formatDisplayPath } from "@/lib/formatPath";
 
 const CLOCK_INTERVAL_MS = 1000;
 const MILLISECONDS_PER_SECOND = 1000;
@@ -31,7 +32,7 @@ function duration(start: number, end?: number): string { return `${Math.max(0, M
           <div class="item-title"><strong>{{ item.title }}</strong><span class="badge">{{ labels[item.status] }}</span><span class="duration">{{ duration(item.startedAt, item.finishedAt) }}</span>
             <button v-if="item.status !== 'running'" :aria-label="`关闭${item.title}反馈`" @click="dismissFeedback(item.id)"><X :size="14" /></button>
           </div>
-          <p class="context" :title="item.root">{{ item.root }}</p><p v-if="item.target" class="target">{{ item.target }}</p>
+          <p class="context" :title="formatDisplayPath(item.root)">{{ formatDisplayPath(item.root) }}</p><p v-if="item.target" class="target">{{ item.target }}</p>
           <p class="message" :role="item.status === 'failed' || item.status === 'conflicted' ? 'alert' : 'status'">{{ item.message }}</p>
           <template v-if="item.status === 'running'">
             <div class="progress-label"><span>{{ item.cancelling ? '正在停止' : item.phase ?? '等待 Git 返回进度' }}</span><span v-if="item.percent !== undefined">当前阶段 {{ item.percent }}%</span></div>

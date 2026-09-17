@@ -8,8 +8,9 @@ import { useRepositoryStore } from "@/stores/repository";
 import { useTerminalStore } from "@/stores/terminal";
 import { useChangesStore } from "@/stores/changes";
 import type { TerminalEvent } from "@/lib/backend/types";
+import { createTerminalScreen } from "./terminalScreen";
 
-const screen = vi.hoisted(() => ({ write: vi.fn(async (_data: string | Uint8Array) => undefined), attach: vi.fn(), detach: vi.fn(), focus: vi.fn(), reset: vi.fn(), clear: vi.fn(), dispose: vi.fn(), text: vi.fn(() => "saved result"), cols: 80, rows: 24 }));
+const screen = vi.hoisted(() => ({ restoreInput: vi.fn(async () => {}), setPrompt: vi.fn(), commitPrompt: vi.fn(async () => {}), write: vi.fn(async (_data: string | Uint8Array) => undefined), attach: vi.fn(), detach: vi.fn(), focus: vi.fn(), reset: vi.fn(), clear: vi.fn(), dispose: vi.fn(), text: vi.fn(() => "saved result"), cols: 80, rows: 24 }));
 vi.mock("./terminalScreen", () => ({ createTerminalScreen: vi.fn(async () => screen) }));
 
 describe("interactive Git workbench", () => {
@@ -29,17 +30,21 @@ describe("interactive Git workbench", () => {
     await wrapper.get('.sidebar [data-view="terminal"]').trigger("click"); await flushPromises(); return wrapper;
   }
   function send(event: TerminalEvent["event"], sequence: number) { emit({ rootPath: "C:/repo", runId: useTerminalStore().runId!, sequence, event }); }
+  async function enter(command = "git status") {
+    const prompt = vi.mocked(createTerminalScreen).mock.calls.at(-1)![2];
+    prompt.change(command); prompt.submit(); await flushPromises();
+  }
 
-  it("opens terminal input with unrestricted Git help and examples only fill", async () => {
+  it("opens an inline terminal prompt without a separate command form", async () => {
     const wrapper = await open();
-    expect(wrapper.get('[aria-label="Git 命令"]').element).toBeInstanceOf(HTMLInputElement);
-    expect(wrapper.text()).not.toContain("只读查询"); expect(wrapper.text()).toContain("Tab 补全");
-    await wrapper.get('[data-command="git log --oneline -n 20"]').trigger("click");
-    expect(useTerminalStore().draft).toBe("git log --oneline -n 20"); expect(backend.terminalStart).not.toHaveBeenCalled(); wrapper.unmount();
+    expect(wrapper.find('[aria-label="运行命令"]').exists()).toBe(false);
+    expect(wrapper.get('[aria-label="Git 终端输入与输出"]').attributes('title')).toContain("Tab 补全");
+    expect(screen.setPrompt).toHaveBeenCalledWith("[repo main]$ ", "");
+    expect(backend.terminalStart).not.toHaveBeenCalled(); wrapper.unmount();
   });
   it("runs Enter, streams bytes to terminal and exposes exit status", async () => {
     const wrapper = await open();
-    await wrapper.get('[aria-label="Git 命令"]').trigger("keydown", { key: "Enter" }); await flushPromises();
+    await enter();
     send({ kind: "output", data: btoa("<img src=x>") }, 1);
     send({ kind: "exited", exitCode: 128, durationMs: 250, cancelled: false, error: null }, 2); await flushPromises();
     expect(screen.write.mock.calls.some(([data]) => typeof data !== "string" && Array.from(data).join(",") === Array.from(new TextEncoder().encode("<img src=x>")).join(","))).toBe(true);
@@ -47,10 +52,8 @@ describe("interactive Git workbench", () => {
   });
   it("supports input/interruption and remains reachable while browsing during a run", async () => {
     const wrapper = await open();
-    const input = wrapper.get('[aria-label="Git 命令"]');
-    await input.trigger("keydown", { key: "Enter", isComposing: true }); expect(backend.terminalStart).not.toHaveBeenCalled();
-    await wrapper.get('[aria-label="运行命令"]').trigger("click"); await flushPromises();
-    expect(wrapper.get('[aria-label="运行命令"]').attributes("disabled")).toBeDefined();
+    await enter();
+    expect(screen.setPrompt).toHaveBeenCalledWith(null, expect.any(String));
     await wrapper.get('[aria-label="中断命令"]').trigger("click"); await flushPromises();
     expect(backend.terminalWrite).toHaveBeenCalledWith("C:/repo", useTerminalStore().runId, btoa("\x03"));
     await wrapper.get('.sidebar [data-view="changes"]').trigger("click");
@@ -64,7 +67,7 @@ describe("interactive Git workbench", () => {
     await wrapper.get('[aria-label="终止命令"]').trigger("click"); expect(backend.terminalTerminate).toHaveBeenCalledOnce(); wrapper.unmount();
   });
   it("recalls without executing and preserves the screen when returning from home", async () => {
-    const wrapper = await open(); await wrapper.get('[aria-label="运行命令"]').trigger("click"); await flushPromises();
+    const wrapper = await open(); await enter();
     send({ kind: "exited", exitCode: 0, durationMs: 12, cancelled: false, error: null }, 1); await flushPromises();
     await wrapper.get('[data-testid="console-history-entry"]').trigger("click"); expect(backend.terminalStart).toHaveBeenCalledOnce();
     await wrapper.get('[aria-label="返回首页"]').trigger("click"); await wrapper.get('[aria-label="继续当前仓库"]').trigger("click"); await flushPromises();

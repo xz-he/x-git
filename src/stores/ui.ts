@@ -39,6 +39,7 @@ export const useUiStore = defineStore("ui", () => {
   const homeVisible = ref(false);
   const resolvedTheme = ref<ResolvedTheme>("light");
   const settingsDialogOpen = ref(false);
+  const settingsTab = ref<"appearance" | "ai" | "updates">("appearance");
   const diffFullscreen = ref(false);
 
   function applyTheme(preference: ThemePreference): void {
@@ -60,6 +61,7 @@ export const useUiStore = defineStore("ui", () => {
     homeVisible,
     resolvedTheme,
     settingsDialogOpen,
+    settingsTab,
     diffFullscreen,
     applyTheme,
     openView,

@@ -8,6 +8,17 @@ describe("Git feedback panel", () => {
   beforeEach(() => { resetGitFeedback(); });
   function panel() { return mount(GitFeedbackPanel, { global: { stubs: { Teleport: true } } }); }
   function start() { gitFeedback.value = [{ id: "a", root: "C:/repo", title: "Push 推送", target: "main → origin/main", status: "running", message: "正在连接远端", startedAt: Date.now(), canCancel: false, cancelling: false }]; }
+  it.each([
+    [String.raw`\\?\D:\hq-project\fancyqube`, String.raw`D:\hq-project\fancyqube`],
+    [String.raw`\\?\UNC\server\share\repo`, String.raw`\\server\share\repo`],
+    ["D:/hq-project/fancyqube", "D:/hq-project/fancyqube"],
+  ])("formats the feedback path and tooltip without changing the operation path (%s)", (root, displayed) => {
+    start(); gitFeedback.value[0]!.root = root;
+    const wrapper = panel();
+    expect(wrapper.get(".context").text()).toBe(displayed);
+    expect(wrapper.get(".context").attributes("title")).toBe(displayed);
+    expect(gitFeedback.value[0]!.root).toBe(root);
+  });
   it("shows indeterminate progress and only displays real stage percentages", async () => {
     start(); const wrapper = panel();
     expect(wrapper.get('[role="progressbar"]').attributes("aria-valuenow")).toBeUndefined();

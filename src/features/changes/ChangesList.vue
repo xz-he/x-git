@@ -19,6 +19,7 @@ import { useAiStore } from "@/stores/ai";
 import { useSettingsStore } from "@/stores/settings";
 import { useReviewSkill } from "@/features/ai/useReviewSkill";
 import NoiseCleanup from "./NoiseCleanup.vue";
+import ChangeGroupsSplit from "./ChangeGroupsSplit.vue";
 
 const changesStore = useChangesStore();
 const repositoryStore = useRepositoryStore();
@@ -169,6 +170,7 @@ async function confirmDiscard(): Promise<void> {
 
 <template>
   <div class="changes-list table-mode">
+    <div class="changes-toolbar">
     <div class="stats-caption">{{ statsLoading ? '统计中…' : '增删行数按暂存范围统计' }}</div>
     <div v-if="statsError" class="stats-error" role="status">行数统计失败 <button @click="statsVersion++">重试</button></div>
     <NoiseCleanup />
@@ -185,6 +187,9 @@ async function confirmDiscard(): Promise<void> {
       </button>
     </div>
 
+    </div>
+    <ChangeGroupsSplit :has-staged="stagedFiles.length > 0">
+    <template #staged>
     <section class="change-group" aria-labelledby="staged-heading">
       <header id="staged-heading">
         <span>已暂存</span>
@@ -241,6 +246,8 @@ async function confirmDiscard(): Promise<void> {
       </div>
     </section>
 
+    </template>
+    <template #unstaged>
     <section class="change-group" aria-labelledby="unstaged-heading">
       <header id="unstaged-heading">
         <span>未暂存</span>
@@ -309,6 +316,8 @@ async function confirmDiscard(): Promise<void> {
       </div>
     </section>
 
+    </template>
+    </ChangeGroupsSplit>
     <div
       v-if="pendingDiscard"
       class="modal-backdrop"
@@ -379,9 +388,13 @@ async function confirmDiscard(): Promise<void> {
 .change-row .file-status { color: var(--file-status-color); }
 .additions, .deletions, .table-heading span:nth-child(5), .table-heading span:nth-child(6) { text-align: right; font-variant-numeric: tabular-nums; padding-right: 8px; }
 .changes-list {
+  display: flex;
+  flex-direction: column;
   min-height: 0;
-  overflow: auto;
+  min-width: 0;
+  overflow: hidden;
 }
+.changes-toolbar { flex: 0 0 auto; }
 
 .error-banner {
   display: grid;
@@ -399,10 +412,6 @@ async function confirmDiscard(): Promise<void> {
 
 .change-group {
   padding: 8px 8px 4px;
-}
-
-.change-group + .change-group {
-  border-top: 1px solid var(--border);
 }
 
 .change-group > header {

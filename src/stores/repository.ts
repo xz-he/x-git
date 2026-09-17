@@ -20,6 +20,7 @@ import { useConsoleStore } from "@/stores/console";
 import { useTaskBranchesStore } from "@/stores/taskBranches";
 import { useTerminalStore } from "@/stores/terminal";
 import { useActivityStore } from "@/stores/activity";
+import { useUpdatesStore } from "@/stores/updates";
 
 export type RepositoryOperation =
   | { kind: "idle" }
@@ -32,6 +33,7 @@ export const useRepositoryStore = defineStore("repository", () => {
   const error = ref<BackendError>();
   const refreshingModules = ref(false);
   const otherOperationBusy = computed<boolean>((): boolean =>
+    useUpdatesStore().phase === "installing" ||
     useActivityStore().submitting ||
     refreshingModules.value || operation.value.kind !== "idle" ||
     useChangesStore().operation.kind !== "idle" ||

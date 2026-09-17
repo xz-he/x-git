@@ -10,3 +10,4 @@ src-tauri/target/
 !.env.example
 docs/
 output/
+.release-keys/

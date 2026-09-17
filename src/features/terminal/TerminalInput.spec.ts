@@ -13,6 +13,7 @@ describe("terminal command input", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     backend = createBackendFixture(); setBackendClientForTests(backend);
+    useTerminalStore().draft = "git status";
     useRepositoryStore().snapshot = { rootPath: "C:/repo", name: "repo", currentBranch: "main", headShortHash: "abc", isClean: true, changedFileCount: 0, conflictCount: 0, remotes: [], upstream: null };
   });
   const suggestions = (values: string[]): TerminalCompletion => ({ start: 4, end: 6, items: values.map(value => ({ value, label: value, description: "Git 命令", kind: "command" })), hasMore: false });

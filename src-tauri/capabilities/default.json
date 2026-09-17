@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Capabilities required by the HQ Git main window.",
   "windows": ["main"],
-  "permissions": ["core:default", "dialog:allow-open"]
+  "permissions": ["core:default", "core:app:allow-version", "dialog:allow-open", "updater:default", "process:allow-restart"]
 }
