@@ -8,6 +8,7 @@ import type { RepositorySnapshot, TaskBranchBinding, TaskBranchResult } from "@/
 import { useRepositoryStore } from "@/stores/repository";
 import { useChangesStore } from "@/stores/changes";
 import { useTaskBranchesStore } from "@/stores/taskBranches";
+import { useSettingsStore } from "@/stores/settings";
 import { createBackendFixture } from "@/test/backend";
 
 const repo: RepositorySnapshot = {
@@ -38,7 +39,17 @@ describe("task branches", () => {
     });
     setBackendClientForTests(backend);
   });
-  afterEach(() => wrapper?.unmount());
+  afterEach(() => { wrapper?.unmount(); vi.useRealTimers(); });
+
+  async function openAutoSlugDialog() {
+    vi.useFakeTimers();
+    useSettingsStore().settings.apiKey = "test-key";
+    wrapper = mount(RefsList, { props: { mode: "branches" } });
+    await flushPromises();
+    await wrapper.get('[aria-label="快速建分支"]').trigger("click");
+    await wrapper.get('[aria-label="完整任务单号"]').setValue("R2026082681825");
+  }
+  const englishValue = () => (wrapper.get('[aria-label="英文描述"]').element as HTMLInputElement).value;
 
   it("unlinks only the selected task and keeps the commit draft", async () => {
     const other = binding({ id: "task-2", targetBranch: "feature/R2-other" });
@@ -124,6 +135,115 @@ describe("task branches", () => {
       kind: "feature", ticket: "R2026082681825", slug: "purchase-orders", description: "采购订单",
       mode: "remoteMaster", remote: "origin", sourceBranch: "dev", expectedHead: "aaaaaaa",
     });
+  });
+
+  it("fills the English slug from the Chinese description and lets manual edits take over", async () => {
+    vi.mocked(backend.aiChat).mockResolvedValueOnce("fix-invoice-deduplication").mockResolvedValueOnce("video-task-type-filter-error");
+    await openAutoSlugDialog();
+    await wrapper.get('[aria-label="中文说明"]').setValue("修复跨境发票去重逻辑");
+    expect(backend.aiChat).not.toHaveBeenCalled();
+    expect(wrapper.get('[aria-label="确认创建任务分支"]').attributes()).toHaveProperty("disabled");
+    await vi.advanceTimersByTimeAsync(700);
+    expect(englishValue()).toBe("fix-invoice-deduplication");
+    expect(backend.aiChat).toHaveBeenCalledWith(expect.any(String), [expect.objectContaining({ content: expect.stringContaining("修复跨境发票去重逻辑") })]);
+    await wrapper.get('[aria-label="中文说明"]').setValue("视频任务类型筛选错误");
+    expect(englishValue()).toBe("");
+    await vi.advanceTimersByTimeAsync(700);
+    expect(englishValue()).toBe("video-task-type-filter-error");
+    await wrapper.get('[aria-label="英文描述"]').setValue("custom-slug");
+    await wrapper.get('[aria-label="中文说明"]').setValue("修复视频任务类型筛选错误");
+    await vi.advanceTimersByTimeAsync(700);
+    expect(englishValue()).toBe("custom-slug");
+    expect(backend.aiChat).toHaveBeenCalledTimes(2);
+    vi.mocked(backend.aiChat).mockResolvedValueOnce("fix-video-filter");
+    await wrapper.get('[aria-label="英文描述"]').setValue("");
+    await vi.advanceTimersByTimeAsync(700);
+    expect(englishValue()).toBe("fix-video-filter");
+  });
+
+  it("debounces edits and ignores cancelled translation responses", async () => {
+    let resolve!: (value: string) => void;
+    vi.mocked(backend.aiChat).mockImplementationOnce(() => new Promise(next => { resolve = next; })).mockResolvedValue("latest-description");
+    await openAutoSlugDialog();
+    await wrapper.get('[aria-label="中文说明"]').setValue("说明一");
+    await vi.advanceTimersByTimeAsync(300);
+    await wrapper.get('[aria-label="中文说明"]').setValue("说明二");
+    await vi.advanceTimersByTimeAsync(700);
+    expect(backend.aiChat).toHaveBeenCalledTimes(1);
+    await wrapper.get('[aria-label="中文说明"]').setValue("最新说明");
+    expect(backend.aiCancel).toHaveBeenCalledWith(vi.mocked(backend.aiChat).mock.calls[0]![0]);
+    await vi.advanceTimersByTimeAsync(700);
+    expect(backend.aiChat).toHaveBeenCalledTimes(1);
+    resolve("stale-description");
+    await flushPromises();
+    expect(englishValue()).toBe("latest-description");
+    expect(backend.aiChat).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves manual input when an in-flight translation finishes", async () => {
+    let resolve!: (value: string) => void;
+    vi.mocked(backend.aiChat).mockImplementationOnce(() => new Promise(next => { resolve = next; }));
+    await openAutoSlugDialog();
+    await wrapper.get('[aria-label="中文说明"]').setValue("中文说明");
+    await vi.advanceTimersByTimeAsync(700);
+    await wrapper.get('[aria-label="英文描述"]').setValue("manual-name");
+    resolve("automatic-name");
+    await flushPromises();
+    expect(englishValue()).toBe("manual-name");
+    expect(backend.aiCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows configuration and translation failures and allows retry", async () => {
+    await openAutoSlugDialog();
+    useSettingsStore().settings.apiKey = "";
+    await wrapper.get('[aria-label="中文说明"]').setValue("中文说明");
+    await vi.advanceTimersByTimeAsync(700);
+    expect(wrapper.text()).toContain("请先在设置中配置 AI 服务");
+    expect(backend.aiChat).not.toHaveBeenCalled();
+    useSettingsStore().settings.apiKey = "test-key";
+    vi.mocked(backend.aiChat).mockRejectedValueOnce({ code: "aiTransport", message: "连接失败" }).mockResolvedValueOnce("valid-slug");
+    const retry = () => wrapper.findAll("button").find(button => button.text() === "重新生成")!;
+    await retry().trigger("click");
+    await vi.advanceTimersByTimeAsync(700);
+    expect(wrapper.text()).toContain("连接失败");
+    expect(englishValue()).toBe("");
+    await retry().trigger("click");
+    await vi.advanceTimersByTimeAsync(700);
+    expect(englishValue()).toBe("valid-slug");
+  });
+
+  it.each(["建议使用 branch-name", "a".repeat(81), "", "feature/branch-name"])("rejects malformed AI output: %s", async reply => {
+    vi.mocked(backend.aiChat).mockResolvedValue(reply);
+    await openAutoSlugDialog();
+    await wrapper.get('[aria-label="中文说明"]').setValue("中文说明");
+    await vi.advanceTimersByTimeAsync(700);
+    expect(englishValue()).toBe("");
+    expect(wrapper.text()).toContain("AI 未返回有效的英文分支描述");
+  });
+
+  it("waits for IME composition and cancels translation on close", async () => {
+    vi.mocked(backend.aiChat).mockImplementation(() => new Promise(() => {}));
+    await openAutoSlugDialog();
+    const input = wrapper.get('[aria-label="中文说明"]');
+    (input.element as HTMLInputElement).value = "视频";
+    await input.trigger("input", { isComposing: true });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(backend.aiChat).not.toHaveBeenCalled();
+    await input.trigger("compositionend");
+    await vi.advanceTimersByTimeAsync(700);
+    expect(backend.aiChat).toHaveBeenCalledTimes(1);
+    await wrapper.get('[data-action="cancel"]').trigger("click");
+    expect(backend.aiCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("removes pending translation when the repository changes", async () => {
+    await openAutoSlugDialog();
+    await wrapper.get('[aria-label="中文说明"]').setValue("中文说明");
+    useRepositoryStore().generation++;
+    await flushPromises();
+    await vi.advanceTimersByTimeAsync(700);
+    expect(backend.aiChat).not.toHaveBeenCalled();
+    expect(wrapper.find('[aria-label="英文描述"]').exists()).toBe(false);
   });
 
   it("validates ticket type and shows the hotfix preview without truncating the ticket", async () => {
