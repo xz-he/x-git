@@ -36,10 +36,10 @@ struct Finding {
     #[serde(rename = "evidenceSources")]
     evidence_sources: Vec<ReviewEvidenceSource>,
 }
-fn invalid() -> BackendError {
+fn invalid(reason: &str) -> BackendError {
     BackendError::new(
         ErrorCode::AiInvalidResponse,
-        "审查响应缺少必需字段或违反结构协议。",
+        format!("AI 审查响应格式不正确：{reason}"),
     )
 }
 pub fn parse(
@@ -53,27 +53,43 @@ pub fn parse(
         output
             .split_once('\n')
             .and_then(|(_, body)| body.strip_suffix("```"))
-            .ok_or_else(invalid)?
+            .ok_or_else(|| invalid("Markdown 代码块未正确结束。"))?
             .trim()
     } else {
         output
     };
-    let value: serde_json::Value = serde_json::from_str(output).map_err(|_| invalid())?;
-    let object = value.as_object().ok_or_else(invalid)?;
+    let value: serde_json::Value = serde_json::from_str(output).map_err(|error| {
+        invalid("回复不是有效 JSON。请检查模型是否返回了说明文字或截断的内容。")
+            .with_diagnostics(error.to_string())
+    })?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| invalid("顶层必须是 JSON 对象。"))?;
     if object.len() != 1 {
-        return Err(invalid());
+        return Err(invalid(
+            "顶层只能包含 reviewResult 或 contextRequests 其中一个字段。",
+        ));
     }
     if let Some(requests) = object.get("contextRequests") {
         let requests: Vec<ContextRequest> =
-            serde_json::from_value(requests.clone()).map_err(|_| invalid())?;
+            serde_json::from_value(requests.clone()).map_err(|error| {
+                invalid("contextRequests 的字段或类型不符合要求。")
+                    .with_diagnostics(error.to_string())
+            })?;
         if requests.is_empty() || requests.len() > super::review_evidence::MAX_REQUESTS {
-            return Err(invalid());
+            return Err(invalid("contextRequests 必须包含 1 到 8 个请求。"));
         }
         return Ok(ReviewEnvelope::Requests(requests));
     }
-    let body: ResultBody =
-        serde_json::from_value(object.get("reviewResult").ok_or_else(invalid)?.clone())
-            .map_err(|_| invalid())?;
+    let body: ResultBody = serde_json::from_value(
+        object
+            .get("reviewResult")
+            .ok_or_else(|| invalid("缺少 reviewResult 包装字段。"))?
+            .clone(),
+    )
+    .map_err(|error| {
+        invalid("reviewResult 缺少必需字段或字段类型不正确。").with_diagnostics(error.to_string())
+    })?;
     let mut result = ValidatedReview {
         summary: body.summary,
         issues: Vec::new(),
@@ -86,24 +102,34 @@ pub fn parse(
             "P1" => AiIssueSeverity::P1,
             "P2" => AiIssueSeverity::P2,
             "P3" => AiIssueSeverity::P3,
-            _ => return Err(invalid()),
+            _ => return Err(invalid("问题 severity 必须为 P0、P1、P2 或 P3。")),
         };
-        if !batch.file_paths.contains(&finding.file)
-            || !(1..=10).contains(&finding.confidence)
-            || !matches!(
-                finding.change_relation.as_str(),
-                "introduced" | "exacerbated" | "unclear"
-            )
-            || [
-                &finding.title,
-                &finding.impact,
-                &finding.recommendation,
-                &finding.evidence,
-            ]
-            .iter()
-            .any(|text| text.trim().is_empty())
+        if !batch.file_paths.contains(&finding.file) {
+            return Err(invalid("问题 file 必须是当前批次的变更文件路径。"));
+        }
+        if !(1..=10).contains(&finding.confidence) {
+            return Err(invalid("问题 confidence 必须是 1 到 10 的整数。"));
+        }
+        if !matches!(
+            finding.change_relation.as_str(),
+            "introduced" | "exacerbated" | "unclear"
+        ) {
+            return Err(invalid(
+                "问题 change_relation 必须为 introduced、exacerbated 或 unclear。",
+            ));
+        }
+        if [
+            &finding.title,
+            &finding.impact,
+            &finding.recommendation,
+            &finding.evidence,
+        ]
+        .iter()
+        .any(|text| text.trim().is_empty())
         {
-            return Err(invalid());
+            return Err(invalid(
+                "问题 title、impact、recommendation、evidence 不得为空。",
+            ));
         }
         let mut missing = finding.context_missing;
         let mut verified = Vec::new();
@@ -231,6 +257,23 @@ mod tests {
             .unwrap()
             .remove("impact");
         assert!(parse(&response.to_string(), &batch(), &sources()).is_err());
+    }
+    #[test]
+    fn reports_missing_field_without_exposing_the_response_body() {
+        let error = parse(
+            r#"{"reviewResult":{"summary":"private source text","issues":[]}}"#,
+            &batch(),
+            &[],
+        )
+        .unwrap_err();
+        assert!(
+            error
+                .diagnostics
+                .as_deref()
+                .unwrap()
+                .contains("missing field `uncovered`")
+        );
+        assert!(!format!("{error:?}").contains("private source text"));
     }
     #[test]
     fn accepts_only_bounded_explicit_context_envelopes() {

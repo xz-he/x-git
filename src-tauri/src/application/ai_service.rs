@@ -649,6 +649,10 @@ pub(super) mod tests {
         let fixture = staged_multi_batch_repository().await;
         let (provider, _) = recording_server(vec![
             (Duration::ZERO, rich_response("a.txt", "P2")),
+            (
+                Duration::ZERO,
+                "Markdown instead of a review envelope".to_owned(),
+            ),
             (Duration::from_secs(5), rich_response("b.txt", "P2")),
         ])
         .await;
@@ -995,7 +999,13 @@ pub(super) mod tests {
         assert_eq!(unknown_error.code, ErrorCode::AiInvalidResponse);
         assert_eq!(malformed_error.code, ErrorCode::AiInvalidResponse);
         assert!(unknown_error.diagnostics.is_none());
-        assert!(malformed_error.diagnostics.is_none());
+        assert!(
+            malformed_error
+                .diagnostics
+                .as_deref()
+                .unwrap()
+                .contains("line 1")
+        );
     }
 
     #[test]
@@ -1227,9 +1237,99 @@ pub(super) mod tests {
     }
 
     #[tokio::test]
+    async fn skill_review_repairs_missing_fields_for_staged_and_commit_sources() {
+        for commit in [false, true] {
+            let fixture = staged_repository(b"new text\n").await;
+            let source = if commit {
+                run_git(fixture.path(), &["commit", "-m", "test change"]).await;
+                crate::domain::ai::ReviewSource::Commit {
+                    revision: "HEAD".to_owned(),
+                }
+            } else {
+                crate::domain::ai::ReviewSource::Staged
+            };
+            let malformed = r#"{"reviewResult":{"summary":"checked","issues":[]}}"#;
+            let (provider, requests) = recording_server(vec![
+                (Duration::ZERO, malformed.to_owned()),
+                (Duration::ZERO, rich_response("change.txt", "P1")),
+            ])
+            .await;
+            let sink = RecordingSink::default();
+            let service = service();
+            service
+                .start_review_source(
+                    &Uuid::new_v4().to_string(),
+                    fixture.path(),
+                    &settings(provider),
+                    source,
+                    Arc::new(sink.clone()),
+                )
+                .await
+                .unwrap();
+            sink.wait_for_terminal().await;
+            let events = sink.events();
+            let AiRunEventData::ReviewCompleted { result } = &events.last().unwrap().event else {
+                panic!("expected repaired result: {events:?}");
+            };
+            // Repair must still pass the ordinary evidence gates.
+            assert_eq!(result.issues[0].severity, AiIssueSeverity::P3);
+            assert!(events.iter().any(|event| matches!(&event.event,
+                AiRunEventData::ReviewProgress { phase, .. } if phase == "repair")));
+            assert!(service.active_runs.lock().await.is_empty());
+            let requests = requests.lock().unwrap();
+            assert_eq!(requests.len(), 2);
+            assert!(requests[1].contains("uncovered"));
+            assert!(requests[1].contains("previousResponse"));
+        }
+    }
+
+    #[tokio::test]
+    async fn skill_review_repair_supports_evidence_rounds_but_is_bounded_per_batch() {
+        let fixture = staged_repository(b"new text\n").await;
+        let context = r#"{"contextRequests":[{"kind":"file","path":"change.txt","startLine":1,"endLine":2}]}"#;
+        let (provider, requests) = recording_server(vec![
+            (Duration::ZERO, "## 审查摘要\n未发现问题".to_owned()),
+            (Duration::ZERO, context.to_owned()),
+            (Duration::ZERO, rich_response("outside-batch.txt", "P1")),
+        ])
+        .await;
+        let sink = RecordingSink::default();
+        let service = service();
+        service
+            .start_review(
+                &Uuid::new_v4().to_string(),
+                fixture.path(),
+                &settings(provider),
+                Arc::new(sink.clone()),
+            )
+            .await
+            .unwrap();
+        sink.wait_for_terminal().await;
+        let events = sink.events();
+        let AiRunEventData::Failed { error } = &events.last().unwrap().event else {
+            panic!("unauthorized path must fail: {events:?}");
+        };
+        assert!(error.message.contains("当前批次"));
+        assert_eq!(requests.lock().unwrap().len(), 3);
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| matches!(&event.event,
+            AiRunEventData::ReviewProgress { phase, .. } if phase == "repair"))
+                .count(),
+            1
+        );
+        assert!(service.active_runs.lock().await.is_empty());
+    }
+
+    #[tokio::test]
     async fn malformed_provider_output_emits_failure_and_cleans_up() {
         let fixture = staged_repository(b"new text\n").await;
-        let provider = one_response_server("{malformed}").await;
+        let (provider, requests) = recording_server(vec![
+            (Duration::ZERO, "{malformed}".to_owned()),
+            (Duration::ZERO, "{malformed}".to_owned()),
+        ])
+        .await;
         let provider_settings = settings(provider);
         let sink = RecordingSink::default();
         let service = service();
@@ -1251,6 +1351,9 @@ pub(super) mod tests {
             panic!("expected failure");
         };
         assert_eq!(error.code, ErrorCode::AiInvalidResponse);
+        assert!(error.message.contains("已尝试一次自动纠正"));
+        assert!(error.diagnostics.as_deref().unwrap().contains("line 1"));
+        assert_eq!(requests.lock().unwrap().len(), 2);
         service
             .start_review(
                 run_id,

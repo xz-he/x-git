@@ -13,7 +13,7 @@ const repositories = useRepositoryStore();
 const tasks = useTaskBranchesStore();
 const initial = { root: repositories.snapshot?.rootPath, generation: repositories.generation, branch: repositories.snapshot?.currentBranch, head: repositories.snapshot?.headShortHash };
 const kind = ref<TaskBranchKind>("feature");
-const mode = ref<TaskBranchMode>("current");
+const mode = ref<TaskBranchMode>("remoteMaster");
 const ticket = ref("");
 const { slug, description, translating, translationError, updateDescription, updateSlug, regenerate, stop } = useTaskBranchSlug();
 const remoteNames = computed(() => repositories.snapshot?.remotes.map((item) => item.name) ?? []);

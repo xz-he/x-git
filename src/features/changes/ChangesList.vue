@@ -71,7 +71,8 @@ const stagedFiles = computed(
   () => changesStore.snapshot?.files.filter((file) => file.staged) ?? [],
 );
 const unstagedFiles = computed(
-  () => changesStore.snapshot?.files.filter((file) => file.unstaged) ?? [],
+  () => changesStore.snapshot?.files.filter((file) => file.unstaged)
+    .sort((a, b) => Number(tableStatus(a, 'unstaged') === 'Untracked') - Number(tableStatus(b, 'unstaged') === 'Untracked')) ?? [],
 );
 const busy = computed(() => repositoryStore.navigationBusy);
 const reviewBusy = computed(() => busy.value || ai.running);
@@ -267,6 +268,7 @@ async function confirmDiscard(): Promise<void> {
         v-for="file in unstagedFiles"
         :key="'unstaged:' + file.path"
         class="change-row unstaged-row"
+        :data-status="tableStatus(file, 'unstaged')"
         :class="{
           selected:
             changesStore.selectedPath === file.path &&
@@ -376,12 +378,12 @@ async function confirmDiscard(): Promise<void> {
 .table-cell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 .table-cell.additions { color: var(--success); }
 .table-cell.deletions { color: var(--danger); }
-.change-row { --file-status-color: color-mix(in srgb, var(--primary) 70%, var(--text-muted)); }
+.change-row { --file-status-color: color-mix(in srgb, var(--primary) 80%, var(--text)); }
 .change-row[data-status="Added"],
-.change-row[data-status="Copied"] { --file-status-color: color-mix(in srgb, var(--success) 80%, var(--text-muted)); }
+.change-row[data-status="Copied"] { --file-status-color: color-mix(in srgb, var(--success) 85%, var(--text)); }
 .change-row[data-status="Deleted"],
-.change-row[data-status="Conflict"] { --file-status-color: color-mix(in srgb, var(--danger) 80%, var(--text-muted)); }
-.change-row.unstaged-row { --file-status-color: var(--text-muted); }
+.change-row[data-status="Conflict"] { --file-status-color: color-mix(in srgb, var(--danger) 85%, var(--text)); }
+.change-row[data-status="Untracked"] { --file-status-color: var(--text-muted); }
 .change-row .file-select,
 .change-row .file-icon,
 .change-row .extension,

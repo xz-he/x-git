@@ -125,7 +125,7 @@ describe("task branches", () => {
     await wrapper.get('[aria-label="完整任务单号"]').setValue("r2026082681825");
     await wrapper.get('[aria-label="英文描述"]').setValue("Purchase Orders");
     await wrapper.get('[aria-label="中文说明"]').setValue("采购订单");
-    await wrapper.get('[aria-label="创建方式"]').setValue("remoteMaster");
+    expect(wrapper.get('[aria-label="创建方式"]').element).toHaveProperty("value", "remoteMaster");
     expect(wrapper.text()).toContain("feature/R2026082681825-purchase-orders");
     expect(wrapper.text()).toContain("R2026082681825 采购订单");
     expect(backend.taskBranchesCreate).not.toHaveBeenCalled();
@@ -251,6 +251,7 @@ describe("task branches", () => {
     await flushPromises();
     await wrapper.get('[aria-label="快速建分支"]').trigger("click");
     await wrapper.get('[aria-label="任务类型"]').setValue("hotfix");
+    await wrapper.get('[aria-label="创建方式"]').setValue("current");
     await wrapper.get('[aria-label="完整任务单号"]').setValue("R2026082681825");
     await wrapper.get('[aria-label="英文描述"]').setValue("fix-sku-bug");
     await wrapper.get('[aria-label="中文说明"]').setValue("修复 SKU");

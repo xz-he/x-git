@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowUpCircle, LoaderCircle } from "@lucide/vue";
+import { Download, LoaderCircle } from "@lucide/vue";
 import { computed } from "vue";
 import { useUpdatesStore } from "@/stores/updates";
 import { useUiStore } from "@/stores/ui";
@@ -23,7 +23,7 @@ function open() {
 
 <template>
   <button class="update-button" :class="{ available: updates.latest }" aria-label="版本更新" :title="label" @click="open">
-    <LoaderCircle v-if="updates.busy" :size="17" class="spin" /><ArrowUpCircle v-else :size="17" />
+    <LoaderCircle v-if="updates.busy" :size="17" class="spin" /><Download v-else :size="17" />
     <span v-if="updates.latest" class="update-dot" aria-label="有可用更新" />
     <span v-else-if="updates.error" class="update-error" aria-label="更新检查失败">!</span>
   </button>

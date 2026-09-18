@@ -87,6 +87,7 @@ async function copyReport(): Promise<void> {
 
     <div v-if="ai.status === 'failed' && ai.error" class="state-banner error" role="alert"><span>{{ ai.error.message }}</span><button aria-label="重试审查" :disabled="retrying || wrongRoot" @click="retry"><RefreshCw :size="14" />重试</button></div>
     <div v-else-if="ai.status === 'cancelled'" class="state-banner"><span>已停止，保留已完成的审查结果。</span><button aria-label="重新审查" :disabled="retrying || wrongRoot" @click="retry"><RefreshCw :size="14" />重新审查</button></div>
+    <details v-if="ai.status === 'failed' && ai.error?.diagnostics" class="error-details"><summary>查看失败原因</summary><pre>{{ ai.error.diagnostics }}</pre></details>
     <p v-if="wrongRoot" class="error">此结果属于其他仓库，无法在当前仓库定位。</p>
     <p v-if="navigationError || changes.navigationError" class="error" role="alert">{{ navigationError || changes.navigationError }}</p>
 
@@ -105,6 +106,8 @@ async function copyReport(): Promise<void> {
 </template>
 
 <style scoped>
+.error-details { font-size: 12px; color: var(--text-muted); }
+.error-details pre { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 .selected-review-paths { max-height: 160px; overflow: auto; padding-left: 18px; }
 .review-view { display: grid; min-width: 0; align-content: start; gap: 12px; padding: 14px; overflow-wrap: anywhere; }.review-context { display: grid; gap: 7px; padding: 11px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-muted); font-size: 11px; line-height: 1.5; }.review-context code { white-space: pre-wrap; user-select: text; }small { color: var(--text-muted); }.state-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 11px; }.state-banner span { flex: 1 1 140px; }.error { color: var(--danger); }.findings { display: grid; gap: 9px; }.empty-state { display: grid; min-height: 160px; place-content: center; justify-items: center; gap: 7px; color: var(--text-muted); text-align: center; font-size: 11px; }.empty-state strong { color: var(--text); font-size: 13px; }.compact-list { padding: 10px 11px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-muted); font-size: 11px; line-height: 1.5; }.compact-list h3 { margin: 0 0 7px; color: var(--text-muted); font-size: 11px; }.compact-list ul { display: grid; gap: 5px; margin: 0; padding-left: 16px; }.warnings { border-color: color-mix(in srgb, var(--warning) 28%, var(--border)); }button { display: inline-flex; align-items: center; gap: 5px; padding: 6px 8px; background: var(--surface-panel); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 11px; }.copy-result { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }summary { cursor: pointer; }
 </style>
