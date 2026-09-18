@@ -87,6 +87,7 @@ impl RemoteService {
                         GitRunOperation::Fetch,
                         request.remote,
                         None,
+                        None,
                         cancellation,
                         publisher,
                     )
@@ -119,6 +120,7 @@ impl RemoteService {
                         GitRunOperation::Pull,
                         request.remote,
                         Some(request.remote_branch),
+                        request.local_branch,
                         cancellation,
                         publisher,
                     )
@@ -330,12 +332,14 @@ impl RemoteService {
         Ok(cancellation)
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn execute_sync<S>(
         &self,
         root: PathBuf,
         operation: GitRunOperation,
         remote: String,
         remote_branch: Option<String>,
+        local_branch: Option<String>,
         cancellation: CancellationToken,
         publisher: GitRunEventPublisher<S>,
     ) -> RunTerminal
@@ -350,13 +354,33 @@ impl RemoteService {
             return self.failed_with_refresh(&root, error).await;
         }
 
+        if cancellation.is_cancelled() {
+            return finish_sync(
+                operation,
+                Err(BackendError::new(ErrorCode::Cancelled, "操作已取消。")),
+                self.refreshed_operation_result(&root).await,
+            );
+        }
+        if let Some(local_branch) = local_branch {
+            let refs = RefsService::new(self.runner.clone(), self.coordinator.clone());
+            if let Err(error) = refs
+                .checkout_integration_destination(&root, &local_branch)
+                .await
+            {
+                return self.failed_with_refresh(&root, error).await;
+            }
+            publisher.progress(
+                GitRunProgressPhase::Updating,
+                format!("正在拉取到本地分支 {local_branch}。"),
+            );
+        }
         let invocation = match remote_branch.as_deref() {
             Some(branch) => GitInvocation::new([
                 OsString::from("pull"),
                 OsString::from("--progress"),
                 OsString::from("--"),
                 OsString::from(&remote),
-                OsString::from(branch),
+                OsString::from(format!("refs/heads/{branch}")),
             ]),
             None => GitInvocation::new([
                 OsString::from("fetch"),
@@ -429,18 +453,13 @@ impl RemoteService {
         let state = read_operation_state(root, &self.runner).await?;
         ensure_mutation_allowed(&state, MutationIntent::RemoteSync)?;
         let remotes = self.snapshot_at_root(root).await?;
-        let remote = remotes
+        let _remote = remotes
             .remotes
             .iter()
             .find(|remote| remote.name == remote_name)
             .ok_or_else(|| unavailable_target("所选远程仓库已不存在，请刷新后重试。"))?;
-        if let Some(branch) = remote_branch
-            && !remote
-                .branches
-                .iter()
-                .any(|candidate| candidate.name == branch)
-        {
-            return Err(unavailable_target("所选远程分支已不存在，请刷新后重试。"));
+        if let Some(branch) = remote_branch {
+            validate_remote_branch_name(root, &self.runner, branch).await?;
         }
         Ok(())
     }
@@ -703,8 +722,15 @@ fn finish_sync(
     match (execution, refreshed) {
         (Ok(_), Ok(result)) => RunTerminal::Completed(result),
         (Ok(_), Err(error)) => RunTerminal::Failed {
-            error: BackendError::new(ErrorCode::GitRefreshFailed, "Git 同步已成功，但刷新本地仓库状态失败。请手动刷新，不要重复执行同步。")
-                .with_diagnostics(format!("{}\n{}", error.message, error.diagnostics.unwrap_or_default())),
+            error: BackendError::new(
+                ErrorCode::GitRefreshFailed,
+                "Git 同步已成功，但刷新本地仓库状态失败。请手动刷新，不要重复执行同步。",
+            )
+            .with_diagnostics(format!(
+                "{}\n{}",
+                error.message,
+                error.diagnostics.unwrap_or_default()
+            )),
             result: None,
         },
         (Err(error), Ok(result)) if error.code == ErrorCode::Cancelled => {
@@ -927,9 +953,17 @@ mod tests {
 
     #[test]
     fn completed_git_command_with_failed_refresh_is_reported_distinctly() {
-        let execution = Ok(crate::infrastructure::git_runner::GitOutput { stdout: String::new(), stderr: String::new(), status_code: Some(0) });
+        let execution = Ok(crate::infrastructure::git_runner::GitOutput {
+            stdout: String::new(),
+            stderr: String::new(),
+            status_code: Some(0),
+        });
         let refresh = Err(BackendError::new(ErrorCode::Io, "无法读取仓库状态"));
-        let RunTerminal::Failed { error, result } = finish_sync(GitRunOperation::Push, execution, refresh) else { panic!("expected refresh warning"); };
+        let RunTerminal::Failed { error, result } =
+            finish_sync(GitRunOperation::Push, execution, refresh)
+        else {
+            panic!("expected refresh warning");
+        };
         assert_eq!(error.code, ErrorCode::GitRefreshFailed);
         assert!(error.message.contains("已成功"));
         assert!(error.message.contains("不要重复执行"));

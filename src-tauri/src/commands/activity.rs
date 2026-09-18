@@ -63,7 +63,8 @@ async fn execute_recorded(
         .find_map(|key| args.get(key))
         .or_else(|| {
             args.get("request").and_then(|r| {
-                r.get("name")
+                r.get("relativePath")
+                    .or_else(|| r.get("name"))
                     .or_else(|| r.get("commit"))
                     .or_else(|| r.get("target"))
             })
@@ -75,6 +76,17 @@ async fn execute_recorded(
         )
     } else {
         title.into()
+    };
+    let title = if action == "refs_merge" {
+        match args.get("destination").and_then(Value::as_str) {
+            Some(destination) => format!(
+                "{title} → {}",
+                destination.chars().take(240).collect::<String>()
+            ),
+            None => title,
+        }
+    } else {
+        title
     };
     state
         .activity
@@ -125,6 +137,9 @@ pub fn action_title(action: &str) -> Option<&'static str> {
         "conflicts_resolve" => "解决冲突",
         "conflicts_continue" => "继续 Git 操作",
         "files_execute" => "文件操作",
+        "files_ignore" => "忽略文件",
+        "files_untrack" => "停止跟踪文件",
+        "files_lfs_track" => "跟踪 Git LFS 文件类型",
         "task_branches_create" => "创建任务分支",
         "task_branches_run" => "提交并移植",
         "task_branches_unlink" => "解除任务分支关联",
@@ -146,6 +161,9 @@ fn dispatch<'a>(
         };
     }
     match action {
+        "files_ignore" => operation!(state.files.ignore_file(root, &field(args, "request")?).await),
+        "files_untrack" => operation!(state.files.untrack_file(root, &field::<String>(args, "relativePath")?).await),
+        "files_lfs_track" => operation!(state.files.track_lfs(root, &field::<String>(args, "relativePath")?).await),
         "changes_stage_file" => operation!(
             state
                 .changes
@@ -251,7 +269,15 @@ fn dispatch<'a>(
         "refs_merge" => operation!(
             state
                 .refs
-                .merge(root, &field::<String>(args, "target")?)
+                .merge_into(
+                    root,
+                    &field::<String>(args, "target")?,
+                    serde_json::from_value::<Option<String>>(
+                        args.get("destination").cloned().unwrap_or(Value::Null)
+                    )
+                    .map_err(|_| invalid())?
+                    .as_deref()
+                )
                 .await,
         ),
         "refs_rebase" => operation!(

@@ -153,11 +153,35 @@ impl RefsService {
         requested_root: &Path,
         target: &str,
     ) -> Result<RefsMutationResult, BackendError> {
+        self.merge_into(requested_root, target, None).await
+    }
+
+    pub async fn merge_into(
+        &self,
+        requested_root: &Path,
+        source: &str,
+        destination: Option<&str>,
+    ) -> Result<RefsMutationResult, BackendError> {
         let root = self.repository_root(requested_root).await?;
         let _guard = self.coordinator.write(&root).await;
-        let target_oid = self
-            .resolve_integration_target(&root, target, MutationIntent::Merge)
+        self.ensure_operation_allows(&root, MutationIntent::Merge)
             .await?;
+        let source = self.validate_branch_name(&root, source).await?;
+        let refs = self.snapshot_at_root(&root).await?;
+        let source_branch = ensure_local_branch_exists(&refs, &source)?;
+        let target_oid = source_branch.tip.full_hash.clone();
+        if destination.is_some_and(|name| name.trim() == source)
+            || (destination.is_none() && source_branch.current)
+        {
+            return Err(BackendError::new(
+                ErrorCode::InvalidReference,
+                "合并源分支和目标分支不能相同。",
+            ));
+        }
+        if let Some(destination) = destination {
+            self.checkout_integration_destination(&root, destination)
+                .await?;
+        }
         let output = self
             .runner
             .run_allowing_failure(
@@ -167,6 +191,37 @@ impl RefsService {
             .await?;
         let result = self.refreshed_mutation_result(&root).await?;
         recover_integration_result(output, result, RepositoryOperationKind::Merge)
+    }
+
+    /// Caller holds the repository mutation lock for validation, switch and integration.
+    pub(crate) async fn checkout_integration_destination(
+        &self,
+        root: &Path,
+        name: &str,
+    ) -> Result<(), BackendError> {
+        let name = self.validate_branch_name(root, name).await?;
+        let refs = self.snapshot_at_root(root).await?;
+        if ensure_local_branch_exists(&refs, &name)?.current {
+            return Ok(());
+        }
+        let status = self
+            .runner
+            .run(
+                Some(root),
+                ["status", "--porcelain", "--untracked-files=normal"],
+            )
+            .await?;
+        if !status.stdout.trim().is_empty() {
+            return Err(BackendError::new(
+                ErrorCode::DirtyWorktree,
+                "切换到目标分支前，请先提交或贮藏当前未提交修改。",
+            ));
+        }
+        self.runner
+            .run(Some(root), ["switch", "--", &name])
+            .await
+            .map_err(map_switch_error)?;
+        Ok(())
     }
 
     pub async fn rebase(

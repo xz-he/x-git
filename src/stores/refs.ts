@@ -24,6 +24,7 @@ interface IntegrationRequest {
   generation: number;
   source: string;
   target: string;
+  destination: string;
 }
 
 export const useRefsStore = defineStore("refs", () => {
@@ -37,8 +38,8 @@ export const useRefsStore = defineStore("refs", () => {
   const integrationRequest = ref<IntegrationRequest>();
   const integrationTargets = computed(() =>
     (snapshot.value?.localBranches ?? []).filter((branch) =>
-      branch.kind === "local" && !branch.current &&
-      branch.name !== useRepositoryStore().snapshot?.currentBranch,
+      branch.kind === "local" && (integrationRequest.value?.action === "merge" ||
+        (!branch.current && branch.name !== useRepositoryStore().snapshot?.currentBranch)),
     ),
   );
   const integrationBlocked = computed(() =>
@@ -173,9 +174,24 @@ export const useRefsStore = defineStore("refs", () => {
     return mutate((rootPath) => backendClient.refsDelete(rootPath, request));
   }
 
-  function merge(target: string): Promise<void> {
+  async function merge(target: string, destination?: string): Promise<void> {
     if (integrationBlocked.value) return Promise.reject(integrationBusyError());
-    return mutate((rootPath) => backendClient.refsMerge(rootPath, target));
+    const repositories = useRepositoryStore();
+    const root = repositories.snapshot?.rootPath;
+    const owner = repositories.generation;
+    const previousBranch = repositories.snapshot?.currentBranch;
+    try {
+      await mutate((rootPath) => destination === undefined
+        ? backendClient.refsMerge(rootPath, target)
+        : backendClient.refsMerge(rootPath, target, destination));
+    } catch (cause) {
+      // Switching may succeed even if the merge fails. Refresh after mutate
+      // releases its busy flag so the UI cannot keep showing the old branch.
+      if (destination && destination !== previousBranch && repositories.snapshot?.rootPath === root && repositories.generation === owner) {
+        await repositories.refresh().catch(() => undefined);
+      }
+      throw cause;
+    }
   }
 
   function rebase(target: string): Promise<void> {
@@ -210,7 +226,9 @@ export const useRefsStore = defineStore("refs", () => {
     integrationRequest.value = {
       action, rootPath: repository.rootPath, generation: repositories.generation,
       source: repository.currentBranch,
-      target: integrationTargets.value.find((branch) => branch.fullName === target)?.fullName ?? "",
+      destination: repository.currentBranch,
+      target: (action === "merge" ? snapshot.value?.localBranches ?? [] : integrationTargets.value)
+        .find((branch) => branch.fullName === target)?.fullName ?? "",
     };
     void loadIntegrationTargets();
   }
@@ -232,10 +250,12 @@ export const useRefsStore = defineStore("refs", () => {
       integrationRequest.value = undefined;
       return;
     }
-    const target = integrationTargets.value.find((branch) => branch.fullName === request.target);
+    const target = integrationTargets.value.find((branch) => branch.fullName === request.target || branch.name === request.target);
     if (!target) return;
+    if (request.action === "merge" && (!snapshot.value?.localBranches.some(branch => branch.name === request.destination)
+      || target.name === request.destination)) return;
     try {
-      await (request.action === "merge" ? merge(target.name) : rebase(target.name));
+      await (request.action === "merge" ? merge(target.name, request.destination) : rebase(target.name));
       if (integrationRequest.value === request) integrationRequest.value = undefined;
     } catch {
       // Preserve the selected target and backend error for retry.

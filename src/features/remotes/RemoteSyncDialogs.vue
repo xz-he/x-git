@@ -2,13 +2,17 @@
 import { computed, ref, watch } from "vue";
 
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
+import BranchInput from "@/components/common/BranchInput.vue";
 import type { PushRequest } from "@/lib/backend/types";
 import { useRefsStore } from "@/stores/refs";
 import { useRemotesStore } from "@/stores/remotes";
+import { useRepositoryStore } from "@/stores/repository";
 
 const remotes = useRemotesStore();
 const refs = useRefsStore();
+const repositories = useRepositoryStore();
 const pullBranch = ref("");
+const pullLocalBranch = ref("");
 const localBranch = ref("");
 const pushBranch = ref("");
 const establishUpstream = ref(false);
@@ -27,10 +31,9 @@ const leaseBranch = computed(() =>
 );
 const pullDisabled = computed(
   () =>
-    remotes.running ||
-    !selectedRemote.value?.branches.some(
-      (branch) => branch.name === pullBranch.value,
-    ),
+    remotes.running || repositories.navigationBusy || refs.loading || !selectedRemote.value ||
+    !pullBranch.value.trim() ||
+    !localBranches.value.some(branch => branch.name === pullLocalBranch.value),
 );
 const pushDisabled = computed(
   () =>
@@ -49,7 +52,9 @@ watch(
     const currentLocal =
       localBranches.value.find((branch) => branch.current) ??
       localBranches.value[0];
-    pullBranch.value = selectedRemote.value?.branches[0]?.name ?? "";
+    pullBranch.value = selectedRemote.value?.branches.find(branch => branch.trackingLocal === currentLocal?.name)?.name
+      ?? selectedRemote.value?.branches[0]?.name ?? "";
+    pullLocalBranch.value = currentLocal?.name ?? repositories.snapshot?.currentBranch ?? "";
     localBranch.value = currentLocal?.name ?? "";
     pushBranch.value =
       selectedRemote.value?.branches.find(
@@ -69,7 +74,7 @@ async function confirmPull(): Promise<void> {
     return;
   }
   try {
-    await remotes.pull(remote.name, pullBranch.value);
+    await remotes.pull(remote.name, pullBranch.value.trim(), pullLocalBranch.value);
     remotes.dismissAction();
   } catch {
     // Preserve the selected target for retry.
@@ -103,7 +108,7 @@ async function confirmPush(): Promise<void> {
   <ConfirmDialog
     v-if="remotes.requestedAction === 'pull'"
     title="拉取远程分支"
-    :description="selectedRemote ? '将所选远程分支拉取到当前分支。Git 的仓库配置决定合并或变基策略。' : '当前没有可用的远程仓库。'"
+    :description="selectedRemote ? `将 ${selectedRemote.name}/${pullBranch || '远程分支'} 拉取到本地 ${pullLocalBranch || '目标分支'}。执行后停留在目标分支，Git 的仓库配置决定合并或变基策略。` : '当前没有可用的远程仓库。'"
     confirm-label="确认拉取"
     :confirm-disabled="pullDisabled"
     :busy="remotes.running"
@@ -111,17 +116,19 @@ async function confirmPush(): Promise<void> {
     @confirm="confirmPull"
   >
     <label class="field">
-      远程分支
-      <select v-model="pullBranch" aria-label="远程分支">
-        <option
-          v-for="branch in selectedRemote?.branches ?? []"
-          :key="branch.fullName"
-          :value="branch.name"
-        >
-          {{ selectedRemote?.name }}/{{ branch.name }}
-        </option>
+      远程仓库
+      <select v-model="remotes.selectedRemoteName" aria-label="拉取远程仓库" :disabled="remotes.running">
+        <option v-for="remote in remotes.snapshot?.remotes ?? []" :key="remote.name" :value="remote.name">{{ remote.name }}</option>
       </select>
     </label>
+    <label class="field">远程源分支
+      <BranchInput v-model="pullBranch" label="远程分支" :options="selectedRemote?.branches.map(branch => branch.name) ?? []" :disabled="remotes.running" />
+    </label>
+    <label class="field">本地目标分支
+      <BranchInput v-model="pullLocalBranch" label="拉取目标本地分支" :options="localBranches.map(branch => branch.name)" :disabled="remotes.running" />
+    </label>
+    <p class="target-hint">支持输入联想；本地目标分支必须已存在。跨分支拉取前请先提交或贮藏未提交修改。</p>
+    <p v-if="remotes.error" class="lease-warning" role="alert">{{ remotes.error.message }}</p>
   </ConfirmDialog>
 
   <ConfirmDialog
@@ -177,6 +184,7 @@ async function confirmPush(): Promise<void> {
 </template>
 
 <style scoped>
+.target-hint { color: var(--text-muted); font-size: 11px; line-height: 1.6; margin-top: 12px; }
 .target-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
 .field { display: grid; gap: 6px; margin-top: 12px; color: var(--text-muted); font-size: 11px; }
 .field input, .field select { width: 100%; height: 34px; min-width: 0; padding: 0 9px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-app); color: var(--text); }

@@ -45,6 +45,7 @@ pub struct FetchRequest {
 pub struct PullRequest {
     pub remote: String,
     pub remote_branch: String,
+    pub local_branch: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]

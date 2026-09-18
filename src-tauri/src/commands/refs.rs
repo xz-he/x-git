@@ -49,8 +49,12 @@ pub async fn refs_merge(
     state: State<'_, AppState>,
     path: String,
     target: String,
+    destination: Option<String>,
 ) -> Result<RefsMutationResult, BackendError> {
-    state.refs.merge(Path::new(&path), &target).await
+    state
+        .refs
+        .merge_into(Path::new(&path), &target, destination.as_deref())
+        .await
 }
 
 #[tauri::command]

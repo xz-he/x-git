@@ -1,4 +1,4 @@
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -83,11 +83,18 @@ describe("remote workbench", () => {
     );
   });
 
-  it("requires a current remote branch selection for pull", async () => {
+  it("pulls the typed remote branch to the selected existing local branch", async () => {
     const store = useRemotesStore();
     store.resetForRepository("C:/repo", 1);
     store.applySnapshot(remotes);
     store.selectedRemoteName = "origin";
+    const refs = await backend.refsSnapshot("C:/repo");
+    refs.localBranches = ["main", "release"].map(name => ({
+      name, fullName: `refs/heads/${name}`, kind: "local", current: name === "main",
+      tip: { fullHash: "a".repeat(40), shortHash: "aaaaaaa", subject: "base", author: "HQ", authoredAt: "2026-09-18" },
+    }));
+    useRefsStore().applySnapshot(refs, "C:/repo");
+    vi.mocked(backend.remoteStartPull).mockImplementation(async (_root, runId) => ({ runId, operation: "pull" }));
     store.requestAction("pull");
     const wrapper = mount(RemoteSyncDialogs, {
       attachTo: document.body,
@@ -95,6 +102,20 @@ describe("remote workbench", () => {
     });
 
     expect(wrapper.get('[aria-label="确认拉取"]').attributes("disabled")).toBeUndefined();
+    await wrapper.get('[aria-label="远程分支"]').setValue("server-only");
+    const destination = "release";
+    await wrapper.get('[aria-label="拉取目标本地分支"]').setValue(destination);
+    expect(wrapper.findAll('datalist option').map(option => option.attributes('value'))).toContain(destination);
+    await wrapper.get('[aria-label="确认拉取"]').trigger('click');
+    await vi.waitFor(() => expect(backend.remoteStartPull).toHaveBeenCalledWith("C:/repo", expect.any(String), {
+      remote: "origin", remoteBranch: "server-only", localBranch: destination,
+    }));
+    await flushPromises();
+    store.status = "idle";
+    store.requestAction("pull");
+    await wrapper.vm.$nextTick();
+    await wrapper.get('[aria-label="拉取目标本地分支"]').setValue("nonexistent");
+    expect(wrapper.get('[aria-label="确认拉取"]').attributes("disabled")).toBeDefined();
     store.applySnapshot({ remotes: [] });
     await wrapper.vm.$nextTick();
     expect(wrapper.get('[aria-label="确认拉取"]').attributes("disabled")).toBeDefined();

@@ -512,6 +512,112 @@ async fn merge_returns_clean_and_recoverable_conflict_states() {
 }
 
 #[tokio::test]
+async fn merge_into_selected_destination_preserves_other_branch_tips() {
+    let fixture = committed_fixture().await;
+    let root = fixture.path();
+    run_git(root, &["branch", "destination"]).await;
+    run_git(root, &["switch", "-c", "source"]).await;
+    std::fs::write(root.join("feature.txt"), "feature\n").unwrap();
+    run_git(root, &["add", "feature.txt"]).await;
+    run_git(root, &["commit", "-m", "feature"]).await;
+    let before = RefsService::default().snapshot(root).await.unwrap();
+    run_git(root, &["switch", "main"]).await;
+    let result = RefsService::default()
+        .merge_into(root, "source", Some("destination"))
+        .await
+        .unwrap();
+    assert_eq!(
+        result.workspace.repository.current_branch.as_deref(),
+        Some("destination")
+    );
+    assert!(root.join("feature.txt").exists());
+    for name in ["main", "source"] {
+        assert_eq!(
+            result
+                .refs
+                .local_branches
+                .iter()
+                .find(|b| b.name == name)
+                .unwrap()
+                .tip
+                .full_hash,
+            before
+                .local_branches
+                .iter()
+                .find(|b| b.name == name)
+                .unwrap()
+                .tip
+                .full_hash
+        );
+    }
+}
+
+#[tokio::test]
+async fn merge_into_rejects_dirty_switch_missing_and_identical_branches() {
+    let fixture = committed_fixture().await;
+    let root = fixture.path();
+    run_git(root, &["branch", "destination"]).await;
+    std::fs::write(root.join("private.txt"), "unsaved").unwrap();
+    let service = RefsService::default();
+    for (source, destination, code) in [
+        ("main", "destination", ErrorCode::DirtyWorktree),
+        ("main", "main", ErrorCode::InvalidReference),
+        ("missing", "destination", ErrorCode::BranchUnavailable),
+        ("main", "missing", ErrorCode::BranchUnavailable),
+    ] {
+        assert_eq!(
+            service
+                .merge_into(root, source, Some(destination))
+                .await
+                .unwrap_err()
+                .code,
+            code
+        );
+    }
+    assert!(
+        service
+            .snapshot(root)
+            .await
+            .unwrap()
+            .local_branches
+            .iter()
+            .any(|b| b.name == "main" && b.current)
+    );
+    assert_eq!(
+        std::fs::read_to_string(root.join("private.txt")).unwrap(),
+        "unsaved"
+    );
+}
+
+#[tokio::test]
+async fn merge_into_conflict_remains_on_selected_destination_and_can_abort() {
+    let fixture = conflicting_branches_fixture().await;
+    run_git(fixture.path(), &["switch", "topic"]).await;
+    let service = RefsService::default();
+    let result = service
+        .merge_into(fixture.path(), "topic", Some("main"))
+        .await
+        .unwrap();
+    assert_eq!(
+        result.workspace.repository.current_branch.as_deref(),
+        Some("main")
+    );
+    assert_eq!(result.operation_state.kind, RepositoryOperationKind::Merge);
+    let aborted = service
+        .abort(fixture.path(), AbortAction::Merge)
+        .await
+        .unwrap();
+    assert_eq!(
+        aborted.workspace.repository.current_branch.as_deref(),
+        Some("main")
+    );
+    assert_eq!(
+        std::fs::read_to_string(fixture.path().join("README.md")).unwrap(),
+        "main\n"
+    );
+}
+
+#[tokio::test]
 async fn rebase_returns_clean_and_recoverable_conflict_states() {
     let clean = committed_fixture().await;
     run_git(clean.path(), &["switch", "-c", "topic"]).await;

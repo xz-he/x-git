@@ -18,6 +18,7 @@ export const gitFeedback = ref<GitFeedback[]>([]);
 export const feedbackExpanded = ref(true);
 const cancellations = new Map<string, () => Promise<unknown>>();
 const actions: Record<string, string> = {
+  filesOpen: "打开文件", filesInspect: "读取文件历史", filesIgnore: "忽略文件", filesUntrack: "停止跟踪", filesLfsTrack: "跟踪 Git LFS 文件类型",
   activityRollback: "回滚操作", changesStageFiles: "批量暂存", changesUnstageFiles: "批量取消暂存",
   repositoryOpen: "打开仓库", repositoryInit: "初始化仓库", repositoryClone: "Clone 仓库", repositoryRefresh: "刷新仓库",
   changesStageFile: "暂存文件", changesUnstageFile: "取消暂存", changesStageHunk: "暂存代码块", changesUnstageHunk: "取消暂存代码块",
@@ -39,11 +40,12 @@ function object(value: unknown): Record<string, unknown> { return value !== null
 function targetFor(action: string, args: unknown[]): string {
   const request = object(args[asyncActions.has(action) ? 2 : 1]);
   if (action === "remoteStartPush") return clean(`${request.localBranch} → ${request.remote}/${request.remoteBranch}`, MAX_TARGET);
-  if (action === "remoteStartPull") return clean(`${request.remote}/${request.remoteBranch} → 当前分支`, MAX_TARGET);
+  if (action === "remoteStartPull") return clean(`${request.remote}/${request.remoteBranch} → ${request.localBranch ?? '当前分支'}`, MAX_TARGET);
+  if (action === "refsMerge") return clean(`${args[1]} → ${args[2] ?? '当前分支'}`, MAX_TARGET);
   if (action === "remoteStartFetch") return clean(`远程：${request.remote}`, MAX_TARGET);
   if (["terminalStart", "consoleStart", "repositoryClone", "changesCommit", "activityRollback"].includes(action)) return "";
   if (Array.isArray(args[1])) return `${args[1].length} 个文件`;
-  const value = typeof args[1] === "string" ? args[1] : request.name ?? request.commit ?? request.target ?? request.ticket;
+  const value = typeof args[1] === "string" ? args[1] : request.relativePath ?? request.name ?? request.commit ?? request.target ?? request.ticket;
   return typeof value === "string" ? clean(value, MAX_TARGET) : "";
 }
 function prune(): void {

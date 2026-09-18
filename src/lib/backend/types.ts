@@ -247,7 +247,12 @@ export interface FetchRequest {
 export interface PullRequest {
   remote: string;
   remoteBranch: string;
+  localBranch?: string;
 }
+
+export type IgnoreRule = { kind: "exact" } | { kind: "extension" } | { kind: "directory"; directory: string } | { kind: "custom"; pattern: string };
+export interface IgnoreRequest { relativePath: string; rule: IgnoreRule; scope: "repository" | "local" | "global" }
+export interface IgnorePreview { pattern: string; targetPath: string; tracked: boolean }
 
 export interface ForceWithLease {
   expectedRemoteOid: string;

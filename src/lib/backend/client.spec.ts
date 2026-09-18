@@ -29,6 +29,24 @@ describe("backend AI transport", () => {
     tauri.listen.mockReset();
   });
 
+  it("routes file context queries directly and records file mutations", async () => {
+    tauri.invoke.mockResolvedValue({ value: undefined, error: null, warning: null });
+    const path = "D:\\repo", relativePath = "tests/new file.ts";
+    const request = { relativePath, scope: "local" as const, rule: { kind: "exact" as const } };
+    await backendClient.filesOpen(path, relativePath, true);
+    await backendClient.filesInspect(path, relativePath, "history");
+    await backendClient.filesIgnorePreview(path, request);
+    await backendClient.filesIgnore(path, request);
+    await backendClient.filesUntrack(path, relativePath);
+    await backendClient.filesLfsTrack(path, relativePath);
+    expect(tauri.invoke).toHaveBeenNthCalledWith(1, "files_open", { path, relativePath, reveal: true });
+    expect(tauri.invoke).toHaveBeenNthCalledWith(2, "files_inspect", { path, relativePath, kind: "history" });
+    expect(tauri.invoke).toHaveBeenNthCalledWith(3, "files_ignore_preview", { path, request });
+    expect(tauri.invoke).toHaveBeenNthCalledWith(4, "activity_execute", { action: "files_ignore", args: { path, request } });
+    expect(tauri.invoke).toHaveBeenNthCalledWith(5, "activity_execute", { action: "files_untrack", args: { path, relativePath } });
+    expect(tauri.invoke).toHaveBeenNthCalledWith(6, "activity_execute", { action: "files_lfs_track", args: { path, relativePath } });
+  });
+
   it("delegates AI commands with exact command arguments", async () => {
     tauri.invoke.mockResolvedValue(undefined);
 
@@ -114,6 +132,7 @@ describe("backend AI transport", () => {
     await backendClient.refsSwitch("D:\\repo", "topic");
     await backendClient.refsDelete("D:\\repo", deleteRequest);
     await backendClient.refsMerge("D:\\repo", "topic");
+    await backendClient.refsMerge("D:\\repo", "topic", "release");
     await backendClient.refsRebase("D:\\repo", "topic");
     await backendClient.refsAbort("D:\\repo", "merge");
     await backendClient.historyCheckout("D:\\repo", "abc1234");
@@ -125,6 +144,7 @@ describe("backend AI transport", () => {
       ["refs_switch_branch", { path: "D:\\repo", name: "topic" }],
       ["refs_delete_branch", { path: "D:\\repo", request: deleteRequest }],
       ["refs_merge", { path: "D:\\repo", target: "topic" }],
+      ["refs_merge", { path: "D:\\repo", target: "topic", destination: "release" }],
       ["refs_rebase", { path: "D:\\repo", target: "topic" }],
       ["refs_abort", { path: "D:\\repo", action: "merge" }],
       ["history_checkout", { path: "D:\\repo", commit: "abc1234" }],

@@ -156,11 +156,12 @@ export const useRemotesStore = defineStore("remotes", () => {
     );
   }
 
-  function pull(remote: string, remoteBranch: string): Promise<void> {
-    return start("pull", { remote, remoteBranch }, (rootPath, nextRunId) =>
+  function pull(remote: string, remoteBranch: string, localBranch?: string): Promise<void> {
+    return start("pull", { remote, remoteBranch, localBranch }, (rootPath, nextRunId) =>
       backendClient.remoteStartPull(rootPath, nextRunId, {
         remote,
         remoteBranch,
+        ...(localBranch ? { localBranch } : {}),
       } satisfies PullRequest),
     );
   }

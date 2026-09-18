@@ -3,6 +3,26 @@ use crate::domain::{
 };
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum IgnoreScope { Repository, Local, Global }
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+pub enum IgnoreRule { Exact, Extension, Directory { directory: String }, Custom { pattern: String } }
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct IgnoreRequest {
+    pub relative_path: String,
+    pub rule: IgnoreRule,
+    pub scope: IgnoreScope,
+}
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IgnorePreview { pub pattern: String, pub target_path: String, pub tracked: bool }
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FileInspectionKind { History, Blame }
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum FileEntryKind {

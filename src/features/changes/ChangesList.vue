@@ -20,6 +20,9 @@ import { useSettingsStore } from "@/stores/settings";
 import { useReviewSkill } from "@/features/ai/useReviewSkill";
 import NoiseCleanup from "./NoiseCleanup.vue";
 import ChangeGroupsSplit from "./ChangeGroupsSplit.vue";
+import ChangeFileActions from "./ChangeFileActions.vue";
+import { useDragFileSelection } from "./useDragFileSelection";
+const fileActions = ref<InstanceType<typeof ChangeFileActions>>();
 
 const changesStore = useChangesStore();
 const repositoryStore = useRepositoryStore();
@@ -75,6 +78,12 @@ const unstagedFiles = computed(
     .sort((a, b) => Number(tableStatus(a, 'unstaged') === 'Untracked') - Number(tableStatus(b, 'unstaged') === 'Untracked')) ?? [],
 );
 const busy = computed(() => repositoryStore.navigationBusy);
+const { dragging, start: startDragSelection, captureClick: captureSelectionClick } = useDragFileSelection({
+  blocked: () => busy.value || !!pendingDiscard.value,
+  identity: () => JSON.stringify([repositoryStore.snapshot?.rootPath, repositoryStore.generation, repositoryStore.snapshot?.currentBranch]),
+  paths: scope => (scope === "staged" ? stagedFiles.value : unstagedFiles.value).map(file => file.path),
+  selections: { staged: reviewSelection, unstaged: unstagedSelection },
+});
 const reviewBusy = computed(() => busy.value || ai.running);
 const selectedReviewPaths = computed(() => stagedFiles.value
   .filter(file => reviewSelection.value.has(file.path)).map(file => file.path));
@@ -170,7 +179,8 @@ async function confirmDiscard(): Promise<void> {
 </script>
 
 <template>
-  <div class="changes-list table-mode">
+  <div class="changes-list table-mode" :class="{ 'drag-selecting': dragging }" @click.capture="captureSelectionClick" @dragstart.prevent>
+    <ChangeFileActions ref="fileActions" />
     <div class="changes-toolbar">
     <div class="stats-caption">{{ statsLoading ? '统计中…' : '增删行数按暂存范围统计' }}</div>
     <div v-if="statsError" class="stats-error" role="status">行数统计失败 <button @click="statsVersion++">重试</button></div>
@@ -212,8 +222,12 @@ async function confirmDiscard(): Promise<void> {
         v-for="file in stagedFiles"
         :key="'staged:' + file.path"
         class="change-row staged-review-row"
+        @pointerdown="startDragSelection($event, file.path, 'staged')"
+        @contextmenu="fileActions?.open($event, file, 'staged')"
+        @keydown="fileActions?.open($event, file, 'staged')"
         :data-status="tableStatus(file, 'staged')"
         :class="{
+          'batch-selected': reviewSelection.has(file.path),
           selected:
             changesStore.selectedPath === file.path &&
             changesStore.selectedScope === 'staged',
@@ -268,8 +282,12 @@ async function confirmDiscard(): Promise<void> {
         v-for="file in unstagedFiles"
         :key="'unstaged:' + file.path"
         class="change-row unstaged-row"
+        @pointerdown="startDragSelection($event, file.path, 'unstaged')"
+        @contextmenu="fileActions?.open($event, file, 'unstaged')"
+        @keydown="fileActions?.open($event, file, 'unstaged')"
         :data-status="tableStatus(file, 'unstaged')"
         :class="{
+          'batch-selected': unstagedSelection.has(file.path),
           selected:
             changesStore.selectedPath === file.path &&
             changesStore.selectedScope === 'unstaged',
@@ -367,6 +385,8 @@ async function confirmDiscard(): Promise<void> {
 </template>
 
 <style scoped>
+.change-row { user-select: none; }
+.drag-selecting, .drag-selecting .change-row, .drag-selecting .file-select { cursor: crosshair; }
 .stats-caption { padding: 10px 12px 0; color: var(--text-muted); font-size: 10px; }
 .stats-error { padding: 8px 12px; color: var(--danger); font-size: 11px; }
 .stats-error button { background: transparent; color: var(--primary); }
@@ -480,6 +500,7 @@ async function confirmDiscard(): Promise<void> {
 .change-row.selected {
   box-shadow: inset 0 0 0 1px var(--primary-border);
 }
+.change-row.batch-selected { background: var(--primary-soft); box-shadow: inset 3px 0 var(--primary); }
 
 .status-swatch {
   width: 3px;

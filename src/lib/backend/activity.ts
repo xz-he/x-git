@@ -29,6 +29,7 @@ export function recordAsyncEvent(message: { runId: string; event: { kind: string
   void finishRun(message.runId, success, description);
 }
 const recordedActions = new Set([
+  "files_ignore", "files_untrack", "files_lfs_track",
   "changes_stage_file", "changes_stage_files", "changes_unstage_file", "changes_unstage_files",
   "changes_stage_hunk", "changes_unstage_hunk", "changes_stage_lines", "changes_unstage_lines",
   "changes_discard_file", "changes_restore_noise", "changes_commit",

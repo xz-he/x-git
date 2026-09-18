@@ -54,12 +54,15 @@ describe("branch sidebar shortcuts", () => {
     const dialog = wrapper.get('[role="dialog"]');
     expect(dialog.text()).toContain("C:/repo");
     expect(dialog.text()).toContain("main");
-    const select = dialog.get('select[aria-label="目标分支"]');
+    const select = dialog.get(label === "合并" ? '[aria-label="合并源分支"]' : 'select[aria-label="目标分支"]');
     expect(select.element).toHaveProperty("value", "");
-    expect(select.findAll("option").map((option) => option.text())).toEqual(["选择目标分支", "topic"]);
+    if (label === "合并") {
+      expect(dialog.get('[aria-label="合并目标分支"]').element).toHaveProperty("value", "main");
+      expect(dialog.findAll('datalist option').map(option => option.attributes('value'))).toContain('topic');
+    } else expect(select.findAll("option").map((option) => option.text())).toEqual(["选择目标分支", "topic"]);
     expect(dialog.get('.primary-button').attributes()).toHaveProperty("disabled");
     expect(document.activeElement).toBe(dialog.get('[data-action="cancel"]').element);
-    await select.setValue("refs/heads/topic");
+    await select.setValue(label === "合并" ? "topic" : "refs/heads/topic");
     expect(backend.refsMerge).not.toHaveBeenCalled();
     expect(backend.refsRebase).not.toHaveBeenCalled();
     await dialog.get('[data-action="cancel"]').trigger("click");
@@ -72,16 +75,18 @@ describe("branch sidebar shortcuts", () => {
     await wrapper.get('[aria-label="查看分支 topic"]').trigger("click");
     await wrapper.get(`[aria-label="打开${label}"]`).trigger("click");
     await flushPromises();
-    expect(wrapper.get('[aria-label="目标分支"]').element).toHaveProperty("value", "refs/heads/topic");
+    const selector = label === "合并" ? '[aria-label="合并源分支"]' : '[aria-label="目标分支"]';
+    expect(wrapper.get(selector).element).toHaveProperty("value", label === "合并" ? "topic" : "refs/heads/topic");
     await wrapper.get('[data-action="cancel"]').trigger("click");
     await wrapper.get(`[aria-label="${label === "合并" ? "合并分支" : "变基到分支"} topic"]`).trigger("click");
     const method = label === "合并" ? backend.refsMerge : backend.refsRebase;
     vi.mocked(method).mockRejectedValueOnce({ code: "unexpected", message: "Branch action failed" });
     await wrapper.get('[role="dialog"] .primary-button').trigger("click");
     await flushPromises();
-    expect(method).toHaveBeenCalledWith("C:/repo", "topic");
+    if (label === "合并") expect(method).toHaveBeenCalledWith("C:/repo", "topic", "main");
+    else expect(method).toHaveBeenCalledWith("C:/repo", "topic");
     expect(wrapper.get('[role="dialog"] [role="alert"]').text()).toContain("Branch action failed");
-    expect(wrapper.get('[aria-label="目标分支"]').element).toHaveProperty("value", "refs/heads/topic");
+    expect(wrapper.get(selector).element).toHaveProperty("value", label === "合并" ? "topic" : "refs/heads/topic");
     await wrapper.get('[role="dialog"] .primary-button').trigger("click");
     await flushPromises();
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
@@ -104,6 +109,23 @@ describe("branch sidebar shortcuts", () => {
     await wrapper.get('[aria-label="重试读取分支"]').trigger("click");
     await flushPromises();
     expect(wrapper.get('[aria-label="目标分支"]').text()).toContain("topic");
+  });
+
+  it("selects both merge branches with suggestions and rejects identical or unknown destinations", async () => {
+    await wrapper.get('[aria-label="打开合并"]').trigger("click");
+    await flushPromises();
+    const dialog = wrapper.get('[role="dialog"]');
+    await dialog.get('[aria-label="合并源分支"]').setValue("main");
+    expect(dialog.get('.primary-button').attributes()).toHaveProperty("disabled");
+    await dialog.get('[aria-label="合并目标分支"]').setValue("missing");
+    await useRefsStore().confirmIntegration();
+    expect(backend.refsMerge).not.toHaveBeenCalled();
+    await dialog.get('[aria-label="合并目标分支"]').setValue("topic");
+    expect(dialog.text()).toContain("将 main 合并到 topic");
+    expect(dialog.findAll('datalist option').map(option => option.attributes('value'))).toContain('main');
+    await dialog.get('.primary-button').trigger('click');
+    await flushPromises();
+    expect(backend.refsMerge).toHaveBeenCalledExactlyOnceWith("C:/repo", "main", "topic");
   });
 
   it.each(["view", "home", "repository"])("discards pending shortcuts after changing %s", async (change) => {
@@ -138,7 +160,7 @@ describe("branch sidebar shortcuts", () => {
   it("blocks conflicts, independent operations, stale targets and synchronous duplicate confirmation", async () => {
     await wrapper.get('[aria-label="打开合并"]').trigger("click");
     await flushPromises();
-    await wrapper.get('[aria-label="目标分支"]').setValue("refs/heads/topic");
+    await wrapper.get('[aria-label="合并源分支"]').setValue("topic");
     useHistoryStore().submitting = true;
     await flushPromises();
     expect(wrapper.get('[role="dialog"] .primary-button').attributes()).toHaveProperty("disabled");

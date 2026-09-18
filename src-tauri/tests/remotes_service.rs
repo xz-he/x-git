@@ -316,6 +316,92 @@ async fn fetch_updates_remote_refs_and_returns_refreshed_snapshots() {
 }
 
 #[tokio::test]
+async fn pull_into_selected_local_branch_accepts_uncached_remote_branch() {
+    let fixture = remote_advanced_fixture().await;
+    let root = &fixture.worktree;
+    run_git(
+        &fixture._directory.path().join("origin.git"),
+        &["branch", "server-only", &fixture.remote_head],
+    )
+    .await;
+    let original = git_stdout(root, &["rev-parse", "main"]).await;
+    run_git(root, &["branch", "release"]).await;
+    run_git(root, &["switch", "-c", "development"]).await;
+    std::fs::write(root.join("dev.txt"), "development only\n").unwrap();
+    run_git(root, &["add", "dev.txt"]).await;
+    run_git(root, &["commit", "-m", "development"]).await;
+    let development = git_stdout(root, &["rev-parse", "HEAD"]).await;
+    let service = RemoteService::default();
+    let sink = RecordingSink::default();
+    service
+        .start_pull(
+            root,
+            "pull-to-release",
+            PullRequest {
+                remote: "origin".into(),
+                remote_branch: "server-only".into(),
+                local_branch: Some("release".into()),
+            },
+            sink.clone(),
+        )
+        .await
+        .unwrap();
+    let result = completed(sink.terminal("pull-to-release").await);
+    assert_eq!(
+        result.workspace.repository.current_branch.as_deref(),
+        Some("release")
+    );
+    assert_eq!(
+        git_stdout(root, &["rev-parse", "release"]).await,
+        fixture.remote_head
+    );
+    assert_eq!(git_stdout(root, &["rev-parse", "main"]).await, original);
+    assert_eq!(
+        git_stdout(root, &["rev-parse", "development"]).await,
+        development
+    );
+    assert!(!root.join("dev.txt").exists());
+}
+
+#[tokio::test]
+async fn pull_into_other_branch_rejects_dirty_worktree_without_switching() {
+    let fixture = remote_advanced_fixture().await;
+    run_git(&fixture.worktree, &["branch", "release"]).await;
+    std::fs::write(fixture.worktree.join("README.md"), "unsaved\n").unwrap();
+    let service = RemoteService::default();
+    let sink = RecordingSink::default();
+    service
+        .start_pull(
+            &fixture.worktree,
+            "dirty-pull",
+            PullRequest {
+                remote: "origin".into(),
+                remote_branch: "main".into(),
+                local_branch: Some("release".into()),
+            },
+            sink.clone(),
+        )
+        .await
+        .unwrap();
+    let GitRunEventKind::Failed {
+        error,
+        result: Some(result),
+    } = sink.terminal("dirty-pull").await
+    else {
+        panic!("expected dirty worktree rejection");
+    };
+    assert_eq!(error.code, ErrorCode::DirtyWorktree);
+    assert_eq!(
+        result.workspace.repository.current_branch.as_deref(),
+        Some("main")
+    );
+    assert_eq!(
+        std::fs::read_to_string(fixture.worktree.join("README.md")).unwrap(),
+        "unsaved\n"
+    );
+}
+
+#[tokio::test]
 async fn conflicting_pull_preserves_conflict_state_without_inventing_abort() {
     let fixture = remote_advanced_fixture().await;
     std::fs::write(fixture.worktree.join("README.md"), "base\nlocal\n").unwrap();
@@ -335,6 +421,7 @@ async fn conflicting_pull_preserves_conflict_state_without_inventing_abort() {
             PullRequest {
                 remote: "origin".to_owned(),
                 remote_branch: "main".to_owned(),
+                local_branch: None,
             },
             sink.clone(),
         )
@@ -395,6 +482,7 @@ async fn unknown_remote_and_branch_fail_with_refreshed_state() {
             PullRequest {
                 remote: "origin".to_owned(),
                 remote_branch: "--upload-pack=evil".to_owned(),
+                local_branch: None,
             },
             sink.clone(),
         )
@@ -453,6 +541,7 @@ async fn pull_respects_configured_reconciliation_and_refreshes_failure() {
             PullRequest {
                 remote: "origin".to_owned(),
                 remote_branch: "main".to_owned(),
+                local_branch: None,
             },
             sink.clone(),
         )

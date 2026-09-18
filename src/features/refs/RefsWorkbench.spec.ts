@@ -143,7 +143,7 @@ describe("refs workbench", () => {
     expect(wrapper.find('[aria-label^="删除分支"]').exists()).toBe(false);
   });
 
-  it("does not expose switch merge rebase or delete for the current branch", async () => {
+  it("allows merging the current branch elsewhere but not switching rebasing or deleting it", async () => {
     const fixture = refsFixture();
     const branch = fixture.localBranches[0]!;
     vi.mocked(backend.refsSnapshot).mockResolvedValue({
@@ -165,7 +165,7 @@ describe("refs workbench", () => {
 
     expect(wrapper.find('[aria-label^="创建分支"]').exists()).toBe(true);
     expect(wrapper.find('[aria-label^="切换到分支"]').exists()).toBe(false);
-    expect(wrapper.find('[aria-label^="合并分支"]').exists()).toBe(false);
+    expect(wrapper.find('[aria-label^="合并分支"]').exists()).toBe(true);
     expect(wrapper.find('[aria-label^="变基到分支"]').exists()).toBe(false);
     expect(wrapper.find('[aria-label^="删除分支"]').exists()).toBe(false);
   });

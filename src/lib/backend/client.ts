@@ -5,6 +5,7 @@ import type { AiChatMessage } from "./types";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import type {
+  IgnoreRequest, IgnorePreview,
   ChangeLineStat,
   NoiseCandidate, NoiseScan, NoiseRestoreResult,
   TerminalAccepted, TerminalEvent, TerminalCompletion,
@@ -52,6 +53,12 @@ import type {
 } from "./types";
 
 export interface BackendClient {
+  filesOpen(path: string, relativePath: string, reveal: boolean): Promise<void>;
+  filesInspect(path: string, relativePath: string, kind: "history" | "blame"): Promise<string>;
+  filesIgnorePreview(path: string, request: IgnoreRequest): Promise<IgnorePreview>;
+  filesIgnore(path: string, request: IgnoreRequest): Promise<MutationWorkspace>;
+  filesUntrack(path: string, relativePath: string): Promise<MutationWorkspace>;
+  filesLfsTrack(path: string, relativePath: string): Promise<MutationWorkspace>;
   activityList(path: string): Promise<ActivityEntry[]>;
   activityRollback(path: string, id: string): Promise<MutationWorkspace>;
   repositoryWatchSnapshot(path: string): Promise<{ watchId: string; worktreeVersion: number; metadataVersion: number }>;
@@ -148,7 +155,7 @@ export interface BackendClient {
   refsCreate(path: string, request: CreateBranchRequest): Promise<RefsMutationResult>;
   refsSwitch(path: string, name: string): Promise<RefsMutationResult>;
   refsDelete(path: string, request: DeleteBranchRequest): Promise<RefsMutationResult>;
-  refsMerge(path: string, target: string): Promise<RefsMutationResult>;
+  refsMerge(path: string, target: string, destination?: string): Promise<RefsMutationResult>;
   refsRebase(path: string, target: string): Promise<RefsMutationResult>;
   refsAbort(path: string, action: AbortAction): Promise<RefsMutationResult>;
   remotesSnapshot(path: string): Promise<RemoteSnapshot>;
@@ -211,6 +218,12 @@ const tauriBackendClient: BackendClient = {
   consoleListen: (listener) => listen<ConsoleEvent>("git://console-event", ({ payload }) => { recordAsyncEvent(payload); listener(payload); }),
   filesList: (path, relativeDir, cursor) => invoke("files_list", { path, relativeDir, cursor: cursor ?? null }),
   filesPreview: (path, relativePath) => invoke("files_preview", { path, relativePath }),
+  filesOpen: (path, relativePath, reveal) => invoke("files_open", { path, relativePath, reveal }),
+  filesInspect: (path, relativePath, kind) => invoke("files_inspect", { path, relativePath, kind }),
+  filesIgnorePreview: (path, request) => invoke("files_ignore_preview", { path, request }),
+  filesIgnore: (path, request) => invoke("files_ignore", { path, request }),
+  filesUntrack: (path, relativePath) => invoke("files_untrack", { path, relativePath }),
+  filesLfsTrack: (path, relativePath) => invoke("files_lfs_track", { path, relativePath }),
   filesPrepare: (path, intent) => invoke("files_prepare", { path, intent }),
   filesExecute: (path, request) => invoke("files_execute", { path, request }),
   conflictsSnapshot: (path) => invoke("conflicts_snapshot", { path }),
@@ -279,7 +292,7 @@ const tauriBackendClient: BackendClient = {
     invoke("refs_switch_branch", { path, name }),
   refsDelete: (path, request) =>
     invoke("refs_delete_branch", { path, request }),
-  refsMerge: (path, target) => invoke("refs_merge", { path, target }),
+  refsMerge: (path, target, destination) => invoke("refs_merge", { path, target, ...(destination ? { destination } : {}) }),
   refsRebase: (path, target) => invoke("refs_rebase", { path, target }),
   refsAbort: (path, action) => invoke("refs_abort", { path, action }),
   remotesSnapshot: (path) => invoke("remotes_snapshot", { path }),
@@ -330,6 +343,12 @@ export const backendClient: BackendClient = {
   consoleListen: (listener) => activeBackendClient.consoleListen(listener),
   filesList: (path, relativeDir, cursor) => activeBackendClient.filesList(path, relativeDir, cursor),
   filesPreview: (path, relativePath) => activeBackendClient.filesPreview(path, relativePath),
+  filesOpen: (path, relativePath, reveal) => activeBackendClient.filesOpen(path, relativePath, reveal),
+  filesInspect: (path, relativePath, kind) => activeBackendClient.filesInspect(path, relativePath, kind),
+  filesIgnorePreview: (path, request) => activeBackendClient.filesIgnorePreview(path, request),
+  filesIgnore: (path, request) => activeBackendClient.filesIgnore(path, request),
+  filesUntrack: (path, relativePath) => activeBackendClient.filesUntrack(path, relativePath),
+  filesLfsTrack: (path, relativePath) => activeBackendClient.filesLfsTrack(path, relativePath),
   filesPrepare: (path, intent) => activeBackendClient.filesPrepare(path, intent),
   filesExecute: (path, request) => activeBackendClient.filesExecute(path, request),
   conflictsSnapshot: (path) => activeBackendClient.conflictsSnapshot(path),
@@ -401,8 +420,8 @@ export const backendClient: BackendClient = {
     activeBackendClient.refsSwitch(path, name),
   refsDelete: (path, request) =>
     activeBackendClient.refsDelete(path, request),
-  refsMerge: (path, target) =>
-    activeBackendClient.refsMerge(path, target),
+  refsMerge: (path, target, destination) =>
+    destination === undefined ? activeBackendClient.refsMerge(path, target) : activeBackendClient.refsMerge(path, target, destination),
   refsRebase: (path, target) =>
     activeBackendClient.refsRebase(path, target),
   refsAbort: (path, action) =>

@@ -17,6 +17,7 @@ pub mod console_policy;
 pub mod console_service;
 pub mod diff_parser;
 mod file_fingerprint;
+mod file_actions;
 mod file_listing;
 mod file_mutation;
 pub mod file_service;
