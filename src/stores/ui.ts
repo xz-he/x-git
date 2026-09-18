@@ -39,6 +39,7 @@ export const useUiStore = defineStore("ui", () => {
   const homeVisible = ref(false);
   const resolvedTheme = ref<ResolvedTheme>("light");
   const settingsDialogOpen = ref(false);
+  const updateDialogOpen = ref(false);
   const settingsTab = ref<"appearance" | "ai" | "updates">("appearance");
   const diffFullscreen = ref(false);
 
@@ -61,6 +62,7 @@ export const useUiStore = defineStore("ui", () => {
     homeVisible,
     resolvedTheme,
     settingsDialogOpen,
+    updateDialogOpen,
     settingsTab,
     diffFullscreen,
     applyTheme,

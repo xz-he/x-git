@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Bot, FolderOpen, History, House, RefreshCw, Settings, X } from "@lucide/vue";
 import ActivityDialog from "@/features/activity/ActivityDialog.vue";
+import UpdateButton from "./UpdateButton.vue";
 import { activityWarning } from "@/lib/backend/activity";
 import { ref } from "vue";
 import { dialogs } from "@/lib/backend/dialogs";
@@ -49,6 +50,7 @@ const modules: Array<{ label: string; view: WorkspaceView }> = [
   <header class="topbar">
     <nav aria-label="工作区模块"><button v-for="module in modules" :key="module.view" :data-view="module.view" :class="{ active: ui.activeView === module.view }" :disabled="repositories.viewNavigationBusy" :aria-current="ui.activeView === module.view ? 'page' : undefined" @click="ui.openView(module.view)">{{ module.label }}</button></nav>
     <div class="actions">
+      <UpdateButton />
       <button class="icon-button" aria-label="操作历史" :title="activityWarning || '操作历史'" @click="activityOpen = true"><History :size="17" /><span v-if="activityWarning" class="activity-warning">!</span></button>
       <button class="icon-button" aria-label="返回首页" title="返回首页" :disabled="files.submitting" @click="ui.homeVisible = true"><House :size="17" /></button>
       <button class="icon-button" aria-label="切换仓库" title="切换仓库" :disabled="selectingRepository || repositories.navigationBusy" @click="switchRepository"><FolderOpen :size="17" /></button>

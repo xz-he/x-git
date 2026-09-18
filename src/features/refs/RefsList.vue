@@ -25,6 +25,14 @@ function selectBranch(branch: BranchSummary): void {
   refsStore.selectedFullName = branch.fullName;
 }
 
+async function switchBranch(branch: BranchSummary): Promise<void> {
+  if (branch.kind !== "local" || branch.current ||
+    branch.name === repositories.snapshot?.currentBranch || refsStore.integrationBlocked || refsStore.loading) return;
+  selectBranch(branch);
+  // The existing switch path reports progress/errors and lets Git protect local changes.
+  await refsStore.switchBranch(branch.name).catch(() => undefined);
+}
+
 function selectTag(tag: TagSummary): void {
   refsStore.selectedFullName = `refs/tags/${tag.name}`;
 }
@@ -59,9 +67,10 @@ function selectTag(tag: TagSummary): void {
           :class="{ selected: refsStore.selectedFullName === branch.fullName }"
           :aria-label="`查看分支 ${branch.name}`"
           @click="selectBranch(branch)"
+          @dblclick="switchBranch(branch)"
         >
           <span class="ref-main">
-            <span class="ref-name" data-testid="ref-name" :title="branch.name">{{ branch.name }}</span>
+            <span class="ref-name" data-testid="ref-name" :title="branch.current ? branch.name : `${branch.name} · 双击切换分支`">{{ branch.name }}</span>
             <small>{{ branch.tip.shortHash }} · {{ branch.tip.subject }}</small>
           </span>
           <span class="ref-actions" data-testid="ref-actions">

@@ -94,6 +94,19 @@ describe("application shell", () => {
     expect(useStashesStore().message).toBe("unfinished stash");
   });
 
+  it("opens the independent update dialog from both the workspace toolbar and home", async () => {
+    const wrapper = mount(App, { global: { plugins: [pinia] } });
+    await flushPromises();
+    await wrapper.get('.topbar [aria-label="版本更新"]').trigger("click");
+    expect(wrapper.get('[role="dialog"]').text()).toContain("版本更新");
+    expect(useUiStore().settingsDialogOpen).toBe(false);
+    await wrapper.get('[aria-label="关闭版本更新"]').trigger("click");
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+    await wrapper.get('[aria-label="返回首页"]').trigger("click");
+    await wrapper.get('.welcome-header [aria-label="版本更新"]').trigger("click");
+    expect(wrapper.get('[role="dialog"]').text()).toContain("自动检查更新");
+  });
+
   it("keeps automatic reopening and still allows returning home afterwards", async () => {
     useRepositoryStore().snapshot = undefined;
     const backend = createBackendFixture({

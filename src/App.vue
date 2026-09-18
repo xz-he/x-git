@@ -10,6 +10,7 @@ import AiDrawerShell from "@/components/layout/AiDrawerShell.vue";
 import SettingsDialog from "@/components/layout/SettingsDialog.vue";
 import GitFeedbackPanel from "@/components/layout/GitFeedbackPanel.vue";
 import UpdateNotice from "@/components/layout/UpdateNotice.vue";
+import UpdateDialog from "@/components/layout/UpdateDialog.vue";
 import { useUpdatesStore } from "@/stores/updates";
 import WelcomeView from "@/features/repository/WelcomeView.vue";
 import ConflictBanner from "@/features/conflicts/ConflictBanner.vue";
@@ -85,6 +86,7 @@ onMounted(() => {
   void startApplication();
 });
 onBeforeUnmount(() => {
+  updates.dispose();
   repositoryMonitor.dispose();
   window.removeEventListener("resize", updateViewport);
   applicationDisposed = true;
@@ -110,6 +112,7 @@ onBeforeUnmount(() => {
   <WelcomeView v-else />
   <div v-if="repositories.snapshot && !ui.homeVisible && switchingRepository" class="repository-loading" role="status" aria-label="仓库加载状态">正在切换仓库...</div>
   <SettingsDialog v-if="ui.settingsDialogOpen" @close="ui.settingsDialogOpen = false" />
+  <UpdateDialog v-if="ui.updateDialogOpen" />
   <ConflictDialogs />
   <FileDialogs />
   <GitFeedbackPanel />

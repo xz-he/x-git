@@ -7,7 +7,7 @@ import {
   setBackendClientForTests,
   type BackendClient,
 } from "@/lib/backend/client";
-import type { RefsSnapshot, RepositorySnapshot } from "@/lib/backend/types";
+import type { RefsMutationResult, RefsSnapshot, RepositorySnapshot } from "@/lib/backend/types";
 import { useHistoryStore } from "@/stores/history";
 import { useRepositoryStore } from "@/stores/repository";
 import { useUiStore } from "@/stores/ui";
@@ -136,6 +136,8 @@ describe("refs workbench", () => {
     const wrapper = mountView("branches");
     await flushPromises();
     await wrapper.get('[aria-label="查看分支 origin/main"]').trigger("click");
+    await wrapper.get('[aria-label="查看分支 origin/main"]').trigger("dblclick");
+    expect(backend.refsSwitch).not.toHaveBeenCalled();
 
     expect(wrapper.find('[aria-label^="切换到分支"]').exists()).toBe(false);
     expect(wrapper.find('[aria-label^="删除分支"]').exists()).toBe(false);
@@ -158,6 +160,8 @@ describe("refs workbench", () => {
     });
     const wrapper = mountView("branches");
     await flushPromises();
+    await wrapper.get('[aria-label="查看分支 main"]').trigger("dblclick");
+    expect(backend.refsSwitch).not.toHaveBeenCalled();
 
     expect(wrapper.find('[aria-label^="创建分支"]').exists()).toBe(true);
     expect(wrapper.find('[aria-label^="切换到分支"]').exists()).toBe(false);
@@ -189,5 +193,46 @@ describe("refs workbench", () => {
       "value",
       "feature/retry-me",
     );
+  });
+
+  it("selects on click, switches on double-click and prevents duplicate switches", async () => {
+    const fixture = refsFixture();
+    const branch = fixture.localBranches[0]!;
+    let resolve!: (result: RefsMutationResult) => void;
+    vi.mocked(backend.refsSwitch).mockImplementation(() => new Promise(next => { resolve = next; }));
+    const wrapper = mountView("branches");
+    await flushPromises();
+    const name = wrapper.get('[data-testid="ref-name"]');
+    await name.trigger("click");
+    expect(backend.refsSwitch).not.toHaveBeenCalled();
+    await name.trigger("dblclick");
+    await name.trigger("dblclick");
+    expect(backend.refsSwitch).toHaveBeenCalledExactlyOnceWith("C:/repo", branch.name);
+    resolve({
+      workspace: { repository: { ...repository, currentBranch: branch.name }, changes: { files: [], stagedCount: 0, unstagedCount: 0 } },
+      operationState: { kind: "none", conflicts: [], abortAction: null },
+      refs: { ...fixture, localBranches: [{ ...branch, current: true }] },
+    });
+    await flushPromises();
+    expect(useRepositoryStore().snapshot?.currentBranch).toBe(branch.name);
+    expect(wrapper.get('.ref-row').text()).toContain("当前");
+    await wrapper.get('[data-testid="ref-name"]').trigger("dblclick");
+    expect(backend.refsSwitch).toHaveBeenCalledTimes(1);
+    wrapper.unmount();
+  });
+
+  it("blocks double-click while Git is busy and shows protected local-change errors", async () => {
+    const wrapper = mountView("branches");
+    await flushPromises();
+    useRepositoryStore().operation = { kind: "refresh" };
+    await wrapper.get('[data-testid="ref-name"]').trigger("dblclick");
+    expect(backend.refsSwitch).not.toHaveBeenCalled();
+    useRepositoryStore().operation = { kind: "idle" };
+    vi.mocked(backend.refsSwitch).mockRejectedValue({ code: "dirtyWorktree", message: "请先提交或贮藏会被覆盖的修改。" });
+    await wrapper.get('[data-testid="ref-name"]').trigger("dblclick");
+    await flushPromises();
+    expect(wrapper.text()).toContain("请先提交或贮藏会被覆盖的修改。");
+    expect(useRepositoryStore().snapshot?.currentBranch).toBe("main");
+    wrapper.unmount();
   });
 });

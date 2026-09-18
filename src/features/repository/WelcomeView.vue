@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { formatDisplayPath } from "@/lib/formatPath";
+import UpdateButton from "@/components/layout/UpdateButton.vue";
 import { ArrowRight, FolderGit2, GitFork, Plus, Settings, Trash2, X } from "@lucide/vue";
 import { computed, ref } from "vue";
 
@@ -73,7 +74,7 @@ async function removeRecent(path: string) {
         <img :src="appIcon" alt="" />
         <div><h1>HQ Git</h1><p>选择一个仓库开始工作</p></div>
       </div>
-      <button class="icon-button settings-button" aria-label="打开设置" title="打开设置" @click="ui.settingsDialogOpen = true"><Settings :size="18" /></button>
+      <div class="welcome-actions"><UpdateButton /><button class="icon-button settings-button" aria-label="打开设置" title="打开设置" @click="ui.settingsDialogOpen = true"><Settings :size="18" /></button></div>
     </header>
 
     <section v-if="repositories.snapshot" class="current-repository" aria-label="当前仓库">
@@ -132,6 +133,7 @@ async function removeRecent(path: string) {
 .welcome-header, .welcome-brand { display: flex; align-items: center; }
 .welcome-header { justify-content: space-between; margin-bottom: 34px; }
 .welcome-brand { gap: 14px; }
+.welcome-actions { display: flex; align-items: center; gap: 8px; }
 .welcome-header img { width: 44px; height: 44px; border-radius: var(--radius-md); }
 h1, h2, p { margin: 0; }
 h1 { font-size: 24px; }

@@ -54,11 +54,60 @@ describe("AI chat and Git failure drafts", () => {
     pending.resolve("检查远程分支"); await sending;
     expect(chat.draft).toBe("另一个问题"); expect(chat.messages).toHaveLength(4);
   });
+  it("clears the composer as soon as a question is sent and preserves an identical new draft", async () => {
+    const pending = deferred<string>(); vi.mocked(backend.aiChat).mockReturnValueOnce(pending.promise);
+    const wrapper = mount(AiChatPanel);
+    try {
+      const input = wrapper.get("textarea");
+      await input.setValue("建立上游跟踪是什么意思");
+      await wrapper.get("button.send-chat").trigger("click");
+      expect(wrapper.get('[aria-label="AI 对话记录"]').text()).toContain("建立上游跟踪是什么意思");
+      expect(wrapper.text()).toContain("AI 正在回复");
+      expect((input.element as HTMLTextAreaElement).value).toBe("");
+      await input.setValue("建立上游跟踪是什么意思");
+      pending.resolve("上游分支用于关联本地分支和远端分支。"); await flushPromises();
+      expect((input.element as HTMLTextAreaElement).value).toBe("建立上游跟踪是什么意思");
+      expect(wrapper.findAll("article.user")).toHaveLength(1);
+    } finally { wrapper.unmount(); }
+  });
   it("keeps the question on transport failure and supports retry", async () => {
     const chat = useAiChatStore(); chat.draft = "help";
     vi.mocked(backend.aiChat).mockRejectedValueOnce({ code: "aiTransport", message: "连接失败" });
     await chat.send(); expect(chat.draft).toBe("help"); expect(chat.error?.message).toBe("连接失败");
     await chat.send(); expect(chat.messages).toHaveLength(2); expect(chat.error).toBeUndefined();
+  });
+  it.each(["aiTransport", "cancelled"])("restores an unanswered question after %s without overwriting new input", async code => {
+    const chat = useAiChatStore();
+    const first = deferred<string>(); vi.mocked(backend.aiChat).mockReturnValueOnce(first.promise);
+    chat.draft = "  原问题  "; const sending = chat.send();
+    expect(chat.draft).toBe("");
+    first.reject({ code, message: "请求未完成" }); await sending;
+    expect(chat.draft).toBe("  原问题  ");
+    expect(chat.messages).toEqual([]);
+    const retry = deferred<string>(); vi.mocked(backend.aiChat).mockReturnValueOnce(retry.promise);
+    const retrying = chat.send(); chat.draft = "下一条问题";
+    retry.reject({ code, message: "请求未完成" }); await retrying;
+    expect(chat.draft).toBe("下一条问题");
+  });
+  it("preserves newly captured Git errors without repeating the sent question", async () => {
+    const pending = deferred<string>(); vi.mocked(backend.aiChat).mockReturnValueOnce(pending.promise);
+    const chat = useAiChatStore(); chat.draft = "原问题"; const sending = chat.send();
+    chat.captureFailure(failure);
+    expect(chat.draft).toContain("non-fast-forward"); expect(chat.draft).not.toContain("原问题");
+    pending.resolve("回复"); await sending;
+    expect(chat.draft).toContain("non-fast-forward");
+  });
+  it("does not restore a failed question after the conversation is cleared", async () => {
+    const pending = deferred<string>(); vi.mocked(backend.aiChat).mockReturnValueOnce(pending.promise);
+    const chat = useAiChatStore(); chat.draft = "原问题"; const sending = chat.send();
+    chat.clear(); pending.reject({ code: "cancelled", message: "已停止" }); await sending;
+    expect(chat.draft).toBe(""); expect(chat.messages).toEqual([]); expect(chat.error).toBeUndefined();
+  });
+  it("keeps unsent input when AI configuration is missing", async () => {
+    const chat = useAiChatStore(); chat.draft = "原问题";
+    useSettingsStore().settings.apiKey = "";
+    await chat.send();
+    expect(chat.draft).toBe("原问题"); expect(backend.aiChat).not.toHaveBeenCalled();
   });
   it("cancels on repository replacement and discards late replies and errors", async () => {
     const pending = deferred<string>(); vi.mocked(backend.aiChat).mockReturnValueOnce(pending.promise);

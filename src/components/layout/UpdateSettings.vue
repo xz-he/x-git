@@ -28,7 +28,8 @@ async function install(): Promise<void> {
 <template>
   <section class="update-settings" aria-label="版本更新">
     <div class="version-heading"><strong>HQ Git</strong><span>当前版本 v{{ updates.currentVersion }}</span></div>
-    <label class="auto-check"><input type="checkbox" :checked="settings.settings.checkUpdatesOnStartup" :disabled="settings.saving" @change="setAutoCheck" />启动时自动检查更新（仅提示，不自动下载安装）</label>
+    <label class="auto-check"><input type="checkbox" :checked="settings.settings.checkUpdatesOnStartup" :disabled="settings.saving" @change="setAutoCheck" />自动检查更新（仅提示，不自动下载安装）</label>
+    <p class="muted">启动时及每 30 分钟检查；回到窗口或网络恢复时补查，两次检查至少间隔 5 分钟。</p>
     <p v-if="preferenceError" class="error" role="alert">{{ preferenceError }}</p>
     <p v-if="!updates.supported" class="muted">版本更新仅在桌面安装版中可用，浏览器预览不支持安装更新。</p>
     <div v-else class="update-state">
@@ -51,12 +52,12 @@ async function install(): Promise<void> {
         <div class="actions"><button @click="confirmInstall = false">Cancel</button><button class="primary" :disabled="!!updates.installBlockReason" @click="install">Install &amp; Restart</button></div>
       </div>
       <div v-else class="actions">
-        <button v-if="!['ready', 'installed'].includes(updates.phase)" :disabled="updates.busy" @click="updates.checkForUpdates"><RefreshCw :size="14" />Check for Updates</button>
+        <button v-if="!['ready', 'installed'].includes(updates.phase)" :disabled="updates.busy" @click="updates.checkForUpdates()"><RefreshCw :size="14" />Check for Updates</button>
         <button v-if="updates.phase === 'available' || updates.phase === 'downloading'" class="primary" :disabled="updates.busy" @click="updates.download"><ArrowDownToLine :size="14" />{{ updates.phase === 'downloading' ? 'Downloading…' : 'Download Update' }}</button>
         <button v-if="updates.phase === 'ready'" class="primary" :disabled="!!updates.installBlockReason" @click="confirmInstall = true">Install Update…</button>
         <button v-if="updates.phase === 'installed'" class="primary" :disabled="!!updates.installBlockReason" @click="updates.restart">Restart</button>
       </div>
-      <p class="muted">下载期间可继续工作，也可关闭设置窗口，稍后回来安装。更新包必须通过签名校验才可安装。</p>
+      <p class="muted">下载期间可继续工作，也可关闭此窗口，稍后回来安装。更新包必须通过签名校验才可安装。</p>
     </div>
   </section>
 </template>

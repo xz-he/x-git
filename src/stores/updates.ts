@@ -3,7 +3,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
 import { defineStore } from "pinia";
-import { computed, ref } from "vue";
+import { computed, onScopeDispose, ref, watch } from "vue";
 import { version } from "../../package.json";
 import { useAiStore } from "@/stores/ai";
 import { useAiChatStore } from "@/stores/aiChat";
@@ -15,6 +15,8 @@ import { useSettingsStore } from "@/stores/settings";
 type UpdatePhase = "idle" | "checking" | "current" | "available" | "downloading" | "ready" | "installing" | "installed";
 const CHECK_TIMEOUT_MS = 30_000;
 const DOWNLOAD_TIMEOUT_MS = 30 * 60_000;
+const AUTO_CHECK_INTERVAL_MS = 30 * 60_000;
+const RESUME_CHECK_INTERVAL_MS = 5 * 60_000;
 
 export const useUpdatesStore = defineStore("updates", () => {
   const supported = isTauri();
@@ -28,6 +30,11 @@ export const useUpdatesStore = defineStore("updates", () => {
   const noticeVisible = ref(false);
   let candidate: Update | null = null;
   let initialized = false;
+  let lifecycle = 0;
+  let lastCheckAttempt: number | undefined;
+  let notifiedVersion = "";
+  let autoTimer: ReturnType<typeof setInterval> | undefined;
+  let stopPreferenceWatch: (() => void) | undefined;
   const busy = computed(() => ["checking", "downloading", "installing"].includes(phase.value));
   const progress = computed(() => totalBytes.value
     ? Math.min(100, Math.round(downloadedBytes.value / totalBytes.value * 100)) : undefined);
@@ -42,37 +49,68 @@ export const useUpdatesStore = defineStore("updates", () => {
   async function initialize(): Promise<void> {
     if (initialized || !supported) return;
     initialized = true;
+    const currentLifecycle = ++lifecycle;
     try { currentVersion.value = await getVersion(); }
     catch { error.value = "无法读取当前应用版本，请重启应用后重试。"; return; }
-    if (useSettingsStore().settings.checkUpdatesOnStartup && !import.meta.env.DEV) await checkForUpdates();
+    if (currentLifecycle !== lifecycle || import.meta.env.DEV) return;
+    autoTimer = setInterval(checkAutomatically, AUTO_CHECK_INTERVAL_MS);
+    window.addEventListener("focus", checkAutomatically);
+    window.addEventListener("online", checkAutomatically);
+    document.addEventListener("visibilitychange", checkAutomatically);
+    stopPreferenceWatch = watch(() => useSettingsStore().settings.checkUpdatesOnStartup, enabled => {
+      if (enabled) checkAutomatically();
+    });
+    await checkAutomatically();
   }
 
-  async function checkForUpdates(): Promise<void> {
+  async function checkAutomatically(): Promise<void> {
+    if (!initialized || !useSettingsStore().settings.checkUpdatesOnStartup || document.hidden || !navigator.onLine) return;
+    if (lastCheckAttempt !== undefined && Date.now() - lastCheckAttempt < RESUME_CHECK_INTERVAL_MS) return;
+    await checkForUpdates({ background: true });
+  }
+
+  function dispose(): void {
+    initialized = false;
+    lifecycle++;
+    clearInterval(autoTimer);
+    autoTimer = undefined;
+    stopPreferenceWatch?.();
+    stopPreferenceWatch = undefined;
+    window.removeEventListener("focus", checkAutomatically);
+    window.removeEventListener("online", checkAutomatically);
+    document.removeEventListener("visibilitychange", checkAutomatically);
+  }
+  onScopeDispose(dispose);
+
+  async function checkForUpdates(options: { background?: boolean } = {}): Promise<void> {
     // Keep downloaded bytes until installation or application exit.
     if (!supported || busy.value || phase.value === "ready" || phase.value === "installed") return;
+    const previousPhase = phase.value;
+    lastCheckAttempt = Date.now();
     phase.value = "checking";
     error.value = "";
-    latest.value = undefined;
-    noticeVisible.value = false;
     downloadedBytes.value = 0;
     totalBytes.value = undefined;
     try {
+      const next = await check({ timeout: CHECK_TIMEOUT_MS });
       const previous = candidate;
-      candidate = null;
-      // Resource cleanup must not prevent a fresh network check after a failed install.
-      await previous?.close().catch(() => undefined);
-      candidate = await check({ timeout: CHECK_TIMEOUT_MS });
+      candidate = next;
+      // Keep an available update on transient network failure; replace it only after success.
+      if (previous !== next) await previous?.close().catch(() => undefined);
       checkedAt.value = new Date().toLocaleString();
       if (candidate) {
         currentVersion.value = candidate.currentVersion;
         latest.value = { version: candidate.version, body: candidate.body ?? "", date: candidate.date };
         phase.value = "available";
-        noticeVisible.value = true;
+        if (!options.background || notifiedVersion !== candidate.version) noticeVisible.value = true;
+        notifiedVersion = candidate.version;
       } else {
+        latest.value = undefined;
+        noticeVisible.value = false;
         phase.value = "current";
       }
     } catch (cause) {
-      phase.value = "idle";
+      phase.value = candidate ? previousPhase : "idle";
       error.value = `检查更新失败。请确认网络可访问 GitHub，且 Release 已发布 latest.json。${errorDetail(cause)}`;
     }
   }
@@ -133,7 +171,7 @@ export const useUpdatesStore = defineStore("updates", () => {
   }
 
   return { supported, currentVersion, phase, latest, error, checkedAt, downloadedBytes, totalBytes,
-    noticeVisible, busy, progress, installBlockReason, initialize, checkForUpdates, download, install, restart };
+    noticeVisible, busy, progress, installBlockReason, initialize, dispose, checkForUpdates, download, install, restart };
 });
 
 function errorDetail(cause: unknown): string {

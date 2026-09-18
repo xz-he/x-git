@@ -44,7 +44,8 @@ export const useAiChatStore = defineStore("ai-chat", () => {
   }
 
   async function send(): Promise<void> {
-    const question = draft.value.trim();
+    const submittedDraft = draft.value;
+    const question = submittedDraft.trim();
     if (!question || running.value || useAiStore().running || useRepositoryStore().navigationBusy) return;
     error.value = undefined;
     if (!configured.value) { error.value = { code: "aiConfiguration", message: "请先在设置中完成 AI 服务配置。" }; return; }
@@ -60,13 +61,16 @@ export const useAiChatStore = defineStore("ai-chat", () => {
     const id = crypto.randomUUID();
     const current = version;
     runId = id; running.value = true; pendingQuestion.value = question;
+    draft.value = "";
     try {
       const reply = await backendClient.aiChat(id, outgoing);
       if (version !== current) return;
       messages.value.push({ role: "user", content: question }, { role: "assistant", content: reply });
-      if (draft.value.trim() === question) draft.value = "";
     } catch (cause) {
-      if (version === current) error.value = normalizeBackendError(cause);
+      if (version === current) {
+        error.value = normalizeBackendError(cause);
+        if (!draft.value) draft.value = submittedDraft;
+      }
     } finally {
       if (runId === id) { running.value = false; runId = undefined; pendingQuestion.value = ""; }
     }
