@@ -77,9 +77,8 @@ impl AppSettings {
 
     pub fn record_recent_repository(&mut self, path: impl Into<String>) {
         let path = path.into();
-        self.recent_repo_paths
-            .retain(|existing| !existing.eq_ignore_ascii_case(&path));
         self.recent_repo_paths.insert(0, path.clone());
+        deduplicate_recent_paths(&mut self.recent_repo_paths);
         self.recent_repo_paths.truncate(MAX_RECENT_REPOSITORIES);
         self.last_repo_path = Some(path);
     }
@@ -180,16 +179,25 @@ fn normalize_font_family(name: &str) -> String {
 }
 
 fn deduplicate_recent_paths(paths: &mut Vec<String>) {
-    let mut unique = Vec::with_capacity(paths.len());
-    for path in paths.drain(..) {
-        if !unique
-            .iter()
-            .any(|existing: &String| existing.eq_ignore_ascii_case(&path))
-        {
-            unique.push(path);
-        }
+    let mut seen = std::collections::HashSet::new();
+    paths.retain(|path| !path.trim().is_empty() && seen.insert(recent_path_key(path)));
+}
+
+fn recent_path_key(path: &str) -> String {
+    let mut normalized = path.replace('\\', "/");
+    if normalized.to_ascii_lowercase().starts_with("//?/unc/") {
+        normalized = format!("//{}", &normalized[8..]);
+    } else if normalized.starts_with("//?/")
+        && normalized.as_bytes().get(5) == Some(&b':')
+        && normalized.as_bytes().get(6) == Some(&b'/')
+    {
+        normalized = normalized[4..].to_owned();
     }
-    *paths = unique;
+    let windows = normalized.starts_with("//")
+        || (normalized.as_bytes().get(1) == Some(&b':') && normalized.as_bytes().get(2) == Some(&b'/'));
+    let trimmed = normalized.trim_end_matches('/');
+    let key = if trimmed.is_empty() { "/" } else { trimmed };
+    if windows { key.to_lowercase() } else { key.to_owned() }
 }
 
 #[cfg(test)]
@@ -305,5 +313,20 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn recent_repositories_normalize_windows_aliases_without_changing_io_paths() {
+        let canonical = r"\\?\D:\Work\Repo";
+        let mut settings = AppSettings::default();
+        settings.recent_repo_paths = vec![canonical.into(), "d:/work/repo/".into(),
+            r"D:\Work\Repo\".into(), "D:/other/repo".into(), String::new()];
+        settings.normalize();
+        assert_eq!(settings.recent_repo_paths, vec![canonical, "D:/other/repo"]);
+        settings.record_recent_repository("d:/work/repo");
+        assert_eq!(settings.recent_repo_paths, vec!["d:/work/repo", "D:/other/repo"]);
+        assert_eq!(recent_path_key(r"\\?\UNC\server\share\repo"), recent_path_key("//SERVER/share/repo/"));
+        assert_eq!(recent_path_key(r"\\?\C:\"), recent_path_key("C:/"));
+        assert_ne!(recent_path_key("/work/Repo"), recent_path_key("/work/repo"));
     }
 }

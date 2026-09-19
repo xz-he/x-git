@@ -194,6 +194,7 @@ export interface BackendClient {
     request: ResetRequest,
   ): Promise<HistoryMutationResult>;
   settingsLoad(): Promise<SettingsLoadResult>;
+  settingsFonts(): Promise<string[]>;
   settingsSave(settings: AppSettings): Promise<AppSettings>;
 }
 
@@ -318,6 +319,7 @@ const tauriBackendClient: BackendClient = {
   historyReset: (path, request) =>
     invoke("history_reset", { path, request }),
   settingsLoad: () => invoke("settings_load"),
+  settingsFonts: () => invoke("settings_fonts"),
   settingsSave: (settings) => invoke("settings_save", { settings }),
 };
 
@@ -449,6 +451,7 @@ export const backendClient: BackendClient = {
   historyReset: (path, request) =>
     activeBackendClient.historyReset(path, request),
   settingsLoad: () => activeBackendClient.settingsLoad(),
+  settingsFonts: () => activeBackendClient.settingsFonts(),
   settingsSave: (settings) => activeBackendClient.settingsSave(settings),
 };
 

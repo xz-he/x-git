@@ -1,4 +1,5 @@
 import { flushPromises, mount } from "@vue/test-utils";
+import { selectOption } from "@/test/select";
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -237,7 +238,7 @@ describe("history workbench", () => {
     await wrapper.get('[aria-label="Revert 提交 2222222"]').trigger("click");
     const confirm = wrapper.get('[aria-label="确认回滚提交"]');
     expect(confirm.attributes()).toHaveProperty("disabled");
-    await wrapper.get('[aria-label="Revert 主线父提交"]').setValue("2");
+    await selectOption(wrapper, "Revert 主线父提交", 2);
     await confirm.trigger("click");
     await flushPromises();
     expect(backend.historyRevert).toHaveBeenCalledWith("C:/repo", { commit: "2".repeat(40), mainline: 2 });
@@ -331,10 +332,10 @@ describe("history workbench", () => {
       .trigger("click");
     const target = wrapper.get('[aria-label="Cherry-pick 目标分支"]');
     expect(target.text()).toContain("当前分支");
-    expect(target.text()).toContain("release");
     expect(wrapper.find('input[type="checkbox"]').exists()).toBe(false);
 
-    await target.setValue("release");
+    await selectOption(wrapper, "Cherry-pick 目标分支", "release");
+    expect(target.text()).toBe("release");
     const returnChoice = wrapper.get('input[type="checkbox"]');
     expect(returnChoice.element).toHaveProperty("checked", true);
   });

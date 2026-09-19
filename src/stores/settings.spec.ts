@@ -32,6 +32,15 @@ describe("settings store", () => {
     expect(resolveTheme("system", false)).toBe("light");
   });
 
+  it("cleans loaded path aliases and puts the latest opened path first when saving", async () => {
+    const store = useSettingsStore();
+    vi.mocked(backend.settingsLoad).mockResolvedValue({ settings: defaultSettings({ recentRepoPaths: ["D:/work/repo", String.raw`\\?\D:\work\repo`, "D:/other/repo"] }) });
+    await store.load();
+    expect(store.settings.recentRepoPaths).toEqual(["D:/work/repo", "D:/other/repo"]);
+    await store.recordRecentRepository(String.raw`\\?\D:\work\repo`);
+    expect(backend.settingsSave).toHaveBeenLastCalledWith(expect.objectContaining({ recentRepoPaths: [String.raw`\\?\D:\work\repo`, "D:/other/repo"] }));
+  });
+
   it("retains a non-fatal migration warning while normalizing loaded settings", async () => {
     vi.mocked(backend.settingsLoad).mockResolvedValue({
       settings: defaultSettings({ aiDrawerWidth: 100 }),

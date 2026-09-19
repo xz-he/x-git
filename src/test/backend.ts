@@ -138,6 +138,7 @@ export function createBackendFixture(
     historyCherryPick: vi.fn(notConfigured),
     historyReset: vi.fn(notConfigured),
     settingsLoad: vi.fn(async () => ({ settings: createTestSettings() })),
+    settingsFonts: vi.fn(async () => ["Microsoft YaHei", "Consolas", "Segoe UI"]),
     settingsSave: vi.fn(async (settings) => settings),
   };
 

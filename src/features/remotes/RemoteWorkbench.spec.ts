@@ -105,7 +105,10 @@ describe("remote workbench", () => {
     await wrapper.get('[aria-label="远程分支"]').setValue("server-only");
     const destination = "release";
     await wrapper.get('[aria-label="拉取目标本地分支"]').setValue(destination);
-    expect(wrapper.findAll('datalist option').map(option => option.attributes('value'))).toContain(destination);
+    await wrapper.get('[aria-label="拉取目标本地分支"]').trigger("keydown", { key: "Escape" });
+    await wrapper.get('[aria-label="拉取目标本地分支"]').trigger("click");
+    expect(document.querySelector('[role="listbox"]')?.textContent).toContain(destination);
+    await wrapper.get('[aria-label="拉取目标本地分支"]').trigger("keydown", { key: "Escape" });
     await wrapper.get('[aria-label="确认拉取"]').trigger('click');
     await vi.waitFor(() => expect(backend.remoteStartPull).toHaveBeenCalledWith("C:/repo", expect.any(String), {
       remote: "origin", remoteBranch: "server-only", localBranch: destination,

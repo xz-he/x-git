@@ -2,6 +2,7 @@
 import { computed, ref, watch } from "vue";
 import { GitBranchPlus, LoaderCircle, Unlink } from "@lucide/vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
+import AppSelect from "@/components/common/AppSelect.vue";
 import { taskPhaseLabel } from "@/lib/taskBranch";
 import { useTaskBranchesStore } from "@/stores/taskBranches";
 import { useRepositoryStore } from "@/stores/repository";
@@ -65,7 +66,7 @@ async function unlink() {
     <div v-if="tasks.loading" class="task-hint" role="status"><LoaderCircle :size="13" class="spin" /> 正在读取任务分支</div>
     <template v-if="selected">
       <div class="task-heading"><span><GitBranchPlus :size="14" />任务分支</span><small>{{ taskPhaseLabel[selected.phase] }}</small></div>
-      <select v-if="candidates.length > 1" v-model="selectedId" class="task-selector" aria-label="提交目标任务分支" :disabled="tasks.submitting" @change="confirmation = undefined"><option v-if="!selectedId" :value="''">{{ candidates[0]?.targetBranch }}</option><option v-for="item in candidates" :key="item.id" :value="item.id">{{ item.targetBranch }}</option></select>
+      <AppSelect v-if="candidates.length > 1" :model-value="selected?.id ?? ''" aria-label="提交目标任务分支" :disabled="tasks.submitting" :options="candidates.map(item => ({ value: item.id, label: item.targetBranch }))" @update:model-value="selectedId = $event; confirmation = undefined" />
       <code v-else class="task-target">{{ selected.targetBranch }}</code>
       <div class="task-title">{{ selected.ticket }} {{ selected.description }} <button @click="copyTitle">{{ copied ? '已复制' : '复制 MR 标题' }}</button></div>
       <p v-if="selected.sourceCommit" class="task-hint">开发分支提交：<code :title="selected.sourceCommit">{{ selected.sourceCommit.slice(0, 8) }}</code></p>

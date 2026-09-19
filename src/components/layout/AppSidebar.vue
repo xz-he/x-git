@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ArrowDownToLine, ArrowUpFromLine, Braces, CloudDownload, Code2, GitBranch, GitCommitHorizontal, GitMerge, GitPullRequest, History, RadioTower, RotateCcw, Tags, Wrench } from "@lucide/vue";
 import type { Component } from "vue";
-import { PanelLeftClose, PanelLeftOpen } from "@lucide/vue";
+import { PanelLeftClose, PanelLeftOpen, FolderGit2, ChevronDown } from "@lucide/vue";
+import { formatDisplayPath } from "@/lib/formatPath";
 import type { WorkspaceView } from "@/stores/ui";
 import { useUiStore } from "@/stores/ui";
 import { useRemotesStore, type RemoteDialogAction } from "@/stores/remotes";
@@ -99,6 +100,9 @@ function isDisabled(item: SidebarItem): boolean {
 <template>
   <aside class="sidebar" :class="{ collapsed: ui.sidebarCollapsed }" data-testid="app-sidebar">
     <div class="brand"><img :src="appIcon" alt="" /><strong>HQ Git</strong><button class="collapse-toggle" :aria-label="ui.sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'" :title="ui.sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'" :aria-expanded="!ui.sidebarCollapsed" @click="ui.sidebarCollapsed = !ui.sidebarCollapsed"><PanelLeftOpen v-if="ui.sidebarCollapsed" :size="17" /><PanelLeftClose v-else :size="17" /></button></div>
+    <button class="repository-switch" aria-label="快速切换仓库" aria-haspopup="dialog" :aria-expanded="ui.repositorySwitcherOpen" :title="formatDisplayPath(repositories.snapshot?.rootPath) + ' · Ctrl+P 切换仓库'" @click="ui.repositorySwitcherOpen = true">
+      <FolderGit2 :size="17" /><span v-if="!ui.sidebarCollapsed"><strong>{{ repositories.snapshot?.name ?? '选择仓库' }}</strong><small>Switch · Ctrl+P</small></span><ChevronDown v-if="!ui.sidebarCollapsed" :size="14" />
+    </button>
     <nav aria-label="主导航">
       <section v-for="group in groups" :key="group.label">
         <h2><component :is="group.icon" :size="14" /><span>{{ group.label }}</span></h2>
@@ -113,6 +117,13 @@ function isDisabled(item: SidebarItem): boolean {
 .sidebar { grid-row: 1 / -1; padding: 12px 10px; border-right: 1px solid var(--border); background: var(--surface-panel); overflow: auto; }
 .brand { display: flex; align-items: center; gap: 9px; height: 36px; padding: 0 8px 12px; font-size: 15px; }
 .brand img { width: 24px; height: 24px; border-radius: var(--radius-sm); }
+.repository-switch { display: flex; width: 100%; align-items: center; gap: 8px; min-height: 44px; margin-top: 10px; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-muted); text-align: left; }
+.repository-switch:hover { border-color: var(--primary); }
+.repository-switch > svg { flex-shrink: 0; }
+.repository-switch span { display: grid; flex: 1; min-width: 0; gap: 3px; }
+.repository-switch strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.repository-switch small { color: var(--text-muted); font-size: 10px; }
+.collapsed .repository-switch { justify-content: center; padding: 6px; }
 section { margin-top: 14px; }
 h2 { display: flex; align-items: center; gap: 6px; margin: 0 8px 5px; color: var(--text-muted); font-size: 11px; font-weight: 600; }
 .nav-item { display: flex; align-items: center; gap: 9px; width: 100%; height: 32px; padding: 0 10px; border-radius: var(--radius-md); background: transparent; text-align: left; }

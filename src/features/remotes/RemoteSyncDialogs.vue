@@ -3,6 +3,7 @@ import { computed, ref, watch } from "vue";
 
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import BranchInput from "@/components/common/BranchInput.vue";
+import AppSelect from "@/components/common/AppSelect.vue";
 import type { PushRequest } from "@/lib/backend/types";
 import { useRefsStore } from "@/stores/refs";
 import { useRemotesStore } from "@/stores/remotes";
@@ -117,9 +118,7 @@ async function confirmPush(): Promise<void> {
   >
     <label class="field">
       远程仓库
-      <select v-model="remotes.selectedRemoteName" aria-label="拉取远程仓库" :disabled="remotes.running">
-        <option v-for="remote in remotes.snapshot?.remotes ?? []" :key="remote.name" :value="remote.name">{{ remote.name }}</option>
-      </select>
+      <AppSelect v-model="remotes.selectedRemoteName" aria-label="拉取远程仓库" :disabled="remotes.running" :options="(remotes.snapshot?.remotes ?? []).map(remote => ({ value: remote.name, label: remote.name }))" />
     </label>
     <label class="field">远程源分支
       <BranchInput v-model="pullBranch" label="远程分支" :options="selectedRemote?.branches.map(branch => branch.name) ?? []" :disabled="remotes.running" />
@@ -145,15 +144,7 @@ async function confirmPush(): Promise<void> {
     <div class="target-grid">
       <label class="field">
         本地分支
-        <select v-model="localBranch" aria-label="本地分支">
-          <option
-            v-for="branch in localBranches"
-            :key="branch.fullName"
-            :value="branch.name"
-          >
-            {{ branch.name }}
-          </option>
-        </select>
+        <AppSelect v-model="localBranch" aria-label="本地分支" :disabled="remotes.running" :options="localBranches.map(branch => ({ value: branch.name, label: branch.name }))" />
       </label>
       <label class="field">
         远程分支

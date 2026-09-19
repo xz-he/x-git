@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { ExternalLink, FolderOpen, Copy, Columns2, Plus, Minus, Package, Trash2, Undo2, EyeOff, Unlink, GitCommitHorizontal, GitMerge, Terminal, History, ListOrdered } from "@lucide/vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
+import AppSelect from "@/components/common/AppSelect.vue";
 import { backendClient } from "@/lib/backend/client";
 import { normalizeBackendError } from "@/lib/backend/errors";
 import { formatDisplayPath } from "@/lib/formatPath";
@@ -178,11 +179,11 @@ onBeforeUnmount(() => { shown.value = false; });
           <label><input v-model="ruleKind" type="radio" value="exact" />忽略精确的文件名</label>
           <label><input v-model="ruleKind" type="radio" value="extension" :disabled="!extension" />忽略所有 {{ extension || '（无扩展名）' }} 文件</label>
           <label><input v-model="ruleKind" type="radio" value="directory" :disabled="!directories.length" />忽略目录下所有文件</label>
-          <select v-model="directory" aria-label="忽略目录" :disabled="ruleKind !== 'directory'"><option v-for="dir in directories" :key="dir" :value="dir">{{ dir }}/</option></select>
+          <AppSelect v-model="directory" aria-label="忽略目录" :disabled="loading || ruleKind !== 'directory'" :options="directories.map(dir => ({ value: dir, label: dir + '/' }))" />
           <label><input v-model="ruleKind" type="radio" value="custom" />忽略自定义模式</label>
           <input v-model="custom" aria-label="自定义忽略模式" :disabled="ruleKind !== 'custom'" placeholder="例如 **/*.log" />
           <label for="ignore-scope">忽略范围</label>
-          <select id="ignore-scope" v-model="scope"><option value="local">仅此仓库本机（.git/info/exclude）</option><option value="repository">仓库共享（.gitignore，可提交）</option><option value="global">本机所有仓库（全局忽略）</option></select>
+          <AppSelect id="ignore-scope" v-model="scope" aria-label="忽略范围" :disabled="loading" :options="[{ value: 'local', label: '仅此仓库本机（.git/info/exclude）' }, { value: 'repository', label: '仓库共享（.gitignore，可提交）' }, { value: 'global', label: '本机所有仓库（全局忽略）' }] as const" />
         </fieldset>
         <p v-if="previewLoading" role="status">正在预览规则…</p>
         <div v-if="preview" class="ignore-preview"><span>规则</span><code>{{ preview.pattern }}</code><span>写入文件</span><code>{{ formatDisplayPath(preview.targetPath) }}</code></div>

@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { applyFontPreferences } from "@/lib/fonts";
 import AppSidebar from "@/components/layout/AppSidebar.vue";
+import RepositorySwitcher from "@/components/layout/RepositorySwitcher.vue";
 import AppTopbar from "@/components/layout/AppTopbar.vue";
 import ContextPanel from "@/components/layout/ContextPanel.vue";
 import DetailPanel from "@/components/layout/DetailPanel.vue";
@@ -118,6 +119,7 @@ onBeforeUnmount(() => {
   <GitFeedbackPanel />
   </div>
   <UpdateNotice />
+  <RepositorySwitcher />
 </template>
 <style scoped>
 .app-shell {

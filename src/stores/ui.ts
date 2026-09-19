@@ -39,6 +39,7 @@ export const useUiStore = defineStore("ui", () => {
   }, { immediate: true });
   const activeView = ref<WorkspaceView>("changes");
   const homeVisible = ref(false);
+  const repositorySwitcherOpen = ref(false);
   const resolvedTheme = ref<ResolvedTheme>("light");
   const settingsDialogOpen = ref(false);
   const updateDialogOpen = ref(false);
@@ -88,6 +89,7 @@ export const useUiStore = defineStore("ui", () => {
     contextWidth,
     activeView,
     homeVisible,
+    repositorySwitcherOpen,
     resolvedTheme,
     settingsDialogOpen,
     updateDialogOpen,

@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from "vue";
 import { GitCommitHorizontal, GitPullRequest, RotateCcw, Undo2 } from "@lucide/vue";
 
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
+import AppSelect from "@/components/common/AppSelect.vue";
 import type { CommitDetail, ResetMode } from "@/lib/backend/types";
 import { useHistoryStore } from "@/stores/history";
 import { useRefsStore } from "@/stores/refs";
@@ -82,12 +83,12 @@ async function confirm(): Promise<void> {
   <ConfirmDialog v-if="active === 'checkout'" title="以分离 HEAD 检出" :description="`工作区将检出提交 ${shortHash}，当前分支不会移动。`" confirm-label="检出提交" :busy="history.submitting" @cancel="active = undefined" @confirm="confirm" />
   <ConfirmDialog v-else-if="active === 'revert'" title="回滚此提交（Revert）" :description="`在当前分支 ${repositories.snapshot?.currentBranch ?? '未检出分支'} 上生成一个反向提交，撤销 ${shortHash} 的修改，保留原有历史。请先提交或贮藏工作区修改；遇到冲突后可继续解决或中止回滚。`" confirm-label="确认回滚提交" :confirm-disabled="props.detail.parentHashes.length > 1 && mainline === null" :busy="history.submitting" @cancel="active = undefined" @confirm="confirm">
     <p class="commit-subject">{{ props.detail.message.split('\n')[0] }}</p>
-    <label v-if="props.detail.parentHashes.length > 1" class="field">合并提交的主线父提交<select v-model="mainline" aria-label="Revert 主线父提交"><option :value="null" disabled>请选择保留哪一侧作为主线</option><option v-for="(parent, index) in props.detail.parentHashes" :key="parent" :value="index + 1">父提交 {{ index + 1 }}：{{ parent.slice(0, 12) }}</option></select></label>
+    <label v-if="props.detail.parentHashes.length > 1" class="field">合并提交的主线父提交<AppSelect v-model="mainline" aria-label="Revert 主线父提交" placeholder="请选择保留哪一侧作为主线" :disabled="history.submitting" :options="props.detail.parentHashes.map((parent, index) => ({ value: index + 1, label: `父提交 ${index + 1}：${parent.slice(0, 12)}` }))" /></label>
     <p v-if="props.detail.parentHashes.length > 1" class="field">撤销该合并相对所选父提交引入的修改。通常父提交 1 是合并前的目标分支。</p>
     <p v-if="history.error" role="alert" class="revert-error">{{ history.error.message }}</p>
   </ConfirmDialog>
   <ConfirmDialog v-else-if="active === 'cherryPick'" title="Cherry-pick 提交" :description="`应用提交 ${shortHash}。`" confirm-label="Cherry-pick" :busy="history.submitting" @cancel="active = undefined" @confirm="confirm">
-    <label class="field">目标分支<select v-model="targetBranch" aria-label="Cherry-pick 目标分支"><option value="">当前分支</option><option v-for="branch in refs.snapshot?.localBranches ?? []" :key="branch.fullName" :value="branch.name">{{ branch.name }}</option></select></label>
+    <label class="field">目标分支<AppSelect v-model="targetBranch" aria-label="Cherry-pick 目标分支" :disabled="history.submitting" :options="[{ value: '', label: '当前分支' }, ...(refs.snapshot?.localBranches ?? []).map(branch => ({ value: branch.name, label: branch.name }))]" /></label>
     <label v-if="targetBranch" class="check-field"><input v-model="returnAfterSuccess" type="checkbox" />成功后返回当前分支</label>
   </ConfirmDialog>
   <ConfirmDialog v-else-if="active === 'reset'" title="重置当前分支" :description="`将当前分支移动到 ${shortHash}。`" confirm-label="执行重置" :confirm-disabled="resetDisabled" :busy="history.submitting" :danger="resetMode === 'hard'" @cancel="active = undefined" @confirm="confirm">

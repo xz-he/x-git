@@ -1,4 +1,5 @@
 import { flushPromises, mount } from "@vue/test-utils";
+import { selectOption } from "@/test/select";
 import { createPinia, setActivePinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import RefsList from "./RefsList.vue";
@@ -61,13 +62,13 @@ describe("task branches", () => {
     });
     wrapper = mount(CommitPanel);
     await flushPromises();
-    await wrapper.get('[aria-label="提交目标任务分支"]').setValue("task-2");
+    await selectOption(wrapper, "提交目标任务分支", "task-2");
     await wrapper.get('[aria-label="解除关联"]').trigger("click");
     await flushPromises();
     expect(backend.taskBranchesUnlink).toHaveBeenCalledWith(repo.rootPath, "task-2");
     expect(wrapper.text()).not.toContain(other.targetBranch);
     expect(wrapper.text()).toContain(binding().targetBranch);
-    expect((wrapper.get('[aria-label="提交目标任务分支"]').element as HTMLSelectElement).value).toBe("task-1");
+    expect(wrapper.get('[aria-label="提交目标任务分支"]').text()).toBe(binding().targetBranch);
     await useTaskBranchesStore().refresh();
     expect(useTaskBranchesStore().bindings.map((item) => item.id)).toEqual(["task-1", "task-3"]);
     expect(useChangesStore().commitMessage).toContain("新增采购订单");
@@ -125,7 +126,7 @@ describe("task branches", () => {
     await wrapper.get('[aria-label="完整任务单号"]').setValue("r2026082681825");
     await wrapper.get('[aria-label="英文描述"]').setValue("Purchase Orders");
     await wrapper.get('[aria-label="中文说明"]').setValue("采购订单");
-    expect(wrapper.get('[aria-label="创建方式"]').element).toHaveProperty("value", "remoteMaster");
+    expect(wrapper.get('[aria-label="创建方式"]').text()).toBe("从远端 master 创建，留在开发分支");
     expect(wrapper.text()).toContain("feature/R2026082681825-purchase-orders");
     expect(wrapper.text()).toContain("R2026082681825 采购订单");
     expect(backend.taskBranchesCreate).not.toHaveBeenCalled();
@@ -250,8 +251,8 @@ describe("task branches", () => {
     wrapper = mount(RefsList, { props: { mode: "branches" } });
     await flushPromises();
     await wrapper.get('[aria-label="快速建分支"]').trigger("click");
-    await wrapper.get('[aria-label="任务类型"]').setValue("hotfix");
-    await wrapper.get('[aria-label="创建方式"]').setValue("current");
+    await selectOption(wrapper, "任务类型", "hotfix");
+    await selectOption(wrapper, "创建方式", "current");
     await wrapper.get('[aria-label="完整任务单号"]').setValue("R2026082681825");
     await wrapper.get('[aria-label="英文描述"]').setValue("fix-sku-bug");
     await wrapper.get('[aria-label="中文说明"]').setValue("修复 SKU");

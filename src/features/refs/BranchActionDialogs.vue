@@ -5,6 +5,7 @@ import { GitBranchPlus, GitMerge, GitPullRequest, RefreshCcw, Trash2 } from "@lu
 
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import BranchInput from "@/components/common/BranchInput.vue";
+import AppSelect from "@/components/common/AppSelect.vue";
 import type { BranchSummary } from "@/lib/backend/types";
 import { useRefsStore } from "@/stores/refs";
 import { useRepositoryStore } from "@/stores/repository";
@@ -106,10 +107,7 @@ async function confirm(): Promise<void> {
       <p class="repository-context">支持输入联想；跨分支合并前请先提交或贮藏未提交修改。</p>
     </template>
     <label v-else-if="refs.snapshot" class="field">目标分支
-      <select v-model="refs.integrationRequest.target" aria-label="目标分支" :disabled="refs.submitting">
-        <option value="">选择目标分支</option>
-        <option v-for="target in refs.integrationTargets" :key="target.fullName" :value="target.fullName">{{ target.name }}</option>
-      </select>
+      <AppSelect v-model="refs.integrationRequest.target" aria-label="目标分支" placeholder="选择目标分支" :disabled="refs.submitting" :options="refs.integrationTargets.map(target => ({ value: target.fullName, label: target.name }))" />
     </label>
     <p v-if="!refs.loading && refs.snapshot && (refs.integrationRequest.action === 'merge' ? localNames.length < 2 : !refs.integrationTargets.length)">没有可用的目标分支</p>
     <p v-if="refs.integrationBlocked && !refs.submitting" role="status">请先完成当前 Git 操作或解决冲突。</p>

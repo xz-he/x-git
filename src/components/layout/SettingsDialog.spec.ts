@@ -1,4 +1,5 @@
 import { flushPromises, mount } from "@vue/test-utils";
+import { selectOption } from "@/test/select";
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -65,7 +66,7 @@ describe("settings dialog", () => {
     });
     const wrapper = mount(SettingsDialog);
     await wrapper.get('[aria-label="AI 设置"]').trigger("click");
-    await wrapper.get('[aria-label="AI 提供商"]').setValue("gemini");
+    await selectOption(wrapper, "AI 提供商", "gemini");
     await wrapper.get('[aria-label="API Key"]').setValue("secret-key");
     await wrapper
       .get('[aria-label="模型"]')
@@ -90,7 +91,7 @@ describe("settings dialog", () => {
     await wrapper.get('[aria-label="AI 设置"]').trigger("click");
     await wrapper.get('[aria-label="服务地址"]').setValue("https://proxy.example.test/v1");
     await wrapper.get('[aria-label="模型"]').setValue("gpt-6-astra");
-    await wrapper.get('[aria-label="AI 接口格式"]').setValue("responses");
+    await selectOption(wrapper, "AI 接口格式", "responses");
     await wrapper.get('[aria-label="测试 AI 连接"]').trigger("click");
     await flushPromises();
     expect(backend.aiTestConnection).toHaveBeenCalledWith(expect.objectContaining({ apiFormat: "responses", baseUrl: "https://proxy.example.test/v1", model: "gpt-6-astra" }));
@@ -100,7 +101,7 @@ describe("settings dialog", () => {
     wrapper.unmount();
     const reopened = mount(SettingsDialog);
     await reopened.get('[aria-label="AI 设置"]').trigger("click");
-    expect(reopened.get('[aria-label="AI 接口格式"]').element).toHaveProperty("value", "responses");
+    expect(reopened.get('[aria-label="AI 接口格式"]').text()).toBe("OpenAI Responses");
     reopened.unmount();
   });
 

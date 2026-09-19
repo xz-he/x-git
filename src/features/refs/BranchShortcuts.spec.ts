@@ -1,4 +1,5 @@
 import { flushPromises, mount } from "@vue/test-utils";
+import { selectOption } from "@/test/select";
 import { createPinia, setActivePinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -54,15 +55,14 @@ describe("branch sidebar shortcuts", () => {
     const dialog = wrapper.get('[role="dialog"]');
     expect(dialog.text()).toContain("C:/repo");
     expect(dialog.text()).toContain("main");
-    const select = dialog.get(label === "合并" ? '[aria-label="合并源分支"]' : 'select[aria-label="目标分支"]');
-    expect(select.element).toHaveProperty("value", "");
+    const select = dialog.get(label === "合并" ? '[aria-label="合并源分支"]' : '[aria-label="目标分支"]');
     if (label === "合并") {
+      expect(select.element).toHaveProperty("value", "");
       expect(dialog.get('[aria-label="合并目标分支"]').element).toHaveProperty("value", "main");
-      expect(dialog.findAll('datalist option').map(option => option.attributes('value'))).toContain('topic');
-    } else expect(select.findAll("option").map((option) => option.text())).toEqual(["选择目标分支", "topic"]);
+    } else expect(select.text()).toBe("选择目标分支");
     expect(dialog.get('.primary-button').attributes()).toHaveProperty("disabled");
     expect(document.activeElement).toBe(dialog.get('[data-action="cancel"]').element);
-    await select.setValue(label === "合并" ? "topic" : "refs/heads/topic");
+    await selectOption(dialog, label === "合并" ? "合并源分支" : "目标分支", label === "合并" ? "topic" : "refs/heads/topic");
     expect(backend.refsMerge).not.toHaveBeenCalled();
     expect(backend.refsRebase).not.toHaveBeenCalled();
     await dialog.get('[data-action="cancel"]').trigger("click");
@@ -76,7 +76,8 @@ describe("branch sidebar shortcuts", () => {
     await wrapper.get(`[aria-label="打开${label}"]`).trigger("click");
     await flushPromises();
     const selector = label === "合并" ? '[aria-label="合并源分支"]' : '[aria-label="目标分支"]';
-    expect(wrapper.get(selector).element).toHaveProperty("value", label === "合并" ? "topic" : "refs/heads/topic");
+    if (label === "合并") expect(wrapper.get(selector).element).toHaveProperty("value", "topic");
+    else expect(wrapper.get(selector).text()).toBe("topic");
     await wrapper.get('[data-action="cancel"]').trigger("click");
     await wrapper.get(`[aria-label="${label === "合并" ? "合并分支" : "变基到分支"} topic"]`).trigger("click");
     const method = label === "合并" ? backend.refsMerge : backend.refsRebase;
@@ -86,7 +87,8 @@ describe("branch sidebar shortcuts", () => {
     if (label === "合并") expect(method).toHaveBeenCalledWith("C:/repo", "topic", "main");
     else expect(method).toHaveBeenCalledWith("C:/repo", "topic");
     expect(wrapper.get('[role="dialog"] [role="alert"]').text()).toContain("Branch action failed");
-    expect(wrapper.get(selector).element).toHaveProperty("value", label === "合并" ? "topic" : "refs/heads/topic");
+    if (label === "合并") expect(wrapper.get(selector).element).toHaveProperty("value", "topic");
+    else expect(wrapper.get(selector).text()).toBe("topic");
     await wrapper.get('[role="dialog"] .primary-button').trigger("click");
     await flushPromises();
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
@@ -108,7 +110,8 @@ describe("branch sidebar shortcuts", () => {
     expect(wrapper.get('[role="dialog"] [role="alert"]').text()).toContain("Cannot read refs");
     await wrapper.get('[aria-label="重试读取分支"]').trigger("click");
     await flushPromises();
-    expect(wrapper.get('[aria-label="目标分支"]').text()).toContain("topic");
+    await wrapper.get('[aria-label="目标分支"]').trigger("click"); await flushPromises();
+    expect(document.querySelector('[role="listbox"]')?.textContent).toContain("topic");
   });
 
   it("selects both merge branches with suggestions and rejects identical or unknown destinations", async () => {
@@ -122,7 +125,9 @@ describe("branch sidebar shortcuts", () => {
     expect(backend.refsMerge).not.toHaveBeenCalled();
     await dialog.get('[aria-label="合并目标分支"]').setValue("topic");
     expect(dialog.text()).toContain("将 main 合并到 topic");
-    expect(dialog.findAll('datalist option').map(option => option.attributes('value'))).toContain('main');
+    await dialog.get('[aria-label="合并目标分支"]').trigger("click");
+    expect(document.querySelector('[role="listbox"]')?.textContent).toContain('main');
+    await dialog.get('[aria-label="合并目标分支"]').trigger("keydown", { key: "Escape" });
     await dialog.get('.primary-button').trigger('click');
     await flushPromises();
     expect(backend.refsMerge).toHaveBeenCalledExactlyOnceWith("C:/repo", "main", "topic");

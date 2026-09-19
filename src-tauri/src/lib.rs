@@ -105,6 +105,7 @@ pub fn run() {
             commands::repository::repository_clone,
             commands::repository::repository_refresh,
             commands::settings::settings_load,
+            commands::settings::settings_fonts,
             commands::settings::settings_save,
         ])
         .build(tauri::generate_context!())

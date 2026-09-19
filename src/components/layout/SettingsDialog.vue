@@ -25,6 +25,7 @@ import {
 import { useUiStore } from "@/stores/ui";
 import FontSettings from "./FontSettings.vue";
 import UpdateSettings from "./UpdateSettings.vue";
+import AppSelect from "@/components/common/AppSelect.vue";
 
 defineEmits<{ close: [] }>();
 const settingsStore = useSettingsStore();
@@ -63,8 +64,7 @@ function selectTheme(theme: ThemePreference): void {
   void settingsStore.save({ ...settingsStore.settings }).catch(() => undefined);
 }
 
-function selectProvider(event: Event): void {
-  const provider = (event.target as HTMLSelectElement).value as AiProvider;
+function selectProvider(provider: AiProvider): void {
   Object.assign(aiForm, applyAiProviderPreset(aiForm, provider));
   saved.value = false;
 }
@@ -79,8 +79,8 @@ function connectionConfig(): AiConnectionConfig {
   };
 }
 
-function selectApiFormat(event: Event): void {
-  Object.assign(aiForm, applyAiApiFormat(aiForm, (event.target as HTMLSelectElement).value as AiApiFormat));
+function selectApiFormat(format: AiApiFormat): void {
+  Object.assign(aiForm, applyAiApiFormat(aiForm, format));
 }
 
 watch(() => [aiForm.aiProvider, aiForm.aiApiFormat, aiForm.baseUrl, aiForm.model, aiForm.apiKey], () => {
@@ -180,27 +180,12 @@ async function saveAiSettings(): Promise<void> {
         <fieldset :disabled="ai.connectionStatus === 'testing'">
           <label>
             <span>提供商</span>
-            <select
-              :value="aiForm.aiProvider"
-              aria-label="AI 提供商"
-              @change="selectProvider"
-            >
-              <option
-                v-for="provider in providers"
-                :key="provider.value"
-                :value="provider.value"
-              >
-                {{ provider.label }}
-              </option>
-            </select>
+            <AppSelect :model-value="aiForm.aiProvider" aria-label="AI 提供商" :options="providers" :disabled="ai.connectionStatus === 'testing'" @update:model-value="selectProvider" />
           </label>
 
           <label v-if="aiForm.aiProvider !== 'gemini'">
             <span>接口格式</span>
-            <select :value="aiForm.aiApiFormat" aria-label="AI 接口格式" @change="selectApiFormat">
-              <option value="chatCompletions">Chat Completions</option>
-              <option value="responses">OpenAI Responses</option>
-            </select>
+            <AppSelect :model-value="aiForm.aiApiFormat" aria-label="AI 接口格式" :disabled="ai.connectionStatus === 'testing'" :options="[{ value: 'chatCompletions', label: 'Chat Completions' }, { value: 'responses', label: 'OpenAI Responses' }] as const" @update:model-value="selectApiFormat" />
           </label>
           <p v-if="aiForm.aiProvider !== 'gemini' && aiForm.aiApiFormat === 'responses'" class="storage-warning">
             使用 Responses API。服务地址可填写 /v1 基础地址或完整 /responses 地址；需要服务端支持此格式。

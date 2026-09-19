@@ -1,16 +1,12 @@
 <script setup lang="ts">
-import { useId } from "vue";
+import AppSelect from "./AppSelect.vue";
 
 defineProps<{ modelValue: string; options: string[]; label: string; disabled?: boolean }>();
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
-const listId = useId();
 </script>
 
 <template>
-  <input :value="modelValue" :list="listId" :aria-label="label" :disabled="disabled"
-    placeholder="选择或输入分支名" autocomplete="off" spellcheck="false"
-    @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)" />
-  <datalist :id="listId"><option v-for="name in options" :key="name" :value="name" /></datalist>
+  <AppSelect :model-value="modelValue" :options="options.map(name => ({ value: name, label: name }))" :aria-label="label" :disabled="disabled" editable placeholder="选择或输入分支名" @update:model-value="emit('update:modelValue', $event)" />
 </template>
 
 <style scoped>

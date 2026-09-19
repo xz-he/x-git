@@ -49,7 +49,8 @@ describe("file context actions", () => {
     vi.mocked(backend.filesIgnore).mockResolvedValue(result());
     await open("both.ts"); await click("ignore");
     const radio = document.querySelector<HTMLInputElement>('input[value="extension"]')!; radio.checked = true; radio.dispatchEvent(new Event("change", { bubbles: true }));
-    const scope = document.querySelector<HTMLSelectElement>("#ignore-scope")!; scope.value = "repository"; scope.dispatchEvent(new Event("change", { bubbles: true }));
+    document.querySelector<HTMLButtonElement>("#ignore-scope")!.click(); await flushPromises();
+    document.querySelector<HTMLElement>('[role="option"][data-value="repository"]')!.click();
     await flushPromises(); await vi.advanceTimersByTimeAsync(200); await flushPromises();
     expect(document.body.textContent).toContain("不会停止跟踪");
     document.querySelector<HTMLButtonElement>('[aria-label="保存忽略规则"]')!.click(); await flushPromises();

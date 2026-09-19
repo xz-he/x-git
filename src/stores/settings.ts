@@ -4,6 +4,7 @@ import { ref } from "vue";
 import { backendClient } from "@/lib/backend/client";
 import { normalizeBackendError } from "@/lib/backend/errors";
 import { normalizeFontFamily } from "@/lib/fonts";
+import { MAX_RECENT_REPOSITORIES, uniqueRepositoryPaths } from "@/lib/repositoryPaths";
 import type {
   AiApiFormat,
   AiProvider,
@@ -77,11 +78,7 @@ export function normalizeSettings(settings: AppSettings): AppSettings {
     reviewRuleFiles,
     reviewSkillDirectory: (settings.reviewSkillDirectory ?? "").trim().replace(/\\/g, "/"),
     aiDrawerWidth: Math.min(560, Math.max(300, settings.aiDrawerWidth)),
-    recentRepoPaths: Array.from(
-      new Map(
-        settings.recentRepoPaths.map((path) => [path.toLocaleLowerCase(), path]),
-      ).values(),
-    ).slice(0, 20),
+    recentRepoPaths: uniqueRepositoryPaths(settings.recentRepoPaths).slice(0, MAX_RECENT_REPOSITORIES),
   };
 }
 
@@ -170,12 +167,7 @@ export const useSettingsStore = defineStore("settings", () => {
   }
 
   async function recordRecentRepository(path: string): Promise<void> {
-    const recentRepoPaths = [
-      path,
-      ...settings.value.recentRepoPaths.filter(
-        (existing) => existing.toLocaleLowerCase() !== path.toLocaleLowerCase(),
-      ),
-    ].slice(0, 20);
+    const recentRepoPaths = uniqueRepositoryPaths([path, ...settings.value.recentRepoPaths]).slice(0, MAX_RECENT_REPOSITORIES);
     await save({
       ...settings.value,
       lastRepoPath: path,

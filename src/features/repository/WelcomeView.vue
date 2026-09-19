@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { formatDisplayPath } from "@/lib/formatPath";
+import { repositoryPathKey } from "@/lib/repositoryPaths";
 import UpdateButton from "@/components/layout/UpdateButton.vue";
 import { ArrowRight, FolderGit2, GitFork, Plus, Settings, Trash2, X } from "@lucide/vue";
 import { computed, ref } from "vue";
@@ -59,7 +60,7 @@ async function submitClone() {
 
 async function removeRecent(path: string) {
   const recentRepoPaths = settingsStore.settings.recentRepoPaths.filter(
-    (entry) => entry.toLocaleLowerCase() !== path.toLocaleLowerCase(),
+    (entry) => repositoryPathKey(entry) !== repositoryPathKey(path),
   );
   await settingsStore
     .save({ ...settingsStore.settings, recentRepoPaths })
