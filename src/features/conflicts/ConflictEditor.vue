@@ -1,21 +1,27 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Compartment, EditorState, StateEffect, StateField } from "@codemirror/state";
-import { Decoration, EditorView, keymap, lineNumbers, type DecorationSet } from "@codemirror/view";
+import { Decoration, EditorView, highlightWhitespace, keymap, lineNumbers, type DecorationSet } from "@codemirror/view";
 import { ArrowUp, ArrowDown } from "@lucide/vue";
 import { conflictDiff, type ConflictDiffRange } from "./conflictDiff";
 import type { MergeHighlight } from "./conflictMerge";
-import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { defaultKeymap, history, historyKeymap, undo, redo, undoDepth, redoDepth, isolateHistory } from "@codemirror/commands";
 
-const props = withDefaults(defineProps<{ modelValue: string; readonly?: boolean; label: string; compareText?: string; comparisonLabel?: string; mergeHighlights?: MergeHighlight[] }>(), { readonly: false });
-const emit = defineEmits<{ "update:modelValue": [value: string]; "viewport-scroll": [position: { line: number; left: number }] }>();
+const props = withDefaults(defineProps<{ modelValue: string; readonly?: boolean; label: string; compareText?: string; comparisonLabel?: string; mergeHighlights?: MergeHighlight[]; blockActions?: boolean; wrapLines?: boolean; showWhitespace?: boolean; hideNavigation?: boolean }>(), { readonly: false });
+const emit = defineEmits<{
+  "update:modelValue": [value: string]; "viewport-scroll": [position: { line: number; left: number }];
+  "block-context": [position: { line: number; x: number; y: number }];
+  "block-select": [line: number]; "history-change": [state: { undo: boolean; redo: boolean }];
+}>();
 const host = ref<HTMLElement>();
 const mode = new Compartment();
+const display = new Compartment();
 let fontObserver: MutationObserver | undefined;
 let view: EditorView | undefined;
 let replacing = false;
 const changes = ref<(ConflictDiffRange & { kind?: MergeHighlight["kind"] })[]>([]);
 const active = ref(-1);
+let revealedLine: number | undefined;
 const setHighlights = StateEffect.define<DecorationSet>();
 const highlights = StateField.define<DecorationSet>({
   create: () => Decoration.none,
@@ -49,19 +55,38 @@ function updateComparison(): void {
   changes.value = props.mergeHighlights !== undefined
     ? props.mergeHighlights.map(item => ({ oldFrom: item.from, oldTo: item.to, newFrom: item.from, newTo: item.to, kind: item.kind }))
     : props.compareText === undefined ? [] : conflictDiff(props.compareText, props.modelValue);
-  active.value = -1; decorate();
+  active.value = revealedLine === undefined ? -1 : changes.value.findIndex(change => revealedLine! >= change.newFrom && revealedLine! < Math.max(change.newTo, change.newFrom + 1));
+  decorate();
 }
 function jump(direction: number): void {
   if (!view || !changes.value.length) return;
   userScroll();
   active.value = active.value < 0 ? direction > 0 ? 0 : changes.value.length - 1 : (active.value + direction + changes.value.length) % changes.value.length;
   const line = Math.min(view.state.doc.lines, changes.value[active.value]!.newFrom + 1);
+  revealedLine = line - 1;
   const position = view.state.doc.line(line).from;
   view.dispatch({ selection: { anchor: position }, effects: EditorView.scrollIntoView(position, { y: "center" }) });
   decorate();
 }
 const normalize = (value: string) => value.replace(/\r\n/g, "\n");
 const modeExtensions = () => [EditorState.readOnly.of(props.readonly), EditorView.editable.of(!props.readonly), EditorView.contentAttributes.of({ "aria-label": props.label })];
+const displayExtensions = () => [props.wrapLines ? EditorView.lineWrapping : [], props.showWhitespace ? highlightWhitespace() : []];
+function contextAt(event: MouseEvent): boolean {
+  if (!props.blockActions || !view) return false;
+  const position = view.posAtCoords({ x: event.clientX, y: event.clientY });
+  if (position === null) return false;
+  emit("block-context", { line: view.state.doc.lineAt(position).number - 1, x: event.clientX, y: event.clientY });
+  return true;
+}
+function reveal(line: number) {
+  if (!view) return;
+  revealedLine = line;
+  active.value = changes.value.findIndex(change => line >= change.newFrom && line < Math.max(change.newTo, change.newFrom + 1));
+  decorate();
+  scrollTo({ line, left: view.scrollDOM.scrollLeft });
+}
+function undoEdit() { if (view && !props.readonly) undo(view); }
+function redoEdit() { if (view && !props.readonly) redo(view); }
 let scrollFrame = 0;
 let releaseFrame = 0;
 let synchronizing = false;
@@ -96,11 +121,31 @@ function scrollTo(position: { line: number; left: number }) {
   });
 }
 function userScroll() { synchronizing = false; }
-defineExpose({ scrollTo, getScrollPosition });
+defineExpose({ scrollTo, getScrollPosition, reveal, undo: undoEdit, redo: redoEdit });
 onMounted(() => {
   view = new EditorView({ parent: host.value, state: EditorState.create({ doc: normalize(props.modelValue), extensions: [
-    lineNumbers(), history(), keymap.of([...defaultKeymap, ...historyKeymap]), mode.of(modeExtensions()), highlights,
-    EditorView.updateListener.of(update => { if (update.docChanged && !props.readonly && !replacing) emit("update:modelValue", update.state.doc.toString()); }),
+    lineNumbers(), history(), keymap.of([...defaultKeymap, ...historyKeymap]), mode.of(modeExtensions()), display.of(displayExtensions()), highlights,
+    EditorView.domEventHandlers({
+      contextmenu: contextAt,
+      mousedown: event => {
+        if (props.blockActions && event.button === 0 && view) {
+          const position = view.posAtCoords({ x: event.clientX, y: event.clientY });
+          if (position !== null) emit("block-select", view.state.doc.lineAt(position).number - 1);
+        }
+        return false;
+      },
+      keydown: event => {
+        if (!props.blockActions || !view || !(event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) return false;
+        const position = view.state.selection.main.head, coordinates = view.coordsAtPos(position);
+        if (!coordinates) return false;
+        emit("block-context", { line: view.state.doc.lineAt(position).number - 1, x: coordinates.left, y: coordinates.bottom });
+        return true;
+      },
+    }),
+    EditorView.updateListener.of(update => {
+      if (update.docChanged && !props.readonly && !replacing) emit("update:modelValue", update.state.doc.toString());
+      if (update.docChanged) emit("history-change", { undo: undoDepth(update.state) > 0, redo: redoDepth(update.state) > 0 });
+    }),
     EditorView.theme({ "&": { height: "100%", color: "var(--text)", backgroundColor: "var(--surface-panel)" }, ".cm-scroller": { overflow: "auto", fontFamily: "var(--font-code)", fontSize: "12px" }, ".cm-gutters": { backgroundColor: "var(--surface-muted)", color: "var(--text-muted)", borderColor: "var(--border)" }, ".cm-content": { caretColor: "var(--text)" }, ".cm-cursor": { borderLeftColor: "var(--text)" }, "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": { backgroundColor: "var(--primary-soft)" } }),
   ] }) });
   view.scrollDOM.addEventListener("scroll", onScroll, { passive: true });
@@ -115,11 +160,12 @@ watch(() => props.modelValue, value => {
   const next = normalize(value);
   if (view && view.state.doc.toString() !== next) {
     replacing = true;
-    try { view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: next } }); }
+    try { view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: next }, annotations: isolateHistory.of("full") }); }
     finally { replacing = false; }
   }
 });
 watch(() => [props.readonly, props.label], () => view?.dispatch({ effects: mode.reconfigure(modeExtensions()) }));
+watch(() => [props.wrapLines, props.showWhitespace], () => view?.dispatch({ effects: display.reconfigure(displayExtensions()) }));
 watch(() => [props.modelValue, props.compareText, props.mergeHighlights], () => {
   clearTimeout(comparisonTimer); comparisonTimer = setTimeout(updateComparison, 80);
 });
@@ -134,7 +180,7 @@ onBeforeUnmount(() => {
 });
 </script>
 <template><div class="conflict-editor">
-  <div v-if="compareText !== undefined || mergeHighlights !== undefined" class="diff-navigation">
+  <div v-if="!hideNavigation && (compareText !== undefined || mergeHighlights !== undefined)" class="diff-navigation">
     <span>{{ comparisonLabel || '版本差异' }} <small aria-live="polite">{{ changes.length ? `${active < 0 ? '—' : active + 1} / ${changes.length} 处差异` : '无差异' }}</small></span>
     <button :aria-label="label + '：上一处差异'" title="上一处差异" :disabled="!changes.length" @click="jump(-1)"><ArrowUp :size="15" /></button>
     <button :aria-label="label + '：下一处差异'" title="下一处差异" :disabled="!changes.length" @click="jump(1)"><ArrowDown :size="15" /></button>

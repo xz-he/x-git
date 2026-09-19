@@ -171,6 +171,7 @@ async function saveAiSettings(): Promise<void> {
             </button>
           </div>
         </div>
+        <p v-if="ui.nativeThemeError" role="alert">{{ ui.nativeThemeError }}</p>
         <FontSettings />
       </div>
 

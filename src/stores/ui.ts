@@ -1,5 +1,7 @@
 import { defineStore } from "pinia";
-import { ref, watch } from "vue";
+import { onScopeDispose, ref, watch } from "vue";
+import { isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import type { ThemePreference } from "@/lib/backend/types";
 
@@ -42,13 +44,39 @@ export const useUiStore = defineStore("ui", () => {
   const updateDialogOpen = ref(false);
   const settingsTab = ref<"appearance" | "ai" | "updates">("appearance");
   const diffFullscreen = ref(false);
+  const nativeThemeError = ref("");
+  const systemTheme = typeof window.matchMedia === "function"
+    ? window.matchMedia("(prefers-color-scheme: dark)") : undefined;
+  let themePreference: ThemePreference = "system";
+  let themeQueue = Promise.resolve();
+  let themeVersion = 0;
+
+  function applyPageTheme(): void {
+    resolvedTheme.value = resolveTheme(themePreference, systemTheme?.matches ?? false);
+    document.documentElement.dataset.theme = resolvedTheme.value;
+  }
+  function systemThemeChanged(): void {
+    if (themePreference === "system") applyPageTheme();
+  }
+  systemTheme?.addEventListener("change", systemThemeChanged);
+  onScopeDispose(() => {
+    themeVersion++;
+    systemTheme?.removeEventListener("change", systemThemeChanged);
+  });
 
   function applyTheme(preference: ThemePreference): void {
-    const systemPrefersDark =
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches;
-    resolvedTheme.value = resolveTheme(preference, systemPrefersDark);
-    document.documentElement.dataset.theme = resolvedTheme.value;
+    themePreference = preference;
+    applyPageTheme();
+    nativeThemeError.value = "";
+    if (!isTauri()) return;
+    const version = ++themeVersion;
+    // Serialize native updates so rapid toggles cannot leave the title bar on an older theme.
+    themeQueue = themeQueue.then(async () => {
+      if (version !== themeVersion) return;
+      await getCurrentWindow().setTheme(preference === "system" ? null : preference);
+    }).catch(() => {
+      if (version === themeVersion) nativeThemeError.value = "标题栏主题同步失败，请重新切换主题重试。";
+    });
   }
 
   function openView(view: WorkspaceView): void {
@@ -65,6 +93,7 @@ export const useUiStore = defineStore("ui", () => {
     updateDialogOpen,
     settingsTab,
     diffFullscreen,
+    nativeThemeError,
     applyTheme,
     openView,
   };
