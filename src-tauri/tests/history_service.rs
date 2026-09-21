@@ -870,13 +870,35 @@ async fn cherry_pick_preserves_unstaged_and_untracked_changes_and_existing_stash
         );
         assert_eq!(
             std::fs::read_to_string(root.join("history.txt")).unwrap(),
-            "local unstaged\n"
+            if target == Some(false) {
+                "original stash\n"
+            } else {
+                "local unstaged\n"
+            }
         );
-        assert_eq!(std::fs::read(root.join("本地文件.bin")).unwrap(), binary);
-        assert_eq!(
-            git_text(root, &["stash", "list", "--format=%H"]).await,
-            old_stashes
-        );
+        if target == Some(false) {
+            assert!(!root.join("本地文件.bin").exists());
+            assert_eq!(
+                git_text(root, &["show", "stash@{0}:history.txt"]).await,
+                "local unstaged"
+            );
+            let retained = git_text(root, &["stash", "list", "--format=%H"]).await;
+            assert!(retained.ends_with(&old_stashes));
+            assert_eq!(retained.lines().count(), 2);
+            assert!(
+                result
+                    .notice
+                    .as_deref()
+                    .unwrap_or_default()
+                    .contains("main")
+            );
+        } else {
+            assert_eq!(std::fs::read(root.join("本地文件.bin")).unwrap(), binary);
+            assert_eq!(
+                git_text(root, &["stash", "list", "--format=%H"]).await,
+                old_stashes
+            );
+        }
         assert_eq!(git_text(root, &["diff", "--cached"]).await, "");
         let picked_branch = if target.is_some() { "release" } else { "main" };
         assert_eq!(
@@ -939,16 +961,30 @@ async fn cherry_pick_preserves_nested_residuals_on_current_target_and_return_bra
                 git_text(root, &["show", &format!("{branch}:picked.txt")]).await,
                 "picked"
             );
-            assert_eq!(std::fs::read(root.join("history.txt")).unwrap(), b"local\n");
-            assert_eq!(
-                std::fs::read(root.join("local.txt")).unwrap(),
-                b"untracked\n"
-            );
+            if target == Some(false) {
+                assert_eq!(std::fs::read(root.join("history.txt")).unwrap(), b"base\n");
+                assert!(!root.join("local.txt").exists());
+                assert_eq!(
+                    git_text(root, &["show", "stash@{0}^3:local.txt"]).await,
+                    "untracked"
+                );
+                assert!(
+                    git_text(root, &["stash", "list", "--format=%H"])
+                        .await
+                        .ends_with(&stashes)
+                );
+            } else {
+                assert_eq!(std::fs::read(root.join("history.txt")).unwrap(), b"local\n");
+                assert_eq!(
+                    std::fs::read(root.join("local.txt")).unwrap(),
+                    b"untracked\n"
+                );
+                assert_eq!(
+                    git_text(root, &["stash", "list", "--format=%H"]).await,
+                    stashes
+                );
+            }
             assert_eq!(git_text(root, &["diff", "--cached"]).await, "");
-            assert_eq!(
-                git_text(root, &["stash", "list", "--format=%H"]).await,
-                stashes
-            );
             nested_work::assert_preserved(root, &before).await;
         }
     }
@@ -962,6 +998,115 @@ async fn git_text(root: &Path, args: &[&str]) -> String {
         .stdout
         .trim()
         .to_owned()
+}
+
+#[tokio::test]
+async fn cherry_pick_isolates_source_ignored_files_and_restores_only_after_return() {
+    for return_after in [false, true] {
+        let fixture = repository_fixture().await;
+        let root = fixture.path();
+        commit_file(root, "base\n", "base").await;
+        run_git(root, &["branch", "release"]).await;
+        std::fs::write(root.join(".gitignore"), ".agents/\n").unwrap();
+        run_git(root, &["add", ".gitignore"]).await;
+        run_git(root, &["commit", "-m", "local ignore rules"]).await;
+        run_git(root, &["switch", "-c", "topic"]).await;
+        std::fs::write(root.join("picked.txt"), "picked\n").unwrap();
+        run_git(root, &["add", "picked.txt"]).await;
+        run_git(root, &["commit", "-m", "picked change"]).await;
+        let commit = head_hash(root).await;
+        run_git(root, &["switch", "main"]).await;
+        std::fs::create_dir(root.join(".agents")).unwrap();
+        std::fs::write(root.join(".agents/local.md"), "source ignored\n").unwrap();
+        let result = HistoryService::default()
+            .cherry_pick(
+                root,
+                CherryPickRequest {
+                    commit,
+                    target_branch: Some("release".into()),
+                    return_after_success: return_after,
+                },
+            )
+            .await
+            .unwrap();
+        assert!(result.error.is_none(), "{:?}", result.error);
+        assert_eq!(git_text(root, &["status", "--porcelain=v1"]).await, "");
+        assert_eq!(
+            git_text(root, &["branch", "--show-current"]).await,
+            if return_after { "main" } else { "release" }
+        );
+        if return_after {
+            assert_eq!(
+                std::fs::read(root.join(".agents/local.md")).unwrap(),
+                b"source ignored\n"
+            );
+            assert_eq!(git_text(root, &["stash", "list"]).await, "");
+        } else {
+            assert!(!root.join(".agents/local.md").exists());
+            assert_eq!(
+                git_text(root, &["show", "stash@{0}^3:.agents/local.md"]).await,
+                "source ignored"
+            );
+            assert!(
+                result
+                    .notice
+                    .as_deref()
+                    .unwrap_or_default()
+                    .contains("main")
+            );
+            run_git(root, &["switch", "main"]).await;
+            run_git(root, &["stash", "apply", "stash@{0}"]).await;
+            assert_eq!(
+                std::fs::read(root.join(".agents/local.md")).unwrap(),
+                b"source ignored\n"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn cherry_pick_switch_does_not_overwrite_source_ignored_files() {
+    let fixture = repository_fixture().await;
+    let root = fixture.path();
+    commit_file(root, "base\n", "base").await;
+    run_git(root, &["switch", "-c", "release"]).await;
+    std::fs::create_dir(root.join(".agents")).unwrap();
+    std::fs::write(root.join(".agents/local.md"), "target committed\n").unwrap();
+    run_git(root, &["add", ".agents/local.md"]).await;
+    run_git(root, &["commit", "-m", "target file"]).await;
+    let target_head = head_hash(root).await;
+    run_git(root, &["switch", "main"]).await;
+    std::fs::write(root.join(".gitignore"), ".agents/\n").unwrap();
+    run_git(root, &["add", ".gitignore"]).await;
+    run_git(root, &["commit", "-m", "source ignores"]).await;
+    let source_head = head_hash(root).await;
+    run_git(root, &["switch", "-c", "topic"]).await;
+    std::fs::write(root.join("picked.txt"), "picked\n").unwrap();
+    run_git(root, &["add", "picked.txt"]).await;
+    run_git(root, &["commit", "-m", "picked"]).await;
+    let commit = head_hash(root).await;
+    run_git(root, &["switch", "main"]).await;
+    std::fs::create_dir_all(root.join(".agents")).unwrap();
+    std::fs::write(root.join(".agents/local.md"), "source unsaved\n").unwrap();
+    let result = HistoryService::default()
+        .cherry_pick(
+            root,
+            CherryPickRequest {
+                commit,
+                target_branch: Some("release".into()),
+                return_after_success: false,
+            },
+        )
+        .await
+        .unwrap();
+    assert!(result.error.is_some());
+    assert_eq!(head_hash(root).await, source_head);
+    assert_eq!(git_text(root, &["rev-parse", "release"]).await, target_head);
+    assert_eq!(
+        std::fs::read(root.join(".agents/local.md")).unwrap(),
+        b"source unsaved\n"
+    );
+    assert_eq!(git_text(root, &["stash", "list"]).await, "");
 }
 
 #[tokio::test]

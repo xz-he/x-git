@@ -215,7 +215,7 @@ impl HistoryService {
             None => source_branch.clone(),
         };
         let switched = target_branch != source_branch;
-        let saved = super::cherry_pick_worktree::CherryPickWorktree::save(
+        let mut saved = super::cherry_pick_worktree::CherryPickWorktree::save(
             &root,
             &self.runner,
             &format!("refs/heads/{target_branch}"),
@@ -231,11 +231,13 @@ impl HistoryService {
                             "-c",
                             "submodule.recurse=false",
                             "switch",
+                            "--no-overwrite-ignore",
                             "--",
                             target_branch.as_str(),
                         ],
                     )
                     .await?;
+                saved.save_exposed_files(&root, &self.runner, &hash).await?;
             }
 
             let output = self
@@ -271,6 +273,7 @@ impl HistoryService {
                             "-c",
                             "submodule.recurse=false",
                             "switch",
+                            "--no-overwrite-ignore",
                             "--",
                             source_branch.as_str(),
                         ],
@@ -282,7 +285,10 @@ impl HistoryService {
         .await;
         let outcome = saved.finish(&root, &self.runner, outcome).await;
         let mut result = self.refreshed_mutation_result(&root).await?;
-        result.error = outcome.err();
+        match outcome {
+            Ok(notice) => result.notice = notice,
+            Err(error) => result.error = Some(error),
+        }
         Ok(result)
     }
 
@@ -602,6 +608,7 @@ impl HistoryService {
             history: history?,
             operation_state,
             error: None,
+            notice: None,
         })
     }
 

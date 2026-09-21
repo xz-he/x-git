@@ -42,6 +42,7 @@ onBeforeUnmount(() => observer?.disconnect());
       </label>
     </div>
     <div v-if="history.error && history.commits.length" class="inline-error" role="alert">{{ history.error.message }}</div>
+    <div v-if="history.notice" class="backup-notice" role="status">{{ history.notice }}</div>
     <div v-if="history.loading && history.commits.length === 0" class="module-state"><LoaderCircle :size="18" class="spin" />{{ t('uiLoadingCommitsc684a1') }}</div>
     <div v-else-if="history.error && history.commits.length === 0" class="module-state error" role="alert">{{ history.error.message }}</div>
     <div v-else-if="history.commits.length === 0" class="module-state"><GitCommitHorizontal :size="20" />{{ history.query.search ? t('uiNoMatchingCommits3dcac9') : t('uiThisRepositoryHasNoCommitsYetfcc894') }}</div>
@@ -69,6 +70,7 @@ onBeforeUnmount(() => observer?.disconnect());
 </template>
 
 <style scoped>
+.backup-notice { margin: 10px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-muted); color: var(--text-muted); overflow-wrap: anywhere; }
 .history-scope { min-width: 0; overflow-wrap: anywhere; color: var(--text-muted); font-size: 11px; }
 .history-scope button { margin-left: 8px; background: transparent; color: var(--primary); }
 .history-list { min-height: 0; overflow: auto; }

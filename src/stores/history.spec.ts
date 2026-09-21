@@ -349,4 +349,26 @@ describe("history store", () => {
     expect(useOperationStore().state.kind).toBe("cherryPick");
     expect(store.submitting).toBe(false);
   });
+
+  it("shows a retained source backup as a successful result and clears it on repository change", async () => {
+    const result: HistoryMutationResult = {
+      workspace: {
+        repository: { rootPath: "C:/repo", name: "repo", currentBranch: "release", headShortHash: "1234567", isClean: true, changedFileCount: 0, conflictCount: 0, remotes: [], upstream: null },
+        changes: { files: [], stagedCount: 0, unstagedCount: 0 },
+      },
+      history: page([commit(1)], null),
+      operationState: { kind: "none", conflicts: [], abortAction: null },
+      notice: "开发分支 main 的未提交修改保留在自动贮藏备份 abc123，切回后恢复。",
+    };
+    vi.mocked(backend.historyCherryPick).mockResolvedValue(result);
+    useRepositoryStore().snapshot = { ...result.workspace.repository, currentBranch: "main" };
+    const store = useHistoryStore();
+    store.resetForRepository("C:/repo", 1);
+    await store.cherryPick({ commit: commit(1).hash, targetBranch: "release", returnAfterSuccess: false });
+    expect(store.error).toBeUndefined();
+    expect(store.notice).toBe(result.notice);
+    expect(useRepositoryStore().snapshot?.currentBranch).toBe("release");
+    store.resetForRepository("C:/other", 2);
+    expect(store.notice).toBeUndefined();
+  });
 });

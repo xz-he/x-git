@@ -473,6 +473,7 @@ export interface RevertRequest {
 export interface HistoryMutationResult extends MutationWorkspace {
   history: HistoryPage;
   error?: BackendError | null;
+  notice?: string | null;
 }
 
 export interface CommitResult {

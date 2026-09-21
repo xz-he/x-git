@@ -116,4 +116,6 @@ pub struct HistoryMutationResult {
     pub operation_state: RepositoryOperationState,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<BackendError>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notice: Option<String>,
 }

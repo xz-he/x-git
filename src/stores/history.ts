@@ -45,6 +45,7 @@ export const useHistoryStore = defineStore("history", () => {
   const detailLoading = ref(false);
   const submitting = ref(false);
   const error = ref<BackendError>();
+  const notice = ref<string>();
   const lifecycle = createModuleLifecycle();
   let loaded = false;
   let requestVersion = 0;
@@ -85,6 +86,7 @@ export const useHistoryStore = defineStore("history", () => {
     detailPending = undefined;
     error.value = undefined;
     loaded = false;
+    notice.value = undefined;
     initialPending = undefined;
   }
 
@@ -367,9 +369,11 @@ export const useHistoryStore = defineStore("history", () => {
     }
     submitting.value = true;
     error.value = undefined;
+    notice.value = undefined;
     try {
       const result = await action(requireRootPath());
       useOperationStore().applyMutationResult(result);
+      notice.value = result.notice ?? undefined;
       if (result.error) throw result.error;
     } catch (cause) {
       error.value = normalizeBackendError(cause);
@@ -420,6 +424,7 @@ export const useHistoryStore = defineStore("history", () => {
     detailLoading,
     submitting,
     error,
+    notice,
     resetForRepository,
     ensureLoaded,
     loadNextPage,

@@ -48,11 +48,20 @@ async fn commit_pick_preserves_nested_residuals_for_both_destinations() {
             );
             assert_eq!(
                 std::fs::read(root.join("task.txt")).unwrap(),
-                b"unstaged changes\n"
+                if return_after {
+                    b"unstaged changes\n".as_slice()
+                } else {
+                    b"task\n".as_slice()
+                }
             );
-            assert_eq!(std::fs::read(root.join("local.txt")).unwrap(), b"local\n");
+            if return_after {
+                assert_eq!(std::fs::read(root.join("local.txt")).unwrap(), b"local\n");
+            } else {
+                assert!(!root.join("local.txt").exists());
+                assert_eq!(git(root, &["show", "stash@{0}^3:local.txt"]).await, "local");
+            }
             assert_eq!(git(root, &["diff", "--cached"]).await, "");
-            assert_eq!(git(root, &["stash", "list"]).await, "");
+            assert_eq!(git(root, &["stash", "list"]).await.is_empty(), return_after);
             nested_work::assert_preserved(root, &before).await;
             let tip = git(root, &["rev-parse", &binding.target_branch]).await;
             run(&s, root, &binding.id, "pick", return_after).await;
@@ -113,6 +122,114 @@ async fn run(
 async fn stage(root: &Path) {
     std::fs::write(root.join("task.txt"), "task\n").unwrap();
     git(root, &["add", "task.txt"]).await;
+}
+
+#[tokio::test]
+async fn source_uncommitted_work_is_not_restored_on_the_target() {
+    let d = fixture().await;
+    let root = d.path();
+    let store = tempfile::tempdir().unwrap();
+    let s = service(store.path());
+    let b = create(&s, root, "remoteMaster").await;
+    stage(root).await;
+    std::fs::write(root.join("task.txt"), "local unfinished work\n").unwrap();
+    std::fs::write(root.join("local.txt"), "untracked local\n").unwrap();
+    let result = run(&s, root, &b.id, "commit", false).await;
+    assert!(result.error.is_none(), "{:?}", result.error);
+    assert_eq!(
+        git(root, &["status", "--porcelain=v1"]).await,
+        "",
+        "target must contain only committed work"
+    );
+    assert_eq!(
+        git(root, &["show", "stash@{0}:task.txt"]).await,
+        "local unfinished work"
+    );
+    assert_eq!(
+        git(root, &["show", "stash@{0}^3:local.txt"]).await,
+        "untracked local"
+    );
+    assert!(
+        result.bindings[0]
+            .message
+            .as_deref()
+            .unwrap_or_default()
+            .contains("dev")
+    );
+    git(root, &["switch", "dev"]).await;
+    git(root, &["stash", "apply", "stash@{0}"]).await;
+    assert_eq!(
+        std::fs::read(root.join("task.txt")).unwrap(),
+        b"local unfinished work\n"
+    );
+    assert_eq!(
+        std::fs::read(root.join("local.txt")).unwrap(),
+        b"untracked local\n"
+    );
+}
+
+#[tokio::test]
+async fn source_ignored_files_do_not_block_return_or_pollute_the_target() {
+    for return_after in [true, false] {
+        let d = fixture().await;
+        let root = d.path();
+        std::fs::write(root.join(".gitignore"), ".agents/\n.tmp/\n").unwrap();
+        git(root, &["add", ".gitignore"]).await;
+        git(root, &["commit", "-m", "dev ignore rules"]).await;
+        std::fs::create_dir(root.join(".agents")).unwrap();
+        std::fs::write(root.join(".agents/local.md"), "local ignored work\n").unwrap();
+        let store = tempfile::tempdir().unwrap();
+        let s = service(store.path());
+        let b = create(&s, root, "remoteMaster").await;
+        stage(root).await;
+        std::fs::write(root.join("task.txt"), "local tracked work\n").unwrap();
+        let result = run(&s, root, &b.id, "commit", return_after).await;
+        assert!(result.error.is_none(), "{:?}", result.error);
+        assert_eq!(
+            git(root, &["branch", "--show-current"]).await,
+            if return_after {
+                "dev"
+            } else {
+                &b.target_branch
+            }
+        );
+        assert_eq!(
+            git(root, &["show", &format!("{}:task.txt", b.target_branch)]).await,
+            "task"
+        );
+        if return_after {
+            assert_eq!(
+                std::fs::read(root.join(".agents/local.md")).unwrap(),
+                b"local ignored work\n"
+            );
+            assert_eq!(
+                std::fs::read(root.join("task.txt")).unwrap(),
+                b"local tracked work\n"
+            );
+            assert_eq!(git(root, &["stash", "list"]).await, "");
+        } else {
+            assert_eq!(git(root, &["status", "--porcelain=v1"]).await, "");
+            assert!(!root.join(".agents/local.md").exists());
+            assert_eq!(
+                git(root, &["stash", "list", "--format=%H"])
+                    .await
+                    .lines()
+                    .count(),
+                2
+            );
+            git(root, &["switch", "dev"]).await;
+            git(root, &["stash", "apply", "stash@{0}"]).await;
+            git(root, &["stash", "apply", "stash@{1}"]).await;
+            assert_eq!(
+                std::fs::read(root.join(".agents/local.md")).unwrap(),
+                b"local ignored work\n"
+            );
+            assert_eq!(
+                std::fs::read(root.join("task.txt")).unwrap(),
+                b"local tracked work\n"
+            );
+        }
+    }
 }
 
 #[tokio::test]
@@ -285,7 +402,11 @@ async fn unstaged_work_is_excluded_and_restored_for_both_destinations() {
         assert_eq!(git(d.path(), &["show", "HEAD:task.txt"]).await, "task");
         assert_eq!(
             std::fs::read_to_string(d.path().join("task.txt")).unwrap(),
-            "unstaged changes\n"
+            if return_after {
+                "unstaged changes\n"
+            } else {
+                "task\n"
+            }
         );
         assert_eq!(oid.len(), 40);
         assert_eq!(
@@ -296,12 +417,23 @@ async fn unstaged_work_is_excluded_and_restored_for_both_destinations() {
                 &b.target_branch
             }
         );
-        assert_eq!(
-            std::fs::read_to_string(d.path().join("local.txt")).unwrap(),
-            "local"
-        );
+        if return_after {
+            assert_eq!(
+                std::fs::read_to_string(d.path().join("local.txt")).unwrap(),
+                "local"
+            );
+        } else {
+            assert!(!d.path().join("local.txt").exists());
+            assert_eq!(
+                git(d.path(), &["show", "stash@{0}^3:local.txt"]).await,
+                "local"
+            );
+        }
         assert_eq!(git(d.path(), &["diff", "--cached"]).await, "");
-        assert_eq!(git(d.path(), &["stash", "list"]).await, "");
+        assert_eq!(
+            git(d.path(), &["stash", "list"]).await.is_empty(),
+            return_after
+        );
         assert_eq!(
             git(
                 d.path(),

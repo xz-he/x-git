@@ -335,7 +335,7 @@ impl TaskBranchService {
         if current != b.source_branch && current != b.target_branch {
             return Err(invalid("当前不在任务的开发或目标分支。"));
         }
-        let saved = super::cherry_pick_worktree::CherryPickWorktree::save(
+        let mut saved = super::cherry_pick_worktree::CherryPickWorktree::save(
             root,
             &self.runner,
             &target,
@@ -354,11 +354,15 @@ impl TaskBranchService {
                         "-c",
                         "submodule.recurse=false",
                         "switch",
+                        "--no-overwrite-ignore",
                         "--",
                         &b.target_branch,
                     ],
                 )
                 .await?;
+                saved
+                    .save_exposed_files(root, &self.runner, &source)
+                    .await?;
             }
             // -x provides durable source identity for recovery after a successful Git write.
             let result = self
@@ -391,12 +395,17 @@ impl TaskBranchService {
             Ok(())
         }
         .await;
-        let result = saved.finish(root, &self.runner, result).await;
-        if let Err(error) = &result {
-            b.message = Some(error.message.clone());
-            self.repository.save(b)?;
+        match saved.finish(root, &self.runner, result).await {
+            Ok(notice) => {
+                b.message = notice;
+                self.repository.save(b)
+            }
+            Err(error) => {
+                b.message = Some(error.message.clone());
+                self.repository.save(b)?;
+                Err(error)
+            }
         }
-        result
     }
     fn picked(&self, b: &mut TaskBranchBinding) -> Result<(), BackendError> {
         b.phase = if b.return_after_success {
@@ -439,6 +448,7 @@ impl TaskBranchService {
                 "-c",
                 "submodule.recurse=false",
                 "switch",
+                "--no-overwrite-ignore",
                 "--",
                 &b.source_branch,
             ],

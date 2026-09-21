@@ -11,8 +11,9 @@ mod residuals;
 /// Caller holds the repository mutation lock. Backups are ordinary, durable Git
 /// stashes, so they remain recoverable even if the app exits during a pick.
 pub(super) struct CherryPickWorktree {
-    stash: Option<String>,
+    stashes: Vec<String>,
     source: String,
+    already_switched: bool,
 }
 
 impl CherryPickWorktree {
@@ -21,6 +22,16 @@ impl CherryPickWorktree {
         runner: &GitCommandRunner,
         target: &str,
         commit: &str,
+    ) -> Result<Self, BackendError> {
+        Self::save_with_origin(root, runner, target, commit, None).await
+    }
+
+    async fn save_with_origin(
+        root: &Path,
+        runner: &GitCommandRunner,
+        target: &str,
+        commit: &str,
+        origin: Option<&str>,
     ) -> Result<Self, BackendError> {
         let staged = runner
             .run_allowing_failure(
@@ -46,10 +57,11 @@ impl CherryPickWorktree {
         let branch = runner
             .run(Some(root), ["rev-parse", "--abbrev-ref", "HEAD"])
             .await?;
-        let source = branch.stdout.trim().to_owned();
+        let source = origin.unwrap_or(branch.stdout.trim()).to_owned();
         let mut saved = Self {
-            stash: None,
+            stashes: Vec::new(),
             source,
+            already_switched: origin.is_some(),
         };
         let status = residuals::inspect(root, runner, target, Some(commit))
             .await
@@ -84,7 +96,9 @@ impl CherryPickWorktree {
             .run_allowing_failure(Some(root), ["log", "-1", "--format=%H%n%s", "refs/stash"])
             .await?;
         if top.is_success() && top.stdout.lines().skip(1).any(|line| line.contains(&label)) {
-            saved.stash = top.stdout.lines().next().map(str::to_owned);
+            if let Some(hash) = top.stdout.lines().next() {
+                saved.stashes.push(hash.to_owned());
+            }
         }
         if !output.is_success() {
             let error = output.into_result().unwrap_err();
@@ -93,8 +107,8 @@ impl CherryPickWorktree {
         let status = residuals::inspect(root, runner, target, Some(commit))
             .await
             .map_err(|error| saved.save_failed(error))?;
-        if saved.stash.is_none() || !status.ordinary.is_empty() {
-            let reason = if saved.stash.is_none() {
+        if saved.stashes.is_empty() || !status.ordinary.is_empty() {
+            let reason = if saved.stashes.is_empty() {
                 "未确认到本次自动贮藏备份，已停止移植。"
             } else {
                 "未能完整贮藏本地变更，工作区仍有残留，请查看详情中的文件列表。"
@@ -109,6 +123,35 @@ impl CherryPickWorktree {
             ));
         }
         Ok(saved)
+    }
+
+    /// Switching can expose files ignored only by the original branch. Back
+    /// them up before the pick, without stashing all ignored build/cache files.
+    pub async fn save_exposed_files(
+        &mut self,
+        root: &Path,
+        runner: &GitCommandRunner,
+        commit: &str,
+    ) -> Result<(), BackendError> {
+        let status = residuals::inspect(root, runner, "HEAD", Some(commit)).await?;
+        if status
+            .ordinary
+            .iter()
+            .any(|entry| !entry.starts_with("?? "))
+        {
+            return Err(BackendError::new(
+                ErrorCode::DirtyWorktree,
+                "切换后出现已跟踪文件修改，已停止移植，请检查工作区。",
+            )
+            .with_diagnostics(status.ordinary.join("\n")));
+        }
+        if status.ordinary.is_empty() {
+            return Ok(());
+        }
+        let extra =
+            Self::save_with_origin(root, runner, "HEAD", commit, Some(&self.source)).await?;
+        self.stashes.extend(extra.stashes);
+        Ok(())
     }
 
     pub async fn ensure_safe_return(
@@ -129,35 +172,41 @@ impl CherryPickWorktree {
     }
 
     fn save_failed(&self, mut error: BackendError) -> BackendError {
-        error.message.push_str(" 本次尚未切换分支或执行 Cherry-pick；如果使用了“提交并移植”，前面的本地提交可能已完成，请核对任务状态。");
-        if let Some(stash) = &self.stash {
+        error.message.push_str(if self.already_switched {
+            " 已切换目标分支，但尚未执行 Cherry-pick；请检查目标分支工作区及备份。"
+        } else {
+            " 本次尚未切换分支或执行 Cherry-pick；如果使用了“提交并移植”，前面的本地提交可能已完成，请核对任务状态。"
+        });
+        if !self.stashes.is_empty() {
             error.message.push_str(&format!(
                 " 未暂存变更的自动贮藏备份仍保留（{}，原分支 {}）。请先检查残留文件与贮藏内容，再决定恢复备份或继续移植。",
-                stash, self.source,
+                self.stashes.join("，"), self.source,
             ));
         }
         error
     }
 
     fn retained(&self, mut error: BackendError) -> BackendError {
-        if let Some(stash) = &self.stash {
+        if !self.stashes.is_empty() {
             error.message = format!(
                 "{} 未暂存变更的自动贮藏备份仍保留（{}，原分支 {}）。请先处理当前冲突或失败，再在贮藏列表中恢复该备份；不要重复移植已成功的提交。",
-                error.message, stash, self.source
+                error.message,
+                self.stashes.join("，"),
+                self.source
             );
         }
         error
     }
 
-    pub async fn finish<T>(
-        self,
+    pub async fn finish(
+        mut self,
         root: &Path,
         runner: &GitCommandRunner,
-        outcome: Result<T, BackendError>,
-    ) -> Result<T, BackendError> {
-        let Some(stash) = &self.stash else {
-            return outcome;
-        };
+        outcome: Result<(), BackendError>,
+    ) -> Result<Option<String>, BackendError> {
+        if self.stashes.is_empty() {
+            return outcome.map(|()| None);
+        }
         let state = read_operation_state(root, runner)
             .await
             .map_err(|e| self.retained(e))?;
@@ -166,46 +215,69 @@ impl CherryPickWorktree {
                 BackendError::new(ErrorCode::GitConflict, "移植尚未结束，暂不恢复未暂存变更。")
             })));
         }
-        let restored = runner
-            .run(
-                Some(root),
-                [
-                    "-c",
-                    "submodule.recurse=false",
-                    "stash",
-                    "apply",
-                    stash.as_str(),
-                ],
-            )
-            .await;
-        if let Err(error) = restored {
-            let message = match &outcome {
-                Ok(_) => "移植操作已完成，但未暂存变更恢复失败。",
-                Err(_) => "移植操作失败，且未暂存变更未能自动恢复。",
+        let branch = runner
+            .run(Some(root), ["symbolic-ref", "--quiet", "--short", "HEAD"])
+            .await
+            .map_err(|error| self.retained(error))?;
+        if branch.stdout.trim() != self.source {
+            return match outcome {
+                Ok(()) => Ok(Some(format!(
+                    "移植已完成。原分支 {} 的本地文件保留在自动贮藏备份（{}），未恢复到目标分支。请切回 {} 后在贮藏列表恢复备份。",
+                    self.source,
+                    self.stashes
+                        .iter()
+                        .rev()
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join("，"),
+                    self.source,
+                ))),
+                Err(error) => Err(self.retained(error)),
             };
-            return Err(
-                self.retained(
+        }
+        // Restore newest first so each of our own top entries can be removed.
+        // Stop on failure and retain all not-yet-restored backups.
+        while let Some(stash) = self.stashes.last().cloned() {
+            let restored = runner
+                .run(
+                    Some(root),
+                    [
+                        "-c",
+                        "submodule.recurse=false",
+                        "stash",
+                        "apply",
+                        stash.as_str(),
+                    ],
+                )
+                .await;
+            if let Err(error) = restored {
+                let message = match &outcome {
+                    Ok(_) => "移植操作已完成，但未暂存变更恢复失败。",
+                    Err(_) => "移植操作失败，且未暂存变更未能自动恢复。",
+                };
+                return Err(self.retained(
                     BackendError::new(error.code, message).with_diagnostics(format!(
                         "{}\n{}",
                         outcome.err().map(|e| e.to_string()).unwrap_or_default(),
                         error.diagnostics.unwrap_or(error.message)
                     )),
-                ),
-            );
-        }
-        // Drop only our own top entry after a successful apply. If an external
-        // Git client added a newer stash, leave the backup instead of deleting it.
-        let top = runner
-            .run(Some(root), ["rev-parse", "refs/stash"])
-            .await
-            .map_err(|e| restored_backup_error(e, stash, outcome.as_ref().err()))?;
-        if top.stdout.trim() == stash {
-            runner
-                .run(Some(root), ["stash", "drop", "stash@{0}"])
+                ));
+            }
+            // Drop only our own top entry after a successful apply. If an external
+            // Git client added a newer stash, leave the backup instead of deleting it.
+            let top = runner
+                .run(Some(root), ["rev-parse", "refs/stash"])
                 .await
-                .map_err(|e| restored_backup_error(e, stash, outcome.as_ref().err()))?;
+                .map_err(|e| restored_backup_error(e, &stash, outcome.as_ref().err()))?;
+            if top.stdout.trim() == stash {
+                runner
+                    .run(Some(root), ["stash", "drop", "stash@{0}"])
+                    .await
+                    .map_err(|e| restored_backup_error(e, &stash, outcome.as_ref().err()))?;
+            }
+            self.stashes.pop();
         }
-        outcome
+        outcome.map(|()| None)
     }
 }
 
@@ -273,7 +345,7 @@ mod tests {
             let saved = CherryPickWorktree::save(root, &runner, "HEAD", "HEAD")
                 .await
                 .unwrap();
-            assert!(saved.stash.is_some());
+            assert!(!saved.stashes.is_empty());
             assert_eq!(
                 git(root, &["show", "stash@{0}:tracked.txt"]).await,
                 "parent local work\n"
@@ -379,7 +451,7 @@ mod tests {
             let saved = CherryPickWorktree::save(root, &runner, "HEAD", "HEAD")
                 .await
                 .unwrap();
-            assert!(saved.stash.is_none());
+            assert!(saved.stashes.is_empty());
             saved.finish(root, &runner, Ok(())).await.unwrap();
             std::fs::write(root.join("tracked.txt"), "parent local\n").unwrap();
             let head = git(root, &["rev-parse", "HEAD"]).await;
