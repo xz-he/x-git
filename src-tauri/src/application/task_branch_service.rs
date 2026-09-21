@@ -335,18 +335,44 @@ impl TaskBranchService {
         if current != b.source_branch && current != b.target_branch {
             return Err(invalid("当前不在任务的开发或目标分支。"));
         }
-        let saved =
-            super::cherry_pick_worktree::CherryPickWorktree::save(root, &self.runner).await?;
+        let saved = super::cherry_pick_worktree::CherryPickWorktree::save(
+            root,
+            &self.runner,
+            &target,
+            &source,
+        )
+        .await?;
         let result = async {
             b.pick_base = Some(target);
             b.phase = TaskBranchPhase::Picking;
             b.message = Some("正在切换并移植已保存提交。".into());
             self.repository.save(b)?;
             if current != b.target_branch {
-                self.git(root, &["switch", "--", &b.target_branch]).await?;
+                self.git(
+                    root,
+                    &[
+                        "-c",
+                        "submodule.recurse=false",
+                        "switch",
+                        "--",
+                        &b.target_branch,
+                    ],
+                )
+                .await?;
             }
             // -x provides durable source identity for recovery after a successful Git write.
-            let result = self.git(root, &["cherry-pick", "-x", &source]).await;
+            let result = self
+                .git(
+                    root,
+                    &[
+                        "-c",
+                        "submodule.recurse=false",
+                        "cherry-pick",
+                        "-x",
+                        &source,
+                    ],
+                )
+                .await;
             if let Err(error) = result {
                 if read_operation_state(root, &self.runner).await?.kind
                     == RepositoryOperationKind::CherryPick
@@ -387,7 +413,12 @@ impl TaskBranchService {
         b: &mut TaskBranchBinding,
     ) -> Result<(), BackendError> {
         self.ensure_idle(root, MutationIntent::SwitchBranch).await?;
-        self.ensure_clean(root).await?;
+        super::cherry_pick_worktree::CherryPickWorktree::ensure_safe_return(
+            root,
+            &self.runner,
+            &b.source_branch,
+        )
+        .await?;
         if self
             .oid(root, &format!("refs/heads/{}", b.source_branch))
             .await?
@@ -402,7 +433,17 @@ impl TaskBranchService {
         }
         b.phase = TaskBranchPhase::PendingReturn;
         self.repository.save(b)?;
-        self.git(root, &["switch", "--", &b.source_branch]).await?;
+        self.git(
+            root,
+            &[
+                "-c",
+                "submodule.recurse=false",
+                "switch",
+                "--",
+                &b.source_branch,
+            ],
+        )
+        .await?;
         b.phase = TaskBranchPhase::Completed;
         b.message = None;
         self.repository.save(b)
@@ -534,19 +575,6 @@ impl TaskBranchService {
     }
     async fn ensure_idle(&self, root: &Path, intent: MutationIntent) -> Result<(), BackendError> {
         ensure_mutation_allowed(&read_operation_state(root, &self.runner).await?, intent)
-    }
-    async fn ensure_clean(&self, root: &Path) -> Result<(), BackendError> {
-        if !self
-            .git(root, &["status", "--porcelain=v1", "--untracked-files=all"])
-            .await?
-            .is_empty()
-        {
-            return Err(BackendError::new(
-                ErrorCode::DirtyWorktree,
-                "已保留提交；请处理剩余未暂存或未跟踪变更，再继续移植或返回。",
-            ));
-        }
-        Ok(())
     }
     async fn ensure_branch(&self, root: &Path, expected: &str) -> Result<(), BackendError> {
         if expected.is_empty() || self.git(root, &["branch", "--show-current"]).await? != expected {

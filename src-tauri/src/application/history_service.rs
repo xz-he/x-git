@@ -215,18 +215,41 @@ impl HistoryService {
             None => source_branch.clone(),
         };
         let switched = target_branch != source_branch;
-        let saved =
-            super::cherry_pick_worktree::CherryPickWorktree::save(&root, &self.runner).await?;
+        let saved = super::cherry_pick_worktree::CherryPickWorktree::save(
+            &root,
+            &self.runner,
+            &format!("refs/heads/{target_branch}"),
+            &hash,
+        )
+        .await?;
         let outcome = async {
             if switched {
                 self.runner
-                    .run(Some(&root), ["switch", "--", target_branch.as_str()])
+                    .run(
+                        Some(&root),
+                        [
+                            "-c",
+                            "submodule.recurse=false",
+                            "switch",
+                            "--",
+                            target_branch.as_str(),
+                        ],
+                    )
                     .await?;
             }
 
             let output = self
                 .runner
-                .run_allowing_failure(Some(&root), ["cherry-pick", "--", hash.as_str()])
+                .run_allowing_failure(
+                    Some(&root),
+                    [
+                        "-c",
+                        "submodule.recurse=false",
+                        "cherry-pick",
+                        "--",
+                        hash.as_str(),
+                    ],
+                )
                 .await?;
             if !output.is_success() {
                 if is_recoverable_cherry_pick(&read_operation_state(&root, &self.runner).await?) {
@@ -235,8 +258,23 @@ impl HistoryService {
                 output.into_result()?;
             }
             if switched && request.return_after_success {
+                super::cherry_pick_worktree::CherryPickWorktree::ensure_safe_return(
+                    &root,
+                    &self.runner,
+                    &source_branch,
+                )
+                .await?;
                 self.runner
-                    .run(Some(&root), ["switch", "--", source_branch.as_str()])
+                    .run(
+                        Some(&root),
+                        [
+                            "-c",
+                            "submodule.recurse=false",
+                            "switch",
+                            "--",
+                            source_branch.as_str(),
+                        ],
+                    )
                     .await?;
             }
             Ok(())

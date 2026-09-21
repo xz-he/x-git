@@ -13,11 +13,10 @@ use crate::domain::{
 };
 use crate::infrastructure::ai_client::AiPromptRequest;
 use sha2::{Digest, Sha256};
-use std::{path::Path, sync::Arc, time::Duration};
+use std::{path::Path, sync::Arc};
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 
-pub(super) const TOTAL_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const MAX_PROMPT_MANIFEST_PATHS: usize = 2000;
 
 impl AiService {
@@ -340,7 +339,7 @@ fn emit(
 fn timeout() -> BackendError {
     BackendError::new(
         ErrorCode::AiTimeout,
-        "审查超过 15 分钟，已停止；已完成批次保留，其他范围未完成。",
+        "审查超过 30 分钟，已停止；已完成批次保留，其他范围未完成。",
     )
 }
 

@@ -63,9 +63,6 @@ impl AiService {
         let service = self.clone();
         let run_id = run_id.to_owned();
         let config = connection_config(settings);
-        let deadline = started_at
-            + (self.conflict_timeout * total.clamp(1, 8) as u32)
-                .min(std::time::Duration::from_secs(15 * 60));
         tokio::spawn(async move {
             let mut sequence = 1;
             let mut completed = 0;
@@ -140,7 +137,7 @@ fn cancelled() -> BackendError {
 fn timeout() -> BackendError {
     BackendError::new(
         ErrorCode::AiTimeout,
-        "AI 冲突建议超过总时限，请缩小冲突范围后重试。",
+        "AI 冲突建议超过 30 分钟，请缩小冲突范围后重试。",
     )
 }
 

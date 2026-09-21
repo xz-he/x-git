@@ -890,6 +890,70 @@ async fn cherry_pick_preserves_unstaged_and_untracked_changes_and_existing_stash
     }
 }
 
+#[path = "support/nested_work.rs"]
+mod nested_work;
+
+#[tokio::test]
+async fn cherry_pick_preserves_nested_residuals_on_current_target_and_return_branches() {
+    for submodule in [false, true] {
+        for target in [None, Some(false), Some(true)] {
+            let fixture = repository_fixture().await;
+            let root = fixture.path();
+            commit_file(root, "base\n", "base").await;
+            nested_work::prepare(root, submodule).await;
+            std::fs::write(root.join("history.txt"), "old user backup\n").unwrap();
+            run_git(root, &["stash", "push", "-m", "user backup"]).await;
+            let stashes = git_text(root, &["stash", "list", "--format=%H"]).await;
+            run_git(root, &["branch", "release"]).await;
+            run_git(root, &["switch", "-c", "topic"]).await;
+            std::fs::write(root.join("picked.txt"), "picked\n").unwrap();
+            run_git(root, &["add", "picked.txt"]).await;
+            run_git(root, &["commit", "-m", "picked"]).await;
+            let commit = head_hash(root).await;
+            run_git(root, &["switch", "main"]).await;
+            let before = nested_work::dirty(root).await;
+            std::fs::write(root.join("history.txt"), "local\n").unwrap();
+            std::fs::write(root.join("local.txt"), "untracked\n").unwrap();
+            let result = HistoryService::default()
+                .cherry_pick(
+                    root,
+                    CherryPickRequest {
+                        commit,
+                        target_branch: target.map(|_| "release".into()),
+                        return_after_success: target == Some(true),
+                    },
+                )
+                .await
+                .unwrap();
+            assert!(result.error.is_none(), "{:?}", result.error);
+            assert_eq!(
+                result.workspace.repository.current_branch.as_deref(),
+                Some(if target == Some(false) {
+                    "release"
+                } else {
+                    "main"
+                })
+            );
+            let branch = if target.is_some() { "release" } else { "main" };
+            assert_eq!(
+                git_text(root, &["show", &format!("{branch}:picked.txt")]).await,
+                "picked"
+            );
+            assert_eq!(std::fs::read(root.join("history.txt")).unwrap(), b"local\n");
+            assert_eq!(
+                std::fs::read(root.join("local.txt")).unwrap(),
+                b"untracked\n"
+            );
+            assert_eq!(git_text(root, &["diff", "--cached"]).await, "");
+            assert_eq!(
+                git_text(root, &["stash", "list", "--format=%H"]).await,
+                stashes
+            );
+            nested_work::assert_preserved(root, &before).await;
+        }
+    }
+}
+
 async fn git_text(root: &Path, args: &[&str]) -> String {
     GitCommandRunner::default()
         .run(Some(root), args)

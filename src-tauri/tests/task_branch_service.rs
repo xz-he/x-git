@@ -6,6 +6,61 @@ use hq_git_lib::infrastructure::task_branch_repository::TaskBranchRepository;
 use serde_json::json;
 use std::path::Path;
 
+#[path = "support/nested_work.rs"]
+mod nested_work;
+
+#[tokio::test]
+async fn commit_pick_preserves_nested_residuals_for_both_destinations() {
+    for submodule in [false, true] {
+        for return_after in [false, true] {
+            let d = fixture().await;
+            let root = d.path();
+            nested_work::prepare(root, submodule).await;
+            git(root, &["branch", "-f", "master", "HEAD"]).await;
+            let store = tempfile::tempdir().unwrap();
+            let s = service(store.path());
+            let binding = create(&s, root, "remoteMaster").await;
+            let before = nested_work::dirty(root).await;
+            stage(root).await;
+            std::fs::write(root.join("task.txt"), "unstaged changes\n").unwrap();
+            std::fs::write(root.join("local.txt"), "local\n").unwrap();
+            let result = run(&s, root, &binding.id, "commit", return_after).await;
+            assert!(result.error.is_none(), "{:?}", result.error);
+            assert_eq!(
+                serde_json::to_value(&result.bindings[0]).unwrap()["phase"],
+                "completed"
+            );
+            assert_eq!(
+                git(root, &["branch", "--show-current"]).await,
+                if return_after {
+                    "dev"
+                } else {
+                    &binding.target_branch
+                }
+            );
+            assert_eq!(
+                git(
+                    root,
+                    &["show", &format!("{}:task.txt", binding.target_branch)]
+                )
+                .await,
+                "task"
+            );
+            assert_eq!(
+                std::fs::read(root.join("task.txt")).unwrap(),
+                b"unstaged changes\n"
+            );
+            assert_eq!(std::fs::read(root.join("local.txt")).unwrap(), b"local\n");
+            assert_eq!(git(root, &["diff", "--cached"]).await, "");
+            assert_eq!(git(root, &["stash", "list"]).await, "");
+            nested_work::assert_preserved(root, &before).await;
+            let tip = git(root, &["rev-parse", &binding.target_branch]).await;
+            run(&s, root, &binding.id, "pick", return_after).await;
+            assert_eq!(git(root, &["rev-parse", &binding.target_branch]).await, tip);
+        }
+    }
+}
+
 async fn git(root: &Path, args: &[&str]) -> String {
     GitCommandRunner::default()
         .run(Some(root), args)

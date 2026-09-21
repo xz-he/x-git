@@ -8,8 +8,8 @@ use uuid::{Uuid, Version};
 
 use crate::application::ai_context::{AiContextBuilder, AiFrozenContext, MAX_DIFF_BATCH_BYTES};
 use crate::domain::ai::{
-    AiCommitMessageResult, AiConnectionConfig, AiConnectionTestResult, AiRunAccepted, AiRunEvent,
-    AiRunEventData, AiTaskKind,
+    AI_RESPONSE_TIMEOUT, AiCommitMessageResult, AiConnectionConfig, AiConnectionTestResult,
+    AiRunAccepted, AiRunEvent, AiRunEventData, AiTaskKind,
 };
 use crate::domain::error::{BackendError, ErrorCode};
 use crate::domain::settings::AppSettings;
@@ -34,8 +34,8 @@ impl AiService {
             context_builder,
             http_client,
             active_runs: Arc::new(Mutex::new(HashMap::new())),
-            review_timeout: super::review_service::TOTAL_TIMEOUT,
-            conflict_timeout: std::time::Duration::from_secs(2 * 60),
+            review_timeout: AI_RESPONSE_TIMEOUT,
+            conflict_timeout: AI_RESPONSE_TIMEOUT,
         }
     }
 

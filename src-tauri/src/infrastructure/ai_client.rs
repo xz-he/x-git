@@ -8,10 +8,9 @@ use reqwest::{Client, StatusCode, Url};
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-use crate::domain::ai::{AiApiFormat, AiConnectionConfig, AiProvider};
+use crate::domain::ai::{AI_RESPONSE_TIMEOUT, AiApiFormat, AiConnectionConfig, AiProvider};
 use crate::domain::error::{BackendError, ErrorCode};
 
-const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
 const MAX_OUTPUT_BYTES: usize = 256 * 1024;
 const MAX_SSE_FRAME_BYTES: usize = 1024 * 1024;
 
@@ -43,7 +42,7 @@ pub struct AiHttpClient {
 
 impl Default for AiHttpClient {
     fn default() -> Self {
-        Self::with_timeout(DEFAULT_TIMEOUT)
+        Self::with_timeout(AI_RESPONSE_TIMEOUT)
     }
 }
 

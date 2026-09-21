@@ -1,5 +1,8 @@
 use std::fmt;
 
+/// Shared deadline for AI requests and complete AI review/conflict tasks.
+pub const AI_RESPONSE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30 * 60);
+
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::domain::error::BackendError;

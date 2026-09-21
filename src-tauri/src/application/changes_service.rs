@@ -741,7 +741,9 @@ fn filter_hunk_lines(hunk: &str, start_line: u32, end_line: u32) -> Option<Strin
     let mut previous_included = true;
 
     for line in lines {
-        let text = line.trim_end_matches(['\r', '\n']);
+        // Git separates patch records with LF. A preceding CR is source content,
+        // including in context/deletion lines used to match the index exactly.
+        let text = line.strip_suffix('\n').unwrap_or(line);
         let newline = if line.ends_with('\n') { "\n" } else { "" };
         if let Some(content) = text.strip_prefix('+') {
             let selected = (start_line..=end_line).contains(&new_line);
@@ -1279,6 +1281,108 @@ mod tests {
             .unwrap();
         assert_eq!(unstaged.changes.staged_count, 0);
         assert_eq!(unstaged.changes.unstaged_count, 1);
+    }
+
+    #[tokio::test]
+    async fn line_staging_preserves_real_newlines_and_unselected_changes() {
+        for newline in ["\n", "\r\n"] {
+            let fixture = modified_text_fixture().await;
+            let path = "skuapp/modelsadminx/t_product_build_ing_Admin.py";
+            std::fs::create_dir_all(fixture.path().join("skuapp/modelsadminx")).unwrap();
+            let base = (1..=2338)
+                .map(|line| format!("line {line}{newline}"))
+                .collect::<String>();
+            let selected = (2328..=2331).fold(base.clone(), |text, line| {
+                text.replace(
+                    &format!("line {line}{newline}"),
+                    &format!("selected {line}{newline}"),
+                )
+            });
+            let changed = selected.replace(
+                &format!("line 2333{newline}"),
+                &format!("unselected 2333{newline}"),
+            );
+            std::fs::write(fixture.path().join(path), &base).unwrap();
+            run_git(fixture.path(), &["add", path]).await;
+            run_git(fixture.path(), &["commit", "-m", "line ending base"]).await;
+            std::fs::write(fixture.path().join(path), &changed).unwrap();
+
+            ChangesService::default()
+                .stage_lines(fixture.path(), path, 2328, 2331)
+                .await
+                .unwrap();
+
+            let index = GitCommandRunner::default()
+                .run(Some(fixture.path()), ["show", &format!(":{path}")])
+                .await
+                .unwrap();
+            assert_eq!(
+                index.stdout.as_bytes(),
+                selected.as_bytes(),
+                "newline={newline:?}"
+            );
+            assert_eq!(
+                std::fs::read(fixture.path().join(path)).unwrap(),
+                changed.as_bytes()
+            );
+
+            ChangesService::default()
+                .unstage_lines(fixture.path(), path, 2328, 2331)
+                .await
+                .unwrap();
+            let index = GitCommandRunner::default()
+                .run(Some(fixture.path()), ["show", &format!(":{path}")])
+                .await
+                .unwrap();
+            assert_eq!(index.stdout.as_bytes(), base.as_bytes());
+            assert_eq!(
+                std::fs::read(fixture.path().join(path)).unwrap(),
+                changed.as_bytes()
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn line_mutations_preserve_mixed_newlines_and_missing_final_newline() {
+        let fixture = modified_text_fixture().await;
+        let base = "one\r\ntwo\nthree\r\nfour\nfive\r\nsix\nseven\r\nlast";
+        let selected = base.replace("last", "last changed");
+        let changed = selected.replace("two\n", "two unselected\n");
+        std::fs::write(fixture.path().join("note.txt"), base).unwrap();
+        run_git(fixture.path(), &["add", "note.txt"]).await;
+        run_git(fixture.path(), &["commit", "-m", "mixed newline base"]).await;
+        std::fs::write(fixture.path().join("note.txt"), &changed).unwrap();
+        let service = ChangesService::default();
+
+        service
+            .stage_lines(fixture.path(), "note.txt", 8, 8)
+            .await
+            .unwrap();
+        let index = service
+            .runner
+            .run(Some(fixture.path()), ["show", ":note.txt"])
+            .await
+            .unwrap();
+        assert_eq!(index.stdout.as_bytes(), selected.as_bytes());
+        assert_eq!(
+            std::fs::read(fixture.path().join("note.txt")).unwrap(),
+            changed.as_bytes()
+        );
+
+        service
+            .unstage_lines(fixture.path(), "note.txt", 8, 8)
+            .await
+            .unwrap();
+        let index = service
+            .runner
+            .run(Some(fixture.path()), ["show", ":note.txt"])
+            .await
+            .unwrap();
+        assert_eq!(index.stdout.as_bytes(), base.as_bytes());
+        assert_eq!(
+            std::fs::read(fixture.path().join("note.txt")).unwrap(),
+            changed.as_bytes()
+        );
     }
 
     #[tokio::test]

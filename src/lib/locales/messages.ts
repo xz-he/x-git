@@ -1,5 +1,5 @@
 export const messages = {
-  cherryPickPreserveUnstaged: { zh: "未暂存及未跟踪文件会自动贮藏，不参与提交或移植；成功后恢复到最终停留的分支。如发生冲突，备份保留在贮藏列表，处理完成后可手动恢复。单独 Cherry-pick 前请先提交或取消暂存已有的已暂存变更。", en: "Unstaged and untracked changes are automatically stashed and excluded from the commit or cherry-pick, then restored on the final branch. If conflicts occur, the backup stays in Stashes for manual recovery. Before a standalone cherry-pick, commit or unstage any staged changes." },
+  cherryPickPreserveUnstaged: { zh: "普通未暂存及未跟踪文件会自动贮藏，不参与提交或移植，成功后恢复到最终停留的分支。嵌套仓库和子模块的残留修改，若不涉及目标分支及待移植提交的路径，会保留原位并继续；否则停止并提示具体路径。如发生冲突，备份保留在贮藏列表，处理完成后可手动恢复。单独 Cherry-pick 前请先提交或取消暂存已有的已暂存变更。", en: "Ordinary unstaged and untracked files are automatically stashed, excluded from the commit or cherry-pick, and restored on the final branch. Residual changes in nested repositories and submodules stay in place when their paths are unaffected by the target branch and selected commit; otherwise the operation stops and lists the affected paths. If conflicts occur, the backup stays in Stashes for manual recovery. Before a standalone cherry-pick, commit or unstage any staged changes." },
   openPull: { zh: "打开拉取", en: "Open Pull" },
   openPush: { zh: "打开推送", en: "Open Push" },
   openFetch: { zh: "打开获取", en: "Open Fetch" },
