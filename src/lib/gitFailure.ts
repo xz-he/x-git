@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { normalizeBackendError } from "@/lib/backend/errors";
 import type { BackendError } from "@/lib/backend/types";
 
@@ -24,16 +25,16 @@ export function cleanGitErrorText(value: string): string {
 }
 
 const actions: Record<string, string> = {
-  activityRollback: "回滚操作历史",
-  changesStageFiles: "批量 git add", changesUnstageFiles: "批量取消暂存",
-  repositoryOpen: "打开仓库", repositoryInit: "git init", repositoryClone: "git clone", repositoryRefresh: "刷新仓库",
-  changesStageFile: "git add", changesUnstageFile: "取消暂存", changesStageHunk: "暂存代码块", changesUnstageHunk: "取消暂存代码块",
-  changesStageLines: "暂存代码行", changesUnstageLines: "取消暂存代码行", changesDiscardFile: "丢弃文件修改", changesCommit: "git commit",
-  changesRestoreNoise: "恢复无效变更", refsCreate: "git branch", refsSwitch: "git switch", refsDelete: "git branch -d",
-  refsMerge: "git merge", refsRebase: "git rebase", refsAbort: "中止 Git 操作",
+  get activityRollback() { return t('uiRollBackHistoryEntry8c4178'); },
+  get changesStageFiles() { return t('uiBatchGitAdd781d9f'); }, get changesUnstageFiles() { return t('uiUnstageSelectedFileseaed74'); },
+  get repositoryOpen() { return t('uiOpenRepository47f538'); }, repositoryInit: "git init", repositoryClone: "git clone", get repositoryRefresh() { return t('uiRefreshRepository70ad8c'); },
+  changesStageFile: "git add", get changesUnstageFile() { return t('uiUnstage807956'); }, get changesStageHunk() { return t('uiStageHunkb02c85'); }, get changesUnstageHunk() { return t('uiUnstageHunkb3c8db'); },
+  get changesStageLines() { return t('uiStageLines5bc946'); }, get changesUnstageLines() { return t('uiUnstageLines7d15eb'); }, get changesDiscardFile() { return t('uiDiscardFileChanges6923a0'); }, changesCommit: "git commit",
+  get changesRestoreNoise() { return t('uiRestoreNonSubstantiveChanges179f9e'); }, refsCreate: "git branch", refsSwitch: "git switch", refsDelete: "git branch -d",
+  refsMerge: "git merge", refsRebase: "git rebase", get refsAbort() { return t('uiAbortGitOperation750351'); },
   historyCheckout: "git checkout", historyRevert: "git revert", historyCherryPick: "git cherry-pick", historyReset: "git reset",
   stashCreate: "git stash push", stashApply: "git stash apply", stashPop: "git stash pop",
-  conflictsResolve: "解决冲突", conflictsContinue: "继续 Git 操作", taskBranchesCreate: "创建任务分支", taskBranchesRun: "提交并移植",
+  get conflictsResolve() { return t('conflicts'); }, get conflictsContinue() { return t('uiContinueGitOperation042a2a'); }, get taskBranchesCreate() { return t('uiCreateTaskBranch6f6fc8'); }, get taskBranchesRun() { return t('uiCommitAndCherryPickbece15'); },
 };
 
 // Observe user-facing Git operations at the IPC boundary, without changing their errors.
@@ -50,7 +51,7 @@ export function observeGitFailures<T extends object>(client: T): T {
           const error = normalizeBackendError(cause);
           if (version !== epoch || error.code.startsWith("ai") || error.code === "unexpected") return;
           reportGitFailure({ root: String(args[key === "repositoryClone" ? 1 : 0] ?? ""),
-            command: `${action}\n操作参数：${JSON.stringify(args.slice(1))}`, error });
+            command: t('msgOperationArgumentsaab145', { p0: action, p1: JSON.stringify(args.slice(1)) }), error });
         };
         try {
           const result = await Reflect.apply(method, target, args);

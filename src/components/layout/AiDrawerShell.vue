@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { ArrowLeft, Bot, Square, X } from "@lucide/vue";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 
@@ -26,19 +27,19 @@ const running = computed(
   () => ai.status === "starting" || ai.status === "running",
 );
 const title = computed(() => {
-  if (view.value === "review") return "AI 代码审查";
-  if (view.value === "commit") return "AI 提交信息";
-  if (view.value === "conflict") return "AI 冲突解决建议";
-  return "AI 助手";
+  if (view.value === "review") return t('uiAICodeReview050e65');
+  if (view.value === "commit") return t('uiAICommitMessage24f905');
+  if (view.value === "conflict") return t('uiAIConflictSuggestions657d89');
+  return t('uiAIAssistant5341ec');
 });
 const progressText = computed(() => {
   if (ai.progressMessage) return ai.progressMessage;
-  if (ai.currentTask === "resolveConflict" && ai.status === "starting") return "准备冲突三方版本与磁盘内容";
-  if (ai.status === "starting") return ai.reviewSource?.kind === "commit" ? "准备历史提交与审查技能" : "准备已暂存上下文";
+  if (ai.currentTask === "resolveConflict" && ai.status === "starting") return t('uiPreparingBaseOursTheirsAndWorkingFilefda139');
+  if (ai.status === "starting") return ai.reviewSource?.kind === "commit" ? t('uiPreparingCommitAndReviewSkillbada60') : t('uiPreparingStagedChanges41df5e');
   if (ai.totalBatchCount > 0) {
-    return `${ai.completedBatchCount} / ${ai.totalBatchCount} 批`;
+    return t('msgBatchesbee769', { p0: ai.completedBatchCount, p1: ai.totalBatchCount });
   }
-  return "正在处理";
+  return t('uiProcessing656aa6');
 });
 
 let startX = 0;
@@ -100,16 +101,16 @@ onBeforeUnmount(() => window.removeEventListener("pointermove", resize));
       class="resize-handle"
       role="separator"
       aria-orientation="vertical"
-      aria-label="调整 AI 助手宽度"
-      title="调整 AI 助手宽度"
+      :aria-label="t('uiResizeAIAssistant18aac5')"
+      :title="t('uiResizeAIAssistant18aac5')"
       @pointerdown="startResize"
     />
     <header class="drawer-header">
       <button
         v-if="view !== 'home'"
         class="icon-button"
-        aria-label="返回 AI 任务"
-        title="返回 AI 任务"
+        :aria-label="t('uiBackToAITasks243533')"
+        :title="t('uiBackToAITasks243533')"
         @click="view = 'home'"
       >
         <ArrowLeft :size="17" />
@@ -120,8 +121,8 @@ onBeforeUnmount(() => window.removeEventListener("pointermove", resize));
       </span>
       <button
         class="icon-button close-button"
-        aria-label="关闭 AI 助手"
-        title="关闭 AI 助手"
+        :aria-label="t('uiCloseAIAssistantf68e20')"
+        :title="t('uiCloseAIAssistantf68e20')"
         @click="emit('close')"
       >
         <X :size="17" />
@@ -133,8 +134,8 @@ onBeforeUnmount(() => window.removeEventListener("pointermove", resize));
       <span>{{ progressText }}</span>
       <button
         class="stop-button"
-        aria-label="停止 AI 任务"
-        title="停止 AI 任务"
+        :aria-label="t('uiStopAITask796eb1')"
+        :title="t('uiStopAITask796eb1')"
         @click="stopRun"
       >
         <Square :size="12" fill="currentColor" />

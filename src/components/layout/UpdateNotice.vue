@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { useUpdatesStore } from "@/stores/updates";
 import { useUiStore } from "@/stores/ui";
 const updates = useUpdatesStore();
@@ -6,10 +7,10 @@ const ui = useUiStore();
 function open(): void { ui.updateDialogOpen = true; updates.noticeVisible = false; }
 </script>
 <template>
-  <div v-if="updates.phase === 'installing'" class="install-overlay" role="alertdialog" aria-modal="true" aria-label="正在安装更新"><p>正在启动更新安装程序，请稍候…</p></div>
+  <div v-if="updates.phase === 'installing'" class="install-overlay" role="alertdialog" aria-modal="true" :aria-label="t('uiInstallingUpdate515926')"><p>{{ t('uiStartingTheUpdateInstallerPleaseWaitf0fa17') }}</p></div>
   <aside v-else-if="updates.noticeVisible && !ui.settingsDialogOpen && !ui.updateDialogOpen" class="update-notice" role="status">
-    <span>{{ updates.phase === 'ready' ? '更新已下载' : '发现新版本' }} v{{ updates.latest?.version }}</span>
-    <button @click="open">View Update</button><button aria-label="稍后更新" @click="updates.noticeVisible = false">Later</button>
+    <span>{{ updates.phase === 'ready' ? t('uiUpdateDownloadeddf0ebf') : t('uiNewVersionAvailable010474') }} v{{ updates.latest?.version }}</span>
+    <button @click="open">View Update</button><button :aria-label="t('uiUpdateLater992321')" @click="updates.noticeVisible = false">Later</button>
   </aside>
 </template>
 <style scoped>

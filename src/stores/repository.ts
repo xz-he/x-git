@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 
@@ -176,7 +177,7 @@ export const useRepositoryStore = defineStore("repository", () => {
     if (refreshingModules.value || useTerminalStore().busy) return false;
     const conflicts = useConflictsStore();
     if (conflicts.submitting || useFilesStore().submitting || useTaskBranchesStore().submitting || operation.value.kind !== "idle") return false;
-    return !conflicts.hasDirtyDrafts || window.confirm("切换仓库将丢弃所有未保存的冲突解决草稿。确认切换？");
+    return !conflicts.hasDirtyDrafts || window.confirm(t('uiSwitchingRepositoriesWillDiscardAllUnsavedResolutionDraftsCoc6023f'));
   }
 
   async function refreshAfterTerminal(root: string, ownerGeneration: number): Promise<void> {

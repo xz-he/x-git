@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { ArrowDownToLine, ArrowUpFromLine, Braces, CloudDownload, Code2, GitBranch, GitCommitHorizontal, GitMerge, GitPullRequest, History, RadioTower, RotateCcw, Tags, Wrench } from "@lucide/vue";
 import type { Component } from "vue";
 import { PanelLeftClose, PanelLeftOpen, FolderGit2, ChevronDown } from "@lucide/vue";
@@ -29,39 +30,45 @@ const repositories = useRepositoryStore();
 const refs = useRefsStore();
 const groups: SidebarGroup[] = [
   {
-    label: "代码",
+    get label() { return t('code'); },
     icon: Code2,
     items: [
-      { label: "仓库文件", icon: Code2, view: "files" },
-      { label: "分支", icon: GitBranch, view: "branches" },
-      { label: "标签", icon: Tags, view: "tags" },
-      { label: "远程", icon: RadioTower, view: "remotes" },
-      { label: "贮藏", icon: Braces, view: "stashes" },
+      { get label() { return t('files'); }, icon: Code2, view: "files" },
+      { get label() { return t('branches'); }, icon: GitBranch, view: "branches" },
+      { get label() { return t('tags'); }, icon: Tags, view: "tags" },
+      { get label() { return t('remotes'); }, icon: RadioTower, view: "remotes" },
+      { get label() { return t('stashes'); }, icon: Braces, view: "stashes" },
     ],
   },
   {
-    label: "变更",
+    get label() { return t('changesGroup'); },
     icon: GitPullRequest,
     items: [
-      { label: "文件状态", icon: GitPullRequest, view: "changes" },
-      { label: "提交记录", icon: History, view: "history" },
+      { get label() { return t('changes'); }, icon: GitPullRequest, view: "changes" },
+      { get label() { return t('history'); }, icon: History, view: "history" },
     ],
   },
   {
-    label: "工具",
+    get label() { return t('tools'); },
     icon: Wrench,
     items: [
-      { label: "拉取", icon: ArrowDownToLine, remoteAction: "pull" },
-      { label: "推送", icon: ArrowUpFromLine, remoteAction: "push" },
-      { label: "获取", icon: CloudDownload, remoteAction: "fetch" },
-      { label: "合并", icon: GitMerge, integrationAction: "merge" },
-      { label: "变基", icon: RotateCcw, integrationAction: "rebase" },
-      { label: "解决冲突", icon: GitPullRequest, view: "conflicts" },
-      { label: "Git 命令", icon: Braces, view: "terminal" },
+      { get label() { return t('pull'); }, icon: ArrowDownToLine, remoteAction: "pull" },
+      { get label() { return t('push'); }, icon: ArrowUpFromLine, remoteAction: "push" },
+      { get label() { return t('fetch'); }, icon: CloudDownload, remoteAction: "fetch" },
+      { get label() { return t('merge'); }, icon: GitMerge, integrationAction: "merge" },
+      { get label() { return t('rebase'); }, icon: RotateCcw, integrationAction: "rebase" },
+      { get label() { return t('conflicts'); }, icon: GitPullRequest, view: "conflicts" },
+      { get label() { return t('terminal'); }, icon: Braces, view: "terminal" },
     ],
   },
 ];
 const appIcon = "/app-icon.png";
+
+function navigationLabel(item: SidebarItem): string | undefined {
+  const action = item.remoteAction ?? item.integrationAction ?? (item.view === 'conflicts' ? 'conflicts' : undefined);
+  const keys = { pull: 'openPull', push: 'openPush', fetch: 'openFetch', merge: 'openMerge', rebase: 'openRebase', conflicts: 'openConflicts' } as const;
+  return action ? t(keys[action]) : undefined;
+}
 
 async function activate(item: SidebarItem): Promise<void> {
   if (item.view ? repositories.viewNavigationBusy : repositories.navigationBusy) return;
@@ -99,14 +106,14 @@ function isDisabled(item: SidebarItem): boolean {
 </script>
 <template>
   <aside class="sidebar" :class="{ collapsed: ui.sidebarCollapsed }" data-testid="app-sidebar">
-    <div class="brand"><img :src="appIcon" alt="" /><strong>HQ Git</strong><button class="collapse-toggle" :aria-label="ui.sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'" :title="ui.sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'" :aria-expanded="!ui.sidebarCollapsed" @click="ui.sidebarCollapsed = !ui.sidebarCollapsed"><PanelLeftOpen v-if="ui.sidebarCollapsed" :size="17" /><PanelLeftClose v-else :size="17" /></button></div>
-    <button class="repository-switch" aria-label="快速切换仓库" aria-haspopup="dialog" :aria-expanded="ui.repositorySwitcherOpen" :title="formatDisplayPath(repositories.snapshot?.rootPath) + ' · Ctrl+P 切换仓库'" @click="ui.repositorySwitcherOpen = true">
-      <FolderGit2 :size="17" /><span v-if="!ui.sidebarCollapsed"><strong>{{ repositories.snapshot?.name ?? '选择仓库' }}</strong><small>Switch · Ctrl+P</small></span><ChevronDown v-if="!ui.sidebarCollapsed" :size="14" />
+    <div class="brand"><img :src="appIcon" alt="" /><strong>HQ Git</strong><button class="collapse-toggle" :aria-label="ui.sidebarCollapsed ? t('uiExpandSidebar8ab519') : t('uiCollapseSidebar3a90f6')" :title="ui.sidebarCollapsed ? t('uiExpandSidebar8ab519') : t('uiCollapseSidebar3a90f6')" :aria-expanded="!ui.sidebarCollapsed" @click="ui.sidebarCollapsed = !ui.sidebarCollapsed"><PanelLeftOpen v-if="ui.sidebarCollapsed" :size="17" /><PanelLeftClose v-else :size="17" /></button></div>
+    <button class="repository-switch" :aria-label="t('uiQuickRepositorySwitcherb77499')" aria-haspopup="dialog" :aria-expanded="ui.repositorySwitcherOpen" :title="formatDisplayPath(repositories.snapshot?.rootPath) + (' ' + t('uiCtrlPSwitchRepository24835b'))" @click="ui.repositorySwitcherOpen = true">
+      <FolderGit2 :size="17" /><span v-if="!ui.sidebarCollapsed"><strong>{{ repositories.snapshot?.name ?? t('uiChooseARepository86b92c') }}</strong><small>Switch · Ctrl+P</small></span><ChevronDown v-if="!ui.sidebarCollapsed" :size="14" />
     </button>
-    <nav aria-label="主导航">
+    <nav :aria-label="t('uiMainNavigationfb1c7d')">
       <section v-for="group in groups" :key="group.label">
         <h2><component :is="group.icon" :size="14" /><span>{{ group.label }}</span></h2>
-        <button v-for="item in group.items" :key="item.label" class="nav-item" :data-view="item.view" :class="{ active: item.view === ui.activeView }" :disabled="isDisabled(item)" :aria-disabled="isDisabled(item)" :aria-label="item.remoteAction || item.integrationAction || item.view === 'conflicts' ? '打开' + item.label : undefined" :aria-current="item.view === ui.activeView ? 'page' : undefined" @click="activate(item)">
+        <button v-for="item in group.items" :key="item.label" class="nav-item" :data-view="item.view" :class="{ active: item.view === ui.activeView }" :disabled="isDisabled(item)" :aria-disabled="isDisabled(item)" :aria-label="navigationLabel(item)" :aria-current="item.view === ui.activeView ? 'page' : undefined" @click="activate(item)">
           <component :is="item.icon" :size="15" /><span :class="{ 'collapsed-label': ui.sidebarCollapsed }">{{ item.label }}</span><span v-if="ui.sidebarCollapsed" class="nav-tooltip" aria-hidden="true">{{ item.label }}</span>
         </button>
       </section>
@@ -126,7 +133,9 @@ function isDisabled(item: SidebarItem): boolean {
 .collapsed .repository-switch { justify-content: center; padding: 6px; }
 section { margin-top: 14px; }
 h2 { display: flex; align-items: center; gap: 6px; margin: 0 8px 5px; color: var(--text-muted); font-size: 11px; font-weight: 600; }
-.nav-item { display: flex; align-items: center; gap: 9px; width: 100%; height: 32px; padding: 0 10px; border-radius: var(--radius-md); background: transparent; text-align: left; }
+.nav-item { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 32px; padding: 6px 10px; border-radius: var(--radius-md); background: transparent; text-align: left; line-height: 1.4; }
+.nav-item > svg { flex-shrink: 0; }
+.nav-item > span { overflow-wrap: anywhere; }
 .nav-item.active { color: var(--primary); background: var(--primary-soft); font-weight: 600; }
 .collapse-toggle { display: grid; place-items: center; width: 28px; height: 28px; margin-left: auto; padding: 0; background: transparent; border-radius: var(--radius-sm); flex-shrink: 0; }
 .collapse-toggle:hover { background: var(--surface-muted); }

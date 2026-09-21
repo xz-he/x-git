@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { X } from "@lucide/vue";
 import { onMounted, ref } from "vue";
 import UpdateSettings from "./UpdateSettings.vue";
@@ -11,7 +12,7 @@ onMounted(() => closeButton.value?.focus());
 <template>
   <div class="update-backdrop" @click.self="ui.updateDialogOpen = false" @keydown.esc.stop="ui.updateDialogOpen = false">
     <section class="update-dialog" role="dialog" aria-modal="true" aria-labelledby="update-dialog-title">
-      <header><h2 id="update-dialog-title">版本更新</h2><button ref="closeButton" aria-label="关闭版本更新" @click="ui.updateDialogOpen = false"><X :size="17" /></button></header>
+      <header><h2 id="update-dialog-title">{{ t('uiUpdatesca9576') }}</h2><button ref="closeButton" :aria-label="t('uiCloseUpdates9ec3e8')" @click="ui.updateDialogOpen = false"><X :size="17" /></button></header>
       <div class="update-content"><UpdateSettings /></div>
     </section>
   </div>

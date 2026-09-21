@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { CheckCircle2, GitCommitHorizontal, LoaderCircle } from "@lucide/vue";
 import { computed, ref } from "vue";
 
@@ -38,34 +39,35 @@ async function createCommit(): Promise<void> {
       <div class="commit-title">
         <span>
           <GitCommitHorizontal :size="16" />
-          <strong id="commit-heading">创建提交</strong>
+          <strong id="commit-heading">{{ t('uiCreateCommitec45fe') }}</strong>
         </span>
-        <small>已暂存 {{ changesStore.snapshot?.stagedCount ?? 0 }}</small>
+        <small>{{ t('staged') }} {{ changesStore.snapshot?.stagedCount ?? 0 }}</small>
       </div>
       <textarea
+        data-testid="commit-message"
         v-model="changesStore.commitMessage"
         :disabled="taskBranches.submitting"
-        aria-label="提交说明"
+        :aria-label="t('uiCommitMessagebb7aed')"
         maxlength="500"
         rows="2"
-        placeholder="输入提交说明"
+        :placeholder="t('uiEnterACommitMessage7c0cc9')"
         @keydown.ctrl.enter.prevent="canCommit && createCommit()"
       />
     </div>
     <div class="commit-actions">
       <div v-if="successHash" class="commit-success" role="status">
         <CheckCircle2 :size="14" />
-        已创建 {{ successHash }}
+        {{ t('uiCreated62cfc5') }} {{ successHash }}
       </div>
       <button
         class="commit-button"
-        aria-label="创建提交"
+        :aria-label="t('uiCreateCommitec45fe')"
         :disabled="!canCommit"
         @click="createCommit"
       >
         <LoaderCircle v-if="isCommitting" :size="15" class="spin" />
         <GitCommitHorizontal v-else :size="15" />
-        {{ isCommitting ? "提交中" : "提交" }}
+        {{ isCommitting ? t('uiCommitting4cc708') : t('commit') }}
       </button>
     </div>
     <TaskBranchCommit />

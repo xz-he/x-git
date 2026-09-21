@@ -7,6 +7,7 @@ mod ai_conflict_service;
 pub mod ai_context;
 pub mod ai_service;
 pub mod changes_service;
+mod cherry_pick_worktree;
 mod conflict_content;
 mod conflict_paths;
 pub mod conflict_service;

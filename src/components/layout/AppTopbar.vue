@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { language, t } from '@/lib/i18n';
 import { Bot, FolderOpen, History, House, RefreshCw, Settings, X } from "@lucide/vue";
 import ActivityDialog from "@/features/activity/ActivityDialog.vue";
 import UpdateButton from "./UpdateButton.vue";
@@ -24,10 +25,10 @@ async function switchRepository(): Promise<void> {
   selectingRepository.value = true;
   switchError.value = "";
   try {
-    const path = await dialogs.selectDirectory("切换仓库");
+    const path = await dialogs.selectDirectory(t('uiSwitchRepository46c7e1'));
     if (!path) return;
     if (repositories.navigationBusy) {
-      switchError.value = "请等待当前操作完成后再切换仓库。";
+      switchError.value = t('uiWaitForTheCurrentOperationToFinishBeforeSwitchingRepositorie73a652');
       return;
     }
     await repositories.open(path);
@@ -38,37 +39,38 @@ async function switchRepository(): Promise<void> {
   }
 }
 const modules: Array<{ label: string; view: WorkspaceView }> = [
-  { label: "仓库文件", view: "files" },
-  { label: "文件状态", view: "changes" },
-  { label: "提交记录", view: "history" },
-  { label: "分支", view: "branches" },
-  { label: "标签", view: "tags" },
-  { label: "远程", view: "remotes" },
+  { get label() { return t('files'); }, view: "files" },
+  { get label() { return t('changes'); }, view: "changes" },
+  { get label() { return t('history'); }, view: "history" },
+  { get label() { return t('branches'); }, view: "branches" },
+  { get label() { return t('tags'); }, view: "tags" },
+  { get label() { return t('remotes'); }, view: "remotes" },
 ];
 </script>
 <template>
   <header class="topbar">
-    <nav aria-label="工作区模块"><button v-for="module in modules" :key="module.view" :data-view="module.view" :class="{ active: ui.activeView === module.view }" :disabled="repositories.viewNavigationBusy" :aria-current="ui.activeView === module.view ? 'page' : undefined" @click="ui.openView(module.view)">{{ module.label }}</button></nav>
+    <nav :aria-label="t('uiWorkspaceModules682898')"><button v-for="module in modules" :key="module.view" :data-view="module.view" :class="{ active: ui.activeView === module.view }" :aria-label="module.label" :disabled="repositories.viewNavigationBusy" :aria-current="ui.activeView === module.view ? 'page' : undefined" @click="ui.openView(module.view)"><span>{{ language === 'bilingual' ? t(module.view, {}, 'en') : module.label }}</span><small v-if="language === 'bilingual'">{{ t(module.view, {}, 'zh-CN') }}</small></button></nav>
     <div class="actions">
       <UpdateButton />
-      <button class="icon-button" aria-label="操作历史" :title="activityWarning || '操作历史'" @click="activityOpen = true"><History :size="17" /><span v-if="activityWarning" class="activity-warning">!</span></button>
-      <button class="icon-button" aria-label="返回首页" title="返回首页" :disabled="files.submitting" @click="ui.homeVisible = true"><House :size="17" /></button>
-      <button class="icon-button" aria-label="切换仓库" title="切换仓库" :disabled="selectingRepository || repositories.navigationBusy" @click="switchRepository"><FolderOpen :size="17" /></button>
-      <button class="icon-button" aria-label="刷新仓库" title="刷新仓库" :disabled="repositories.navigationBusy" @click="$emit('refresh')"><RefreshCw :size="17" /></button>
-      <button class="icon-button ai-button" aria-label="打开 AI 助手" title="打开 AI 助手" @click="$emit('openAi')"><Bot :size="17" /></button>
-      <button class="icon-button" aria-label="打开设置" title="打开设置" @click="$emit('openSettings')"><Settings :size="17" /></button>
+      <button class="icon-button" :aria-label="t('uiOperationHistory56833a')" :title="activityWarning || t('uiOperationHistory56833a')" @click="activityOpen = true"><History :size="17" /><span v-if="activityWarning" class="activity-warning">!</span></button>
+      <button class="icon-button" :aria-label="t('uiHome8befab')" :title="t('uiHome8befab')" :disabled="files.submitting" @click="ui.homeVisible = true"><House :size="17" /></button>
+      <button class="icon-button" :aria-label="t('uiSwitchRepository46c7e1')" :title="t('uiSwitchRepository46c7e1')" :disabled="selectingRepository || repositories.navigationBusy" @click="switchRepository"><FolderOpen :size="17" /></button>
+      <button class="icon-button" :aria-label="t('uiRefreshRepository70ad8c')" :title="t('uiRefreshRepository70ad8c')" :disabled="repositories.navigationBusy" @click="$emit('refresh')"><RefreshCw :size="17" /></button>
+      <button class="icon-button ai-button" :aria-label="t('uiOpenAIAssistantf4bad3')" :title="t('uiOpenAIAssistantf4bad3')" @click="$emit('openAi')"><Bot :size="17" /></button>
+      <button class="icon-button" :aria-label="t('uiOpenSettings857329')" :title="t('uiOpenSettings857329')" @click="$emit('openSettings')"><Settings :size="17" /></button>
     </div>
-    <div v-if="switchError" class="switch-error" role="alert"><span>{{ switchError }}</span><button class="icon-button" aria-label="关闭切换错误" title="关闭" @click="switchError = ''"><X :size="15" /></button></div>
+    <div v-if="switchError" class="switch-error" role="alert"><span>{{ switchError }}</span><button class="icon-button" :aria-label="t('uiDismissRepositorySwitchError13318f')" :title="t('uiClose6c14bd')" @click="switchError = ''"><X :size="15" /></button></div>
     <ActivityDialog v-if="activityOpen" @close="activityOpen = false" />
   </header>
 </template>
 <style scoped>
 .topbar { grid-column: 2 / -1; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; border-bottom: 1px solid var(--border); background: var(--surface-panel); }
-nav { display: flex; align-self: stretch; gap: 18px; }
-nav button { position: relative; min-width: 44px; background: transparent; color: var(--text-muted); }
+nav { display: flex; min-width: 0; align-self: stretch; gap: 12px; overflow-x: auto; }
+nav button { position: relative; display: flex; flex: 0 0 auto; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 44px; white-space: nowrap; background: transparent; color: var(--text-muted); }
+nav button small { font-size: 11px; font-weight: 400; }
 nav button.active { color: var(--text); font-weight: 600; }
 nav button.active::after { position: absolute; right: 5px; bottom: 0; left: 5px; height: 2px; background: var(--primary); content: ""; }
-.actions { display: flex; gap: 6px; }
+.actions { display: flex; flex-shrink: 0; gap: 6px; padding-left: 10px; }
 .activity-warning { color: var(--danger); }
 .icon-button { display: grid; width: 32px; height: 32px; place-items: center; border: 1px solid transparent; border-radius: var(--radius-md); background: transparent; }
 .icon-button:hover:not(:disabled) { border-color: var(--border); background: var(--surface-muted); }

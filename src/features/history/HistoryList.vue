@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { GitCommitHorizontal, LoaderCircle, Search } from "@lucide/vue";
 import { onBeforeUnmount, ref, watch } from "vue";
 
@@ -34,16 +35,16 @@ onBeforeUnmount(() => observer?.disconnect());
 <template>
   <div class="history-list">
     <div class="history-toolbar">
-      <div class="history-scope" :title="history.query.reference || repositories.snapshot?.currentBranch || 'HEAD'">{{ history.query.reference ? '指定引用：' + history.query.reference : '当前分支：' + (repositories.snapshot?.currentBranch || 'HEAD（分离状态）') }}<button v-if="history.query.reference" @click="history.setReference(null)">跟随当前分支</button></div>
+      <div class="history-scope" :title="history.query.reference || repositories.snapshot?.currentBranch || 'HEAD'">{{ history.query.reference ? t('uiSelectedRef7b028e') + history.query.reference : t('uiCurrentBranchcb6e0f') + (repositories.snapshot?.currentBranch || t('uiHEADDetached97456c')) }}<button v-if="history.query.reference" @click="history.setReference(null)">{{ t('uiFollowCurrentBranch50e350') }}</button></div>
       <label class="search-field">
         <Search :size="14" />
-        <input aria-label="搜索提交历史" :value="history.query.search" placeholder="搜索提交、作者或哈希" @input="history.setSearch(($event.target as HTMLInputElement).value)" />
+        <input :aria-label="t('uiSearchCommitHistory1c1dc1')" :value="history.query.search" :placeholder="t('uiSearchCommitsAuthorsOrHashes818a73')" @input="history.setSearch(($event.target as HTMLInputElement).value)" />
       </label>
     </div>
     <div v-if="history.error && history.commits.length" class="inline-error" role="alert">{{ history.error.message }}</div>
-    <div v-if="history.loading && history.commits.length === 0" class="module-state"><LoaderCircle :size="18" class="spin" />正在读取提交</div>
+    <div v-if="history.loading && history.commits.length === 0" class="module-state"><LoaderCircle :size="18" class="spin" />{{ t('uiLoadingCommitsc684a1') }}</div>
     <div v-else-if="history.error && history.commits.length === 0" class="module-state error" role="alert">{{ history.error.message }}</div>
-    <div v-else-if="history.commits.length === 0" class="module-state"><GitCommitHorizontal :size="20" />{{ history.query.search ? "没有匹配的提交" : "仓库还没有提交" }}</div>
+    <div v-else-if="history.commits.length === 0" class="module-state"><GitCommitHorizontal :size="20" />{{ history.query.search ? t('uiNoMatchingCommits3dcac9') : t('uiThisRepositoryHasNoCommitsYetfcc894') }}</div>
     <div v-else class="history-rows">
       <button
         v-for="commit in history.commits"

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Check, FolderGit2, FolderOpen, Search, X } from "@lucide/vue";
 import { dialogs } from "@/lib/backend/dialogs";
@@ -56,7 +57,7 @@ async function browse() {
   if (busy.value) return;
   selecting.value = true; error.value = "";
   try {
-    const path = await dialogs.selectDirectory("打开其他仓库");
+    const path = await dialogs.selectDirectory(t('uiOpenAnotherRepositoryc2bae1'));
     selecting.value = false;
     if (path) await switchTo(path);
   } catch (cause) { error.value = normalizeBackendError(cause).message; }
@@ -97,17 +98,17 @@ onBeforeUnmount(() => window.removeEventListener("keydown", shortcut, true));
   <Teleport to="body">
     <div v-if="ui.repositorySwitcherOpen" class="switcher-backdrop" @click.self="close" @keydown="keydown">
       <section ref="panel" class="repository-switcher" role="dialog" aria-modal="true" aria-labelledby="repository-switcher-title">
-        <header><div><h2 id="repository-switcher-title">切换仓库</h2><p>直接切换工作仓库，无需返回首页</p></div><button class="icon" aria-label="关闭仓库切换器" @click="close"><X :size="18" /></button></header>
-        <div class="search"><Search :size="18" /><input ref="search" v-model="query" aria-label="搜索仓库名称或路径" role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls="repository-options" :aria-activedescendant="rows.length ? `repository-option-${active}` : undefined" placeholder="搜索仓库名称或路径…" autocomplete="off" /></div>
-        <p v-if="busy" class="notice" role="status">{{ pending ? '正在切换仓库…' : selecting ? '请选择仓库目录…' : '有操作正在执行，请等待完成后再切换仓库。' }}</p>
+        <header><div><h2 id="repository-switcher-title">{{ t('uiSwitchRepository46c7e1') }}</h2><p>{{ t('uiSwitchYourWorkingRepositoryWithoutReturningHome7c9557') }}</p></div><button class="icon" :aria-label="t('uiCloseRepositorySwitcheraae721')" @click="close"><X :size="18" /></button></header>
+        <div class="search"><Search :size="18" /><input ref="search" v-model="query" :aria-label="t('uiSearchRepositoryNameOrPathac9f8f')" role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls="repository-options" :aria-activedescendant="rows.length ? `repository-option-${active}` : undefined" :placeholder="t('uiSearchRepositoryNameOrPathd20157')" autocomplete="off" /></div>
+        <p v-if="busy" class="notice" role="status">{{ pending ? t('uiSwitchingRepositoriesfcf862') : selecting ? t('uiChooseARepositoryDirectory8265d3') : t('uiAnOperationIsRunningWaitForItToFinishBeforeSwitching82fc7c') }}</p>
         <p v-if="error" class="error" role="alert">{{ error }}</p>
-        <div id="repository-options" class="repositories" role="listbox" aria-label="最近仓库" :aria-busy="busy">
+        <div id="repository-options" class="repositories" role="listbox" :aria-label="t('uiRecentRepositoriesd9de82')" :aria-busy="busy">
           <div v-for="(row, index) in rows" :id="`repository-option-${index}`" :key="row.key" role="option" :aria-selected="active === index" :aria-disabled="busy" :data-path="row.path" class="repository-row" :class="{ active: active === index, disabled: busy }" :title="row.displayPath" @pointermove="active = index" @pointerdown.prevent @click="switchTo(row.path)">
-            <FolderGit2 :size="20" /><span><strong>{{ row.name }}</strong><small>{{ row.displayPath }}</small></span><span v-if="row.key === currentKey" class="current"><Check :size="13" />当前</span>
+            <FolderGit2 :size="20" /><span><strong>{{ row.name }}</strong><small>{{ row.displayPath }}</small></span><span v-if="row.key === currentKey" class="current"><Check :size="13" />{{ t('uiCurrent25e74d') }}</span>
           </div>
-          <p v-if="!rows.length" class="empty">{{ query ? '没有匹配的仓库，可打开其他目录。' : '暂无最近仓库，请先打开一个本地仓库。' }}</p>
+          <p v-if="!rows.length" class="empty">{{ query ? t('uiNoMatchingRepositoriesOpenAnotherDirectory0c652b') : t('uiNoRecentRepositoriesOpenALocalRepositoryFirstb56f68') }}</p>
         </div>
-        <footer><span>↑ ↓ 选择 · Enter 切换 · Esc 关闭</span><button :disabled="busy" aria-label="打开其他仓库" @click="browse"><FolderOpen :size="15" />Open…</button></footer>
+        <footer><span>{{ t('uiSelectEnterSwitchEscClose5faf92') }}</span><button :disabled="busy" :aria-label="t('uiOpenAnotherRepositoryc2bae1')" @click="browse"><FolderOpen :size="15" />Open…</button></footer>
       </section>
     </div>
   </Teleport>

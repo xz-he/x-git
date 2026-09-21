@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createBackendFixture } from "@/test/backend";
 import type { BackendClient } from "@/lib/backend/client";
-import type { GitRunEvent, RemoteOperationResult, TerminalEvent } from "@/lib/backend/types";
+import type { ConsoleEvent, GitRunEvent, RemoteOperationResult, TerminalEvent } from "@/lib/backend/types";
 import { cancelFeedback, clearCompletedFeedback, gitFeedback, observeGitFeedback, resetGitFeedback } from "./gitFeedback";
 
 const result: RemoteOperationResult = { workspace: { repository: { rootPath: "C:/repo", name: "repo", currentBranch: "main", headShortHash: "abc1234", isClean: true, changedFileCount: 0, conflictCount: 0, remotes: [], upstream: null }, changes: { files: [], stagedCount: 0, unstagedCount: 0 } }, refs: { localBranches: [], remoteBranches: [], tags: [] }, remotes: { remotes: [] }, operationState: { kind: "none", conflicts: [], abortAction: null } };
@@ -66,11 +66,33 @@ describe("global Git feedback", () => {
     emit({ runId: "cancel", sequence: 2, event: { kind: "cancelled", result } });
     expect(gitFeedback.value[0]).toMatchObject({ status: "cancelled", canCancel: false });
   });
-  it("recognizes canonical Windows paths and terminal exit failures", async () => {
-    await client.terminalStart("C:/repo", "terminal", "git status", 80, 24);
-    terminal({ rootPath: "\\\\?\\C:\\repo", runId: "terminal", sequence: 1, event: { kind: "exited", exitCode: 128, cancelled: false, error: null, durationMs: 20 } });
-    expect(gitFeedback.value[0]?.status).toBe("failed");
-    expect(gitFeedback.value[0]?.message).toContain("128");
+  it.each([0, 141])("keeps terminal exit %i in the terminal without global feedback", async exitCode => {
+    const listener = vi.fn();
+    await client.terminalListen(listener);
+    const accepted = await client.terminalStart("C:/repo", "terminal", "git log", 80, 24);
+    expect(accepted).toEqual({ rootPath: "C:/repo", runId: "terminal" });
+    expect(gitFeedback.value).toHaveLength(0);
+    const event: TerminalEvent = { rootPath: "\\\\?\\C:\\repo", runId: "terminal", sequence: 1, event: { kind: "exited", exitCode, cancelled: false, error: null, durationMs: 20 } };
+    terminal(event);
+    expect(listener).toHaveBeenCalledExactlyOnceWith(event);
+    expect(gitFeedback.value).toHaveLength(0);
+  });
+  it("passes console results and start errors through without global feedback", async () => {
+    let consoleEvent!: (event: ConsoleEvent) => void;
+    const listener = vi.fn();
+    vi.mocked(backend.consoleListen).mockImplementation(async callback => { consoleEvent = callback; return () => {}; });
+    vi.mocked(backend.consoleStart).mockResolvedValue({ rootPath: "C:/repo", runId: "console" });
+    await client.consoleListen(listener);
+    await client.consoleStart("C:/repo", "console", "git status");
+    const event: ConsoleEvent = { rootPath: "C:/repo", runId: "console", sequence: 1, event: { kind: "terminal", outcome: "failed", exitCode: 128, durationMs: 20, stdoutTruncated: false, stderrTruncated: false } };
+    consoleEvent(event);
+    expect(listener).toHaveBeenCalledExactlyOnceWith(event);
+    const failure = { code: "gitCommandFailed" as const, message: "Cannot start command" };
+    vi.mocked(backend.terminalStart).mockRejectedValue(failure);
+    vi.mocked(backend.consoleStart).mockRejectedValue(failure);
+    await expect(client.terminalStart("C:/repo", "failed-terminal", "git log", 80, 24)).rejects.toBe(failure);
+    await expect(client.consoleStart("C:/repo", "failed-console", "git status")).rejects.toBe(failure);
+    expect(gitFeedback.value).toHaveLength(0);
   });
   it("distinguishes embedded operation errors and unresolved Git flows", async () => {
     const conflict = { ...result, operationState: { kind: "merge" as const, conflicts: [], abortAction: "merge" as const } };

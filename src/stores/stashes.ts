@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { computed, ref, watch } from "vue";
 import { defineStore } from "pinia";
 import { backendClient } from "@/lib/backend/client";
@@ -189,12 +190,12 @@ export const useStashesStore = defineStore("stashes", () => {
   }
 
   async function mutate(action: (rootPath: string) => Promise<StashMutationResult>): Promise<void> {
-    if (!canMutate.value) throw { code: "gitOperationInProgress", message: "请先完成当前 Git 操作或解决冲突。" } satisfies BackendError;
+    if (!canMutate.value) throw { code: "gitOperationInProgress", get message() { return t('uiFinishTheCurrentGitOperationOrResolveConflictsFirst020dd7'); } } satisfies BackendError;
     const repositories = useRepositoryStore();
     const rootPath = repositories.snapshot?.rootPath ?? loadedRootPath.value;
-    if (!rootPath) throw { code: "invalidRepository", message: "请先打开 Git 仓库。" } satisfies BackendError;
+    if (!rootPath) throw { code: "invalidRepository", get message() { return t('uiOpenAGitRepositoryFirsta00a3e'); } } satisfies BackendError;
     if (loadedRootPath.value !== rootPath || generation.value !== repositories.generation) {
-      throw { code: "invalidRepository", message: "仓库已切换，请刷新贮藏列表后重试。" } satisfies BackendError;
+      throw { code: "invalidRepository", get message() { return t('uiRepositoryChangedRefreshTheStashListAndTryAgain18eac8'); } } satisfies BackendError;
     }
     const repositoryGeneration = repositories.generation;
     const version = ++mutationVersion;
@@ -221,7 +222,7 @@ export const useStashesStore = defineStore("stashes", () => {
   function create(): Promise<void> {
     const paths = selectedPaths.value.filter(path => availableFiles.value.some(file => file.path === path));
     if (selectFiles.value && !paths.length) {
-      error.value = { code: "invalidPath", message: "请至少选择一个要贮藏的文件。" };
+      error.value = { code: "invalidPath", get message() { return t('uiSelectAtLeastOneFileToStashc7e904'); } };
       return Promise.reject(error.value);
     }
     const request = { message: message.value, includeUntracked: includeUntracked.value,

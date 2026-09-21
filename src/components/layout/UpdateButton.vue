@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { Download, LoaderCircle } from "@lucide/vue";
 import { computed } from "vue";
 import { useUpdatesStore } from "@/stores/updates";
@@ -7,12 +8,12 @@ import { useUiStore } from "@/stores/ui";
 const updates = useUpdatesStore();
 const ui = useUiStore();
 const label = computed(() => {
-  if (updates.phase === "downloading") return `正在下载更新${updates.progress === undefined ? '' : ` ${updates.progress}%`}`;
-  if (updates.phase === "ready") return `更新 v${updates.latest?.version} 已下载，点击安装`;
-  if (updates.latest) return `发现新版本 v${updates.latest.version}，查看更新`;
-  if (updates.phase === "checking") return "正在检查版本更新";
-  if (updates.error) return "更新检查失败，点击查看详情";
-  return `版本更新 · 当前 v${updates.currentVersion}`;
+  if (updates.phase === "downloading") return t('msgDownloadingUpdatede91f8', { p0: updates.progress === undefined ? '' : ` ${updates.progress}%` });
+  if (updates.phase === "ready") return t('msgUpdateVDownloadedClickToInstallc8863e', { p0: updates.latest?.version });
+  if (updates.latest) return t('msgNewVersionVAvailableViewUpdate6fb19f', { p0: updates.latest.version });
+  if (updates.phase === "checking") return t('uiCheckingForUpdates7d9574');
+  if (updates.error) return t('uiUpdateCheckFailedClickForDetailsa8d8fa');
+  return t('msgUpdatesCurrentV528468', { p0: updates.currentVersion });
 });
 function open() {
   ui.updateDialogOpen = true;
@@ -22,10 +23,10 @@ function open() {
 </script>
 
 <template>
-  <button class="update-button" :class="{ available: updates.latest }" aria-label="版本更新" :title="label" @click="open">
+  <button class="update-button" :class="{ available: updates.latest }" :aria-label="t('uiUpdatesca9576')" :title="label" @click="open">
     <LoaderCircle v-if="updates.busy" :size="17" class="spin" /><Download v-else :size="17" />
-    <span v-if="updates.latest" class="update-dot" aria-label="有可用更新" />
-    <span v-else-if="updates.error" class="update-error" aria-label="更新检查失败">!</span>
+    <span v-if="updates.latest" class="update-dot" :aria-label="t('uiUpdateAvailablefb725d')" />
+    <span v-else-if="updates.error" class="update-error" :aria-label="t('uiUpdateCheckFailed9e9358')">!</span>
   </button>
 </template>
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { formatDisplayPath } from "@/lib/formatPath";
 import { watch } from "vue";
 import FileTree from "@/features/files/FileTree.vue";
@@ -59,7 +60,7 @@ watch(
   <section class="context" data-testid="context-panel">
     <ContextResizeHandle :width="props.width" :max-width="props.maxWidth" @resize="ui.contextWidth = $event" />
     <div v-if="ui.activeView === 'changes'" class="heading">
-      <span>文件状态</span>
+      <span>{{ t('changes') }}</span>
       <span class="count">{{ changesStore.snapshot?.files.length ?? 0 }}</span>
     </div>
     <div v-if="ui.activeView === 'changes' && repository" class="repo"><strong>{{ repository.name }}</strong><span :title="formatDisplayPath(repository.rootPath)">{{ formatDisplayPath(repository.rootPath) }}</span></div>
@@ -71,7 +72,7 @@ watch(
     <ConflictList v-else-if="ui.activeView === 'conflicts'" />
     <FileTree v-else-if="ui.activeView === 'files'" />
     <ConsoleHistory v-else-if="ui.activeView === 'terminal'" />
-    <div v-else class="module-state">该模块将在后续增量中提供</div>
+    <div v-else class="module-state">{{ t('uiThisModuleWillBeAvailableInAFutureUpdatec1c06b') }}</div>
   </section>
 </template>
 <style scoped>

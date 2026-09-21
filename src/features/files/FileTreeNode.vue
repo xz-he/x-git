@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { ChevronDown, ChevronRight, File, Folder, LockKeyhole } from "@lucide/vue";
 import type { RepositoryFileEntry } from "@/lib/backend/types";
 import { useFilesStore } from "@/stores/files";
@@ -8,15 +9,15 @@ const files = useFilesStore();
 <template>
   <li>
     <div class="row" :class="{ selected: files.selectedEntry?.relativePath === entry.relativePath }">
-      <button v-if="entry.kind === 'directory'" class="expand" :aria-label="(files.expanded.has(entry.relativePath) ? '折叠目录 ' : '展开目录 ') + entry.relativePath" :aria-expanded="files.expanded.has(entry.relativePath)" :disabled="files.busy" @click="files.toggleDirectory(entry.relativePath)"><ChevronDown v-if="files.expanded.has(entry.relativePath)" :size="13" /><ChevronRight v-else :size="13" /></button><span v-else class="spacer" />
-      <button class="entry" :aria-label="'选择' + (entry.kind === 'directory' ? '目录 ' : entry.kind === 'file' ? '文件 ' : '受限项 ') + entry.relativePath" :title="entry.relativePath + (entry.reason ? '\n' + entry.reason : '')" :disabled="files.busy" @click="files.selectEntry(entry)"><Folder v-if="entry.kind === 'directory'" :size="15" /><LockKeyhole v-else-if="entry.kind === 'restricted'" :size="14" /><File v-else :size="14" /><span>{{ entry.name }}</span><small v-if="entry.gitStatus">{{ entry.gitStatus }}</small><small v-if="entry.kind === 'restricted'">受限</small></button>
+      <button v-if="entry.kind === 'directory'" class="expand" :aria-label="(files.expanded.has(entry.relativePath) ? (t('uiCollapseDirectory9922af') + ' ') : (t('uiExpandDirectory000701') + ' ')) + entry.relativePath" :aria-expanded="files.expanded.has(entry.relativePath)" :disabled="files.busy" @click="files.toggleDirectory(entry.relativePath)"><ChevronDown v-if="files.expanded.has(entry.relativePath)" :size="13" /><ChevronRight v-else :size="13" /></button><span v-else class="spacer" />
+      <button class="entry" :aria-label="t('uiSelect70b208') + (entry.kind === 'directory' ? (t('uiDirectory41e524') + ' ') : entry.kind === 'file' ? (t('uifiles49deaf') + ' ') : (t('uiRestrictedItem29e8e7') + ' ')) + entry.relativePath" :title="entry.relativePath + (entry.reason ? '\n' + entry.reason : '')" :disabled="files.busy" @click="files.selectEntry(entry)"><Folder v-if="entry.kind === 'directory'" :size="15" /><LockKeyhole v-else-if="entry.kind === 'restricted'" :size="14" /><File v-else :size="14" /><span>{{ entry.name }}</span><small v-if="entry.gitStatus">{{ entry.gitStatus }}</small><small v-if="entry.kind === 'restricted'">{{ t('uiRestricted936333') }}</small></button>
     </div>
     <ul v-if="entry.kind === 'directory' && files.expanded.has(entry.relativePath)">
-      <li v-if="files.directories[entry.relativePath]?.loading" class="state" role="status">正在读取…</li>
-      <li v-if="files.directories[entry.relativePath]?.error" class="state error" role="alert">{{ files.directories[entry.relativePath]?.error?.message }}<button :disabled="files.busy" @click="files.loadDirectory(entry.relativePath)">重试</button></li>
+      <li v-if="files.directories[entry.relativePath]?.loading" class="state" role="status">{{ t('uiLoadingfcabad') }}</li>
+      <li v-if="files.directories[entry.relativePath]?.error" class="state error" role="alert">{{ files.directories[entry.relativePath]?.error?.message }}<button :disabled="files.busy" @click="files.loadDirectory(entry.relativePath)">{{ t('uiRetrye2d53a') }}</button></li>
       <FileTreeNode v-for="child in files.directories[entry.relativePath]?.page?.entries" :key="child.relativePath" :entry="child" />
-      <li v-if="files.directories[entry.relativePath]?.page?.totalEntries === 0" class="state">空目录</li>
-      <li v-if="files.directories[entry.relativePath]?.page?.nextCursor" class="state"><button :disabled="files.busy || files.directories[entry.relativePath]?.loading" @click="files.loadMore(entry.relativePath)">加载更多</button></li>
+      <li v-if="files.directories[entry.relativePath]?.page?.totalEntries === 0" class="state">{{ t('uiEmptyDirectorye878e3') }}</li>
+      <li v-if="files.directories[entry.relativePath]?.page?.nextCursor" class="state"><button :disabled="files.busy || files.directories[entry.relativePath]?.loading" @click="files.loadMore(entry.relativePath)">{{ t('uiLoadMore3a0fab') }}</button></li>
     </ul>
   </li>
 </template>

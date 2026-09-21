@@ -1,7 +1,8 @@
+import { t } from '@/lib/i18n';
 import type { ConsoleStatus } from "@/stores/console";
 
 const STATUS_LABELS: Record<ConsoleStatus, string> = {
-  idle: "就绪", starting: "正在启动", running: "运行中", completed: "已完成",
-  failed: "执行失败", cancelled: "已取消", timedOut: "执行超时",
+  get idle() { return t('uiReadyb796f2'); }, get starting() { return t('uiStarting6017dc'); }, get running() { return t('uiRunning594249'); }, get completed() { return t('uiCompletede99b48'); },
+  get failed() { return t('uiExecutionFailed9746cf'); }, get cancelled() { return t('uiCancelleda5ffdc'); }, get timedOut() { return t('uiTimedOutf2c3ab'); },
 };
 export function consoleStatusLabel(status: ConsoleStatus): string { return STATUS_LABELS[status]; }

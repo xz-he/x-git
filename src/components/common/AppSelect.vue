@@ -1,4 +1,5 @@
 <script setup lang="ts" generic="T extends string | number | null | undefined">
+import { t } from '@/lib/i18n';
 import { computed, nextTick, onBeforeUnmount, ref, useAttrs, useId, watch, type CSSProperties } from "vue";
 import { Check, ChevronDown, Search } from "@lucide/vue";
 
@@ -6,7 +7,8 @@ defineOptions({ inheritAttrs: false });
 const props = withDefaults(defineProps<{
   modelValue: T; options: readonly { value: T; label: string; disabled?: boolean }[];
   disabled?: boolean; editable?: boolean; placeholder?: string;
-}>(), { placeholder: "请选择" });
+  fontFamily?: string;
+}>(), { placeholder: undefined });
 const emit = defineEmits<{ "update:modelValue": [value: T]; change: [value: T] }>();
 const attrs = useAttrs();
 const id = `select-${useId()}`;
@@ -18,6 +20,7 @@ const query = ref("");
 const active = ref(-1);
 const placement = ref<Record<string, string>>({});
 const selected = computed(() => props.options.find(option => option.value === props.modelValue));
+const placeholder = computed(() => props.placeholder ?? t('uiSelectAnOption382f4b'));
 const filtered = computed(() => props.options.filter(option => option.label.toLocaleLowerCase().includes(query.value.trim().toLocaleLowerCase())));
 const searchable = computed(() => !props.editable && props.options.length > 8);
 const activeId = computed(() => open.value && active.value >= 0 ? `${id}-${active.value}` : undefined);
@@ -133,16 +136,16 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="app-select" :class="attrs.class" :style="attrs.style as CSSProperties">
+  <div class="app-select" :class="attrs.class" :style="[attrs.style as CSSProperties, fontFamily ? { fontFamily } : undefined]">
     <input v-if="editable" ref="trigger" v-bind="{ ...attrs, class: undefined, style: undefined }" class="select-trigger select-input" :value="modelValue ?? ''" :placeholder="placeholder" :disabled="disabled" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" :aria-expanded="open" :aria-controls="open ? id : undefined" :aria-activedescendant="activeId" autocomplete="off" spellcheck="false" @input="edit" @click="open ? close() : show()" @keydown="keydown" />
     <button v-else ref="trigger" v-bind="{ ...attrs, class: undefined, style: undefined }" type="button" class="select-trigger" :class="{ 'is-placeholder': !selected }" :disabled="disabled" role="combobox" aria-haspopup="listbox" :aria-expanded="open" :aria-controls="open ? id : undefined" :aria-activedescendant="activeId" :title="selected?.label" @click="open ? close() : show()" @keydown="keydown"><span>{{ selected?.label ?? placeholder }}</span></button>
     <ChevronDown class="select-chevron" :class="{ expanded: open }" :size="15" aria-hidden="true" />
     <Teleport to="body">
-      <div v-if="open" ref="panel" class="select-popover" :style="placement" @keydown="keydown">
-        <div v-if="searchable" class="select-search"><Search :size="14" aria-hidden="true" /><input ref="search" v-model="query" :aria-label="`搜索${attrs['aria-label'] ?? '选项'}`" :aria-controls="id" :aria-activedescendant="activeId" role="combobox" aria-expanded="true" aria-autocomplete="list" placeholder="搜索选项…" @input="searchChanged" /></div>
+      <div v-if="open" ref="panel" class="select-popover" :style="{ ...placement, fontFamily }" @keydown="keydown">
+        <div v-if="searchable" class="select-search"><Search :size="14" aria-hidden="true" /><input ref="search" v-model="query" :aria-label="t('msgSearchc32673', { p0: attrs['aria-label'] ?? t('uiOptions221ee0') })" :aria-controls="id" :aria-activedescendant="activeId" role="combobox" aria-expanded="true" aria-autocomplete="list" :placeholder="t('uiSearchOptionsb55e53')" @input="searchChanged" /></div>
         <div :id="id" class="select-options" role="listbox" :aria-label="attrs['aria-label'] as string | undefined">
           <div v-for="(option, index) in filtered" :id="`${id}-${index}`" :key="String(option.value)" role="option" :data-value="String(option.value)" :aria-selected="option.value === modelValue" :aria-disabled="option.disabled || undefined" class="select-option" :class="{ active: index === active, selected: option.value === modelValue, disabled: option.disabled }" :title="option.label" @pointermove="!option.disabled && (active = index)" @pointerdown.prevent @click="choose(index)"><span>{{ option.label }}</span><Check v-if="option.value === modelValue" :size="15" aria-hidden="true" /></div>
-          <div v-if="!filtered.length" class="select-empty" role="status">{{ editable ? '无匹配项，可继续输入' : options.length ? '无匹配选项' : '暂无可选项' }}</div>
+          <div v-if="!filtered.length" class="select-empty" role="status">{{ editable ? t('uiNoMatchesKeepTypingToEnterAValue34f7c2') : options.length ? t('uiNoMatchingOptionsb8859e') : t('uiNoOptionsAvailable187f0d') }}</div>
         </div>
       </div>
     </Teleport>

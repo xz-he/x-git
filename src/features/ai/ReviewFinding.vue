@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { FileSearch } from "@lucide/vue";
 import type { AiReviewIssue } from "@/lib/backend/types";
 import { locationLabel, relationLabel, severityLabel } from "./reviewPresentation";
@@ -7,11 +8,11 @@ defineEmits<{ reveal: [issue: AiReviewIssue] }>();
 </script>
 <template>
   <article class="finding" :data-review-severity="issue.severity">
-    <header><span class="severity" :class="issue.severity">{{ severityLabel[issue.severity] }}</span><button class="location" :aria-label="`查看 ${locationLabel(issue)}`" :title="locationLabel(issue)" :disabled="navigationDisabled || (!issue.startLine && !issue.endLine)" @click="$emit('reveal', issue)"><FileSearch :size="13" /><span>{{ locationLabel(issue) }}</span></button></header>
+    <header><span class="severity" :class="issue.severity">{{ severityLabel[issue.severity] }}</span><button class="location" :aria-label="t('msgView48e5d7', { p0: locationLabel(issue) })" :title="locationLabel(issue)" :disabled="navigationDisabled || (!issue.startLine && !issue.endLine)" @click="$emit('reveal', issue)"><FileSearch :size="13" /><span>{{ locationLabel(issue) }}</span></button></header>
     <h3 v-if="issue.title">{{ issue.title }}</h3>
     <p>{{ issue.impact ?? issue.reason }}</p>
-    <div class="suggested-fix"><strong>建议修复</strong><span>{{ issue.suggestedFix }}</span></div>
-    <details v-if="issue.evidence || issue.confidence != null || issue.contextMissing?.length" class="evidence"><summary>证据与置信度 <span v-if="issue.confidence != null">{{ issue.confidence }}/10</span></summary><p v-if="issue.evidence">{{ issue.evidence }}</p><p v-if="issue.changeRelation">变更关系：{{ relationLabel[issue.changeRelation] ?? issue.changeRelation }}</p><ul v-if="issue.contextMissing?.length"><li v-for="missing in issue.contextMissing" :key="missing">缺失上下文：{{ missing }}</li></ul><ul v-if="issue.evidenceSources?.length"><li v-for="source in issue.evidenceSources" :key="`${source.path}:${source.startLine}:${source.revision}`"><code>{{ source.path }}:{{ source.startLine }}–{{ source.endLine }} @ {{ source.revision }}</code></li></ul></details>
+    <div class="suggested-fix"><strong>{{ t('uiSuggestedFix68b72f') }}</strong><span>{{ issue.suggestedFix }}</span></div>
+    <details v-if="issue.evidence || issue.confidence != null || issue.contextMissing?.length" class="evidence"><summary>{{ t('uiEvidenceAndConfidence41fe36') }} <span v-if="issue.confidence != null">{{ issue.confidence }}/10</span></summary><p v-if="issue.evidence">{{ issue.evidence }}</p><p v-if="issue.changeRelation">{{ t('uiRelationToChangeeea05c') }}{{ relationLabel[issue.changeRelation] ?? issue.changeRelation }}</p><ul v-if="issue.contextMissing?.length"><li v-for="missing in issue.contextMissing" :key="missing">{{ t('uiMissingContext116e33') }}{{ missing }}</li></ul><ul v-if="issue.evidenceSources?.length"><li v-for="source in issue.evidenceSources" :key="`${source.path}:${source.startLine}:${source.revision}`"><code>{{ source.path }}:{{ source.startLine }}–{{ source.endLine }} @ {{ source.revision }}</code></li></ul></details>
   </article>
 </template>
 <style scoped>

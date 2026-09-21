@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { Cloud, GitBranch, LoaderCircle, RadioTower, RefreshCw } from "@lucide/vue";
 import { computed } from "vue";
 
@@ -27,22 +28,22 @@ function retry(): void {
 <template>
   <div class="remote-list">
     <header class="list-heading">
-      <span><RadioTower :size="14" />远程仓库</span>
+      <span><RadioTower :size="14" />{{ t('uiRemoteRepository36ecf0') }}</span>
       <strong>{{ items.length }}</strong>
     </header>
     <div v-if="remotes.loading && !remotes.snapshot" class="module-state">
       <LoaderCircle :size="18" class="spin" />
-      <span>正在读取远程仓库</span>
+      <span>{{ t('uiLoadingRemotesc70572') }}</span>
     </div>
     <div v-else-if="remotes.error && !remotes.snapshot" class="module-state error" role="alert">
       <span>{{ remotes.error.message }}</span>
-      <button aria-label="重试读取远程仓库" @click="retry">
-        <RefreshCw :size="14" />重试
+      <button :aria-label="t('uiRetryLoadingRemotes30b8c4')" @click="retry">
+        <RefreshCw :size="14" />{{ t('uiRetrye2d53a') }}
       </button>
     </div>
     <div v-else-if="items.length === 0" class="module-state">
       <Cloud :size="20" />
-      <span>没有已配置的远程仓库</span>
+      <span>{{ t('uiNoRemotesConfigured56c67d') }}</span>
     </div>
     <section
       v-for="remote in items"
@@ -53,7 +54,7 @@ function retry(): void {
       <button
         class="remote-row"
         :class="{ selected: remotes.selectedRemoteName === remote.name }"
-        :aria-label="'查看远程仓库 ' + remote.name"
+        :aria-label="(t('uiViewRemote448791') + ' ') + remote.name"
         @click="select(remote)"
       >
         <RadioTower :size="15" />
@@ -64,18 +65,18 @@ function retry(): void {
         v-for="branch in remote.branches"
         :key="branch.fullName"
         class="branch-row"
-        :aria-label="'查看远程分支 ' + remote.name + '/' + branch.name"
+        :aria-label="(t('uiViewRemoteBranch267454') + ' ') + remote.name + '/' + branch.name"
         @click="select(remote)"
       >
         <GitBranch :size="13" />
         <span class="branch-copy">
           <span class="ref-name" :title="branch.name">{{ branch.name }}</span>
-          <small v-if="branch.trackingLocal">跟踪 {{ branch.trackingLocal }}</small>
-          <small v-else>未跟踪</small>
+          <small v-if="branch.trackingLocal">{{ t('uiTrackingbd9b64') }} {{ branch.trackingLocal }}</small>
+          <small v-else>{{ t('uiNotTracking2f345a') }}</small>
         </span>
         <span class="divergence">
-          <span v-if="branch.ahead">领先 {{ branch.ahead }}</span>
-          <span v-if="branch.behind">落后 {{ branch.behind }}</span>
+          <span v-if="branch.ahead">{{ t('uiAheada6d477') }} {{ branch.ahead }}</span>
+          <span v-if="branch.behind">{{ t('uiBehind8cf31d') }} {{ branch.behind }}</span>
         </span>
       </button>
     </section>

@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { defineStore } from "pinia";
 import { markRaw, ref } from "vue";
 
@@ -349,7 +350,7 @@ export const useHistoryStore = defineStore("history", () => {
     if (!rootPath) {
       throw {
         code: "invalidRepository",
-        message: "请先打开 Git 仓库。",
+        get message() { return t('uiOpenAGitRepositoryFirsta00a3e'); },
       } satisfies BackendError;
     }
     return rootPath;
@@ -361,15 +362,15 @@ export const useHistoryStore = defineStore("history", () => {
     if (submitting.value || useTerminalStore().busy) {
       throw {
         code: "gitOperationInProgress",
-        message: "已有 Git 操作正在提交。",
+        get message() { return t('uiAGitOperationIsAlreadyBeingSubmittedb4d501'); },
       } satisfies BackendError;
     }
     submitting.value = true;
     error.value = undefined;
     try {
-      useOperationStore().applyMutationResult(
-        await action(requireRootPath()),
-      );
+      const result = await action(requireRootPath());
+      useOperationStore().applyMutationResult(result);
+      if (result.error) throw result.error;
     } catch (cause) {
       error.value = normalizeBackendError(cause);
       throw error.value;

@@ -21,6 +21,7 @@ pub enum ThemePreference {
 #[serde(default, rename_all = "camelCase")]
 pub struct AppSettings {
     pub schema_version: u32,
+    pub language: String,
     pub theme: ThemePreference,
     pub font_family: String,
     pub code_font_family: String,
@@ -44,6 +45,7 @@ impl Default for AppSettings {
     fn default() -> Self {
         Self {
             schema_version: SETTINGS_SCHEMA_VERSION,
+            language: "zh-CN".to_owned(),
             theme: ThemePreference::System,
             font_family: String::new(),
             code_font_family: String::new(),
@@ -68,6 +70,9 @@ impl Default for AppSettings {
 impl AppSettings {
     pub fn normalize(&mut self) {
         self.schema_version = SETTINGS_SCHEMA_VERSION;
+        if !matches!(self.language.as_str(), "zh-CN" | "en" | "bilingual") {
+            self.language = "zh-CN".to_owned();
+        }
         self.font_family = normalize_font_family(&self.font_family);
         self.code_font_family = normalize_font_family(&self.code_font_family);
         self.ai_drawer_width = self.ai_drawer_width.clamp(300, 560);
@@ -212,6 +217,26 @@ mod tests {
         assert_eq!(settings.theme, ThemePreference::System);
         assert!(!settings.ai_drawer_open);
         assert_eq!(settings.ai_drawer_width, 360);
+    }
+
+    #[test]
+    fn language_settings_are_backward_compatible_and_validate_unknown_values() {
+        let old: AppSettings = serde_json::from_value(serde_json::json!({"schemaVersion": 1})).unwrap();
+        assert_eq!(old.language, "zh-CN");
+        let mut invalid: AppSettings = serde_json::from_value(serde_json::json!({"language": "unknown"})).unwrap();
+        invalid.normalize();
+        assert_eq!(invalid.language, "zh-CN");
+    }
+
+    #[test]
+    fn all_supported_languages_survive_settings_serialization() {
+        for language in ["zh-CN", "en", "bilingual"] {
+            let mut settings = AppSettings { language: language.to_owned(), ..AppSettings::default() };
+            settings.normalize();
+            let json = serde_json::to_string(&settings).unwrap();
+            let restored: AppSettings = serde_json::from_str(&json).unwrap();
+            assert_eq!(restored.language, language);
+        }
     }
 
     #[test]

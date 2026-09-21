@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { defineStore } from "pinia";
 import { onScopeDispose, ref, watch } from "vue";
 import { isTauri } from "@tauri-apps/api/core";
@@ -76,7 +77,7 @@ export const useUiStore = defineStore("ui", () => {
       if (version !== themeVersion) return;
       await getCurrentWindow().setTheme(preference === "system" ? null : preference);
     }).catch(() => {
-      if (version === themeVersion) nativeThemeError.value = "标题栏主题同步失败，请重新切换主题重试。";
+      if (version === themeVersion) nativeThemeError.value = t('uiCouldNotSynchronizeTheTitleBarThemeSwitchThemesAgainToRetry272c36');
     });
   }
 

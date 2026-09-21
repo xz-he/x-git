@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { onBeforeUnmount, ref } from "vue";
 import { backendClient } from "@/lib/backend/client";
 import { normalizeBackendError } from "@/lib/backend/errors";
@@ -44,12 +45,12 @@ export function useTaskBranchSlug() {
       const reply = (await request).trim().toLowerCase().replace(/^`([^`]+)`$/, "$1");
       if (current !== revision) return;
       if (reply.length > MAX_SLUG_LENGTH || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(reply)) {
-        translationError.value = "AI 未返回有效的英文分支描述，请重试或手动填写。";
+        translationError.value = t('uiAIDidNotReturnAValidEnglishBranchDescriptionRetryOrEnterOneM71707a');
         return;
       }
       slug.value = reply;
     } catch (cause) {
-      if (current === revision) translationError.value = `生成失败：${normalizeBackendError(cause).message} 可重试或手动填写。`;
+      if (current === revision) translationError.value = t('msgGenerationFailedRetryOrEnterItManuallya4a0e2', { p0: normalizeBackendError(cause).message });
     } finally {
       if (pending === request) pending = undefined;
       if (runId === id) runId = undefined;
@@ -66,7 +67,7 @@ export function useTaskBranchSlug() {
     if (!source || composing) return;
     const config = settings.settings;
     if (!config.apiKey.trim() || !config.baseUrl.trim() || !config.model.trim()) {
-      translationError.value = "请先在设置中配置 AI 服务以自动生成英文描述，也可以手动填写。";
+      translationError.value = t('uiConfigureAnAIServiceInSettingsToGenerateAnEnglishDescription43567f');
       return;
     }
     translating.value = true;

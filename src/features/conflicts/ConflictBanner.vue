@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { computed } from "vue";
 import { GitMerge, RotateCcw, TriangleAlert } from "@lucide/vue";
 
@@ -14,19 +15,18 @@ const repositories = useRepositoryStore();
 const ui = useUiStore();
 const count = computed(() => operation.state.conflicts.length);
 const title = computed(() => {
-  if (operation.state.kind === "revert") return count.value ? `Revert 冲突：${count.value} 个文件` : "Revert 等待继续";
-  if (!count.value) return operation.state.kind === "merge" ? "合并等待完成" : operation.state.kind === "rebase" ? "变基等待继续" : "Cherry-pick 等待继续";
-  const suffix = `：${count.value} 个文件`;
-  if (operation.state.kind === "merge") return `合并冲突${suffix}`;
-  if (operation.state.kind === "rebase") return `变基冲突${suffix}`;
-  if (operation.state.kind === "cherryPick") return `Cherry-pick 冲突${suffix}`;
-  return `未解决冲突${suffix}`;
+  if (operation.state.kind === "revert") return count.value ? t('msgRevertConflictsFiles4adc95', { p0: count.value }) : t('uiRevertAwaitingContinuationa092e8');
+  if (!count.value) return operation.state.kind === "merge" ? t('uiMergeAwaitingCompletionfdbcc9') : operation.state.kind === "rebase" ? t('uiRebaseAwaitingContinuationf6c110') : t('uiCherryPickAwaitingContinuation3a2566');
+  if (operation.state.kind === "merge") return t('mergeConflictCount', { count: count.value });
+  if (operation.state.kind === "rebase") return t('rebaseConflictCount', { count: count.value });
+  if (operation.state.kind === "cherryPick") return t('cherryPickConflictCount', { count: count.value });
+  return t('unresolvedConflictCount', { count: count.value });
 });
 const abortLabel: Record<AbortAction, string> = {
-  merge: "中止合并",
-  rebase: "中止变基",
-  cherryPick: "中止 Cherry-pick",
-  revert: "中止 Revert",
+  get merge() { return t('uiAbortMergee9f5c2'); },
+  get rebase() { return t('uiAbortRebaseb47fc3'); },
+  get cherryPick() { return t('uiAbortCherryPicka4c150'); },
+  get revert() { return t('uiAbortRevert95a2d9'); },
 };
 
 async function abort(): Promise<void> {
@@ -43,13 +43,13 @@ async function abort(): Promise<void> {
     <div class="conflict-summary">
       <strong>{{ title }}</strong>
       <details v-if="count">
-        <summary>查看冲突文件</summary>
+        <summary>{{ t('uiViewConflictedFiles175c69') }}</summary>
         <code v-for="file in operation.state.conflicts" :key="file.path">
           {{ file.status }} {{ file.path }}
         </code>
       </details>
     </div>
-    <button class="abort-button" @click="ui.openView('conflicts')">解决冲突</button>
+    <button class="abort-button" @click="ui.openView('conflicts')">{{ t('conflicts') }}</button>
     <button
       v-if="operation.state.abortAction"
       class="abort-button"

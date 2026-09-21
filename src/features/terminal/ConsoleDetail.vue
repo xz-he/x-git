@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { Copy, Eraser, Square, Terminal, Zap } from "@lucide/vue";
 import { formatDisplayPath } from "@/lib/formatPath";
@@ -11,41 +12,41 @@ const repository = useRepositoryStore();
 const host = ref<HTMLElement>();
 const copyStatus = ref("");
 const screenError = ref("");
-const statusText = computed(() => terminal.resetting ? "正在结束旧会话" : terminal.refreshing ? "正在刷新工作台" : consoleStatusLabel(terminal.status));
+const statusText = computed(() => terminal.resetting ? t('uiEndingPreviousSession2b67f5') : terminal.refreshing ? t('uiRefreshingWorkbench07d483') : consoleStatusLabel(terminal.status));
 let disposed = false;
 onMounted(async () => {
   try { if (host.value) await terminal.attach(host.value); }
-  catch (cause) { if (!disposed) screenError.value = cause instanceof Error ? cause.message : "无法初始化终端"; }
+  catch (cause) { if (!disposed) screenError.value = cause instanceof Error ? cause.message : t('uiCouldNotInitializeTerminal7c63ac'); }
 });
 onBeforeUnmount(() => { disposed = true; terminal.detach(); });
 async function copyOutput(): Promise<void> {
-  try { await navigator.clipboard.writeText(terminal.outputText()); copyStatus.value = "已复制"; }
-  catch { copyStatus.value = "复制失败，请在终端中选择文本后复制。"; }
+  try { await navigator.clipboard.writeText(terminal.outputText()); copyStatus.value = t('uiCopiede381a5'); }
+  catch { copyStatus.value = t('uiCopyFailedSelectTextInTheTerminalAndCopyItManually265d5f'); }
 }
 </script>
 
 <template>
-  <section class="console-detail" aria-label="Git 命令控制台">
+  <section class="console-detail" :aria-label="t('uiGitCommandConsole73f165')">
     <header class="console-header">
-      <div class="title"><Terminal :size="19" /><h1>Git 终端</h1><span class="badge">{{ repository.snapshot?.currentBranch || '分离 HEAD' }}</span></div>
-      <p :title="formatDisplayPath(repository.snapshot?.rootPath)">{{ formatDisplayPath(repository.snapshot?.rootPath) || '请先打开 Git 仓库' }}</p>
+      <div class="title"><Terminal :size="19" /><h1>{{ t('uiGitTerminalabeaee') }}</h1><span class="badge">{{ repository.snapshot?.currentBranch || t('uiDetachedHEADddb9e0') }}</span></div>
+      <p :title="formatDisplayPath(repository.snapshot?.rootPath)">{{ formatDisplayPath(repository.snapshot?.rootPath) || t('uiOpenAGitRepositoryFirstca5538') }}</p>
     </header>
     <div class="output-toolbar">
-      <span role="status">{{ statusText }}<template v-if="terminal.result"> · {{ terminal.result.durationMs }} ms<template v-if="terminal.result.exitCode !== null"> · 退出码 {{ terminal.result.exitCode }}</template></template></span>
+      <span role="status">{{ statusText }}<template v-if="terminal.result"> · {{ terminal.result.durationMs }} ms<template v-if="terminal.result.exitCode !== null"> {{ t('uiExitCoded1cbfc') }} {{ terminal.result.exitCode }}</template></template></span>
       <div class="tools">
-        <button v-if="terminal.running" aria-label="中断命令" title="发送 Ctrl+C" @click="terminal.sendInput('\x03')"><Zap :size="14" />中断</button>
-        <button v-if="terminal.running" class="danger" aria-label="终止命令" :disabled="terminal.cancelRequested" @click="terminal.terminate()"><Square :size="13" />{{ terminal.cancelRequested ? '终止中…' : '终止' }}</button>
-        <button aria-label="复制输出" :disabled="!terminal.screenReady" @click="copyOutput"><Copy :size="14" />复制</button>
-        <button aria-label="清屏" :disabled="terminal.busy" @click="terminal.clear()"><Eraser :size="14" />清屏</button>
+        <button v-if="terminal.running" :aria-label="t('uiInterruptCommand91c075')" :title="t('uiSendCtrlC60c5ca')" @click="terminal.sendInput('\x03')"><Zap :size="14" />{{ t('uiInterrupt44e681') }}</button>
+        <button v-if="terminal.running" class="danger" :aria-label="t('uiTerminateCommand680944')" :disabled="terminal.cancelRequested" @click="terminal.terminate()"><Square :size="13" />{{ terminal.cancelRequested ? t('uiTerminating024aa3') : t('uiTerminate2eee57') }}</button>
+        <button :aria-label="t('uiCopyOutputce4702')" :disabled="!terminal.screenReady" @click="copyOutput"><Copy :size="14" />{{ t('uiCopy4edd1d') }}</button>
+        <button :aria-label="t('uiClearScreene8db7c')" :disabled="terminal.busy" @click="terminal.clear()"><Eraser :size="14" />{{ t('uiClearScreene8db7c') }}</button>
       </div>
     </div>
     <div v-if="terminal.error || terminal.refreshError || screenError || copyStatus" class="notices">
       <p v-if="terminal.error" role="alert">{{ terminal.error.message }}</p>
-      <p v-if="terminal.refreshError" role="alert">命令已结束，工作台刷新失败：{{ terminal.refreshError.message }} <button :disabled="terminal.refreshing" @click="terminal.retryRefresh()">重新刷新</button></p>
+      <p v-if="terminal.refreshError" role="alert">{{ t('uiCommandFinishedButWorkbenchRefreshFailed23a0cb') }}{{ terminal.refreshError.message }} <button :disabled="terminal.refreshing" @click="terminal.retryRefresh()">{{ t('uiRefreshAgain8924dc') }}</button></p>
       <p v-if="screenError" role="alert">{{ screenError }}</p>
       <p v-if="copyStatus" role="status">{{ copyStatus }}</p>
     </div>
-    <div ref="host" class="terminal-host" aria-label="Git 终端输入与输出" title="Enter 执行 · Tab 补全 · ↑↓ 历史 · Ctrl+C 中断 · Ctrl+L 清屏" @click="terminal.focus()" />
+    <div ref="host" class="terminal-host" :aria-label="t('uiGitTerminalInputAndOutputd165be')" :title="t('uiEnterRunTabCompleteHistoryCtrlCInterruptCtrlLClear2a9daa')" @click="terminal.focus()" />
   </section>
 </template>
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { computed, onMounted, ref } from "vue";
 import { GitCommitHorizontal, GitPullRequest, RotateCcw, Undo2 } from "@lucide/vue";
 
@@ -73,32 +74,34 @@ async function confirm(): Promise<void> {
 </script>
 
 <template>
-  <div class="history-actions" aria-label="提交操作" :inert="repositories.navigationBusy || undefined">
-    <button :aria-label="`Checkout 提交 ${props.detail.shortHash}`" title="分离 HEAD 检出" :disabled="history.submitting" @click="open('checkout')"><GitCommitHorizontal :size="15" />Checkout</button>
-    <button :aria-label="`Cherry-pick 提交 ${props.detail.shortHash}`" title="Cherry-pick" :disabled="history.submitting" @click="open('cherryPick')"><GitPullRequest :size="15" />Cherry-pick</button>
-    <button :aria-label="`Revert 提交 ${props.detail.shortHash}`" title="生成反向提交，撤销这次提交的修改" :disabled="history.submitting" @click="open('revert')"><Undo2 :size="15" />Revert</button>
-    <button :aria-label="`Reset 到提交 ${props.detail.shortHash}`" title="重置" :disabled="history.submitting" @click="open('reset')"><RotateCcw :size="15" />Reset</button>
+  <div class="history-actions" :aria-label="t('uiCommitActions999f4c')" :inert="repositories.navigationBusy || undefined">
+    <button :aria-label="t('msgCheckoutCommit0fcd13', { p0: props.detail.shortHash })" :title="t('uiCheckoutWithDetachedHEAD5900ae')" :disabled="history.submitting" @click="open('checkout')"><GitCommitHorizontal :size="15" />Checkout</button>
+    <button :aria-label="t('msgCherryPickCommita65640', { p0: props.detail.shortHash })" title="Cherry-pick" :disabled="history.submitting" @click="open('cherryPick')"><GitPullRequest :size="15" />Cherry-pick</button>
+    <button :aria-label="t('msgRevertCommit95ca02', { p0: props.detail.shortHash })" :title="t('uiCreateAnInverseCommitToUndoThisCommitSChanges3f9a97')" :disabled="history.submitting" @click="open('revert')"><Undo2 :size="15" />Revert</button>
+    <button :aria-label="t('msgResetToCommit9e15f7', { p0: props.detail.shortHash })" :title="t('uiReset3d8134')" :disabled="history.submitting" @click="open('reset')"><RotateCcw :size="15" />Reset</button>
   </div>
 
-  <ConfirmDialog v-if="active === 'checkout'" title="以分离 HEAD 检出" :description="`工作区将检出提交 ${shortHash}，当前分支不会移动。`" confirm-label="检出提交" :busy="history.submitting" @cancel="active = undefined" @confirm="confirm" />
-  <ConfirmDialog v-else-if="active === 'revert'" title="回滚此提交（Revert）" :description="`在当前分支 ${repositories.snapshot?.currentBranch ?? '未检出分支'} 上生成一个反向提交，撤销 ${shortHash} 的修改，保留原有历史。请先提交或贮藏工作区修改；遇到冲突后可继续解决或中止回滚。`" confirm-label="确认回滚提交" :confirm-disabled="props.detail.parentHashes.length > 1 && mainline === null" :busy="history.submitting" @cancel="active = undefined" @confirm="confirm">
+  <ConfirmDialog v-if="active === 'checkout'" :title="t('uiCheckoutWithDetachedHEAD2ce873')" :description="t('msgCheckOutCommitInTheWorkingTreeWithoutMovingTheCurr62b9d1', { p0: shortHash })" :confirm-label="t('uiCheckoutCommit45ff42')" :busy="history.submitting" @cancel="active = undefined" @confirm="confirm" />
+  <ConfirmDialog v-else-if="active === 'revert'" :title="t('uiRevertThisCommit8403af')" :description="t('msgCreateAnInverseCommitOnTheCurrentBranchToUndoPrese3ab534', { p0: repositories.snapshot?.currentBranch ?? t('uiNoBranchCheckedOut5130ff'), p1: shortHash })" :confirm-label="t('uiConfirmRevert27cfa9')" :confirm-disabled="props.detail.parentHashes.length > 1 && mainline === null" :busy="history.submitting" @cancel="active = undefined" @confirm="confirm">
     <p class="commit-subject">{{ props.detail.message.split('\n')[0] }}</p>
-    <label v-if="props.detail.parentHashes.length > 1" class="field">合并提交的主线父提交<AppSelect v-model="mainline" aria-label="Revert 主线父提交" placeholder="请选择保留哪一侧作为主线" :disabled="history.submitting" :options="props.detail.parentHashes.map((parent, index) => ({ value: index + 1, label: `父提交 ${index + 1}：${parent.slice(0, 12)}` }))" /></label>
-    <p v-if="props.detail.parentHashes.length > 1" class="field">撤销该合并相对所选父提交引入的修改。通常父提交 1 是合并前的目标分支。</p>
+    <label v-if="props.detail.parentHashes.length > 1" class="field">{{ t('uiMainlineParentOfMergeCommit510ec3') }}<AppSelect v-model="mainline" :aria-label="t('uiRevertMainlineParent3bc689')" :placeholder="t('uiSelectTheParentToKeepAsMainlineaadf67')" :disabled="history.submitting" :options="props.detail.parentHashes.map((parent, index) => ({ value: index + 1, label: t('msgParent2b7399', { p0: index + 1, p1: parent.slice(0, 12) }) }))" /></label>
+    <p v-if="props.detail.parentHashes.length > 1" class="field">{{ t('uiUndoesChangesIntroducedByTheMergeRelativeToTheSelectedParentd1a899') }}</p>
     <p v-if="history.error" role="alert" class="revert-error">{{ history.error.message }}</p>
   </ConfirmDialog>
-  <ConfirmDialog v-else-if="active === 'cherryPick'" title="Cherry-pick 提交" :description="`应用提交 ${shortHash}。`" confirm-label="Cherry-pick" :busy="history.submitting" @cancel="active = undefined" @confirm="confirm">
-    <label class="field">目标分支<AppSelect v-model="targetBranch" aria-label="Cherry-pick 目标分支" :disabled="history.submitting" :options="[{ value: '', label: '当前分支' }, ...(refs.snapshot?.localBranches ?? []).map(branch => ({ value: branch.name, label: branch.name }))]" /></label>
-    <label v-if="targetBranch" class="check-field"><input v-model="returnAfterSuccess" type="checkbox" />成功后返回当前分支</label>
+  <ConfirmDialog v-else-if="active === 'cherryPick'" :title="t('uiCherryPickCommit1c6e85')" :description="t('msgApplyCommit554462', { p0: shortHash })" confirm-label="Cherry-pick" :busy="history.submitting" @cancel="active = undefined" @confirm="confirm">
+    <label class="field">{{ t('uiTargetBranch55b297') }}<AppSelect v-model="targetBranch" :aria-label="t('uiCherryPickTargetBrancheab1fc')" :disabled="history.submitting" :options="[{ value: '', label: t('uiCurrentBranch0eb05c') }, ...(refs.snapshot?.localBranches ?? []).map(branch => ({ value: branch.name, label: branch.name }))]" /></label>
+    <label v-if="targetBranch" class="check-field"><input v-model="returnAfterSuccess" type="checkbox" />{{ t('uiReturnToCurrentBranchOnSuccessf715b9') }}</label>
+    <p class="field">{{ t('cherryPickPreserveUnstaged') }}</p>
+    <p v-if="history.error" role="alert" class="revert-error">{{ history.error.message }}</p>
   </ConfirmDialog>
-  <ConfirmDialog v-else-if="active === 'reset'" title="重置当前分支" :description="`将当前分支移动到 ${shortHash}。`" confirm-label="执行重置" :confirm-disabled="resetDisabled" :busy="history.submitting" :danger="resetMode === 'hard'" @cancel="active = undefined" @confirm="confirm">
+  <ConfirmDialog v-else-if="active === 'reset'" :title="t('uiResetCurrentBranchf212b1')" :description="t('msgMoveTheCurrentBranchTo7f37ca', { p0: shortHash })" :confirm-label="t('uiPerformReset94f347')" :confirm-disabled="resetDisabled" :busy="history.submitting" :danger="resetMode === 'hard'" @cancel="active = undefined" @confirm="confirm">
     <fieldset class="reset-modes">
-      <legend>重置模式</legend>
-      <label><input v-model="resetMode" type="radio" value="soft" aria-label="软重置" />软重置</label>
-      <label><input v-model="resetMode" type="radio" value="mixed" aria-label="混合重置" />混合重置</label>
-      <label><input v-model="resetMode" type="radio" value="hard" aria-label="硬重置" />硬重置</label>
+      <legend>{{ t('uiResetMode1c08fe') }}</legend>
+      <label><input v-model="resetMode" type="radio" value="soft" :aria-label="t('uiSoftReset39643f')" />{{ t('uiSoftReset39643f') }}</label>
+      <label><input v-model="resetMode" type="radio" value="mixed" :aria-label="t('uiMixedReset5bced1')" />{{ t('uiMixedReset5bced1') }}</label>
+      <label><input v-model="resetMode" type="radio" value="hard" :aria-label="t('uiHardResetc2d210')" />{{ t('uiHardResetc2d210') }}</label>
     </fieldset>
-    <label v-if="resetMode === 'hard'" class="field">输入 {{ shortHash }} 确认<input v-model="resetConfirmation" aria-label="输入短哈希确认" autocomplete="off" /></label>
+    <label v-if="resetMode === 'hard'" class="field">{{ t('uiEntere88504') }} {{ shortHash }} {{ t('uiConfirmb56d9a') }}<input v-model="resetConfirmation" :aria-label="t('uiEnterShortHashToConfirmd3a6a4')" autocomplete="off" /></label>
   </ConfirmDialog>
 </template>
 

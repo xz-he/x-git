@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { GitBranch, LoaderCircle, Tag, Wifi } from "@lucide/vue";
 import { computed, ref } from "vue";
 import TaskBranchDialog from "./TaskBranchDialog.vue";
@@ -14,7 +15,7 @@ const tasks = useTaskBranchesStore();
 const repositories = useRepositoryStore();
 const taskDialogOpen = ref(false);
 const createdTask = ref("");
-function taskCreated(name: string, title: string) { taskDialogOpen.value = false; createdTask.value = `已创建 ${name} · MR 标题：${title}`; }
+function taskCreated(name: string, title: string) { taskDialogOpen.value = false; createdTask.value = t('msgCreatedMRTitled0ed96', { p0: name, p1: title }); }
 const localBranches = computed(() => refsStore.snapshot?.localBranches ?? []);
 const remoteBranches = computed(
   () => refsStore.snapshot?.remoteBranches ?? [],
@@ -41,15 +42,15 @@ function selectTag(tag: TagSummary): void {
 <template>
   <div class="refs-list">
     <div v-if="props.mode === 'branches'" class="task-entry">
-      <button aria-label="快速建分支" :disabled="tasks.blocked || !repositories.snapshot?.currentBranch || !repositories.snapshot?.headShortHash" @click="taskDialogOpen = true">快速建分支</button>
+      <button :aria-label="t('uiQuickBranch2c5f2e')" :disabled="tasks.blocked || !repositories.snapshot?.currentBranch || !repositories.snapshot?.headShortHash" @click="taskDialogOpen = true">{{ t('uiQuickBranch2c5f2e') }}</button>
       <p v-if="createdTask" role="status">{{ createdTask }}</p>
       <p v-if="tasks.error" role="alert">{{ tasks.error.message }}</p>
-      <button v-if="tasks.error" aria-label="重试读取任务分支" :disabled="tasks.loading || tasks.submitting" @click="tasks.refreshState">重试读取任务分支</button>
+      <button v-if="tasks.error" :aria-label="t('uiRetryLoadingTaskBranches249403')" :disabled="tasks.loading || tasks.submitting" @click="tasks.refreshState">{{ t('uiRetryLoadingTaskBranches249403') }}</button>
     </div>
     <TaskBranchDialog v-if="taskDialogOpen && props.mode === 'branches'" @close="taskDialogOpen = false" @created="taskCreated" />
     <div v-if="refsStore.loading && !refsStore.snapshot" class="module-state">
       <LoaderCircle :size="18" class="spin" />
-      <span>正在读取引用</span>
+      <span>{{ t('uiLoadingRefsc86af4') }}</span>
     </div>
     <div v-else-if="refsStore.error && !refsStore.snapshot" class="module-state error" role="alert">
       {{ refsStore.error.message }}
@@ -57,7 +58,7 @@ function selectTag(tag: TagSummary): void {
     <template v-else-if="props.mode === 'branches'">
       <section class="ref-group" aria-labelledby="local-branches-heading">
         <header id="local-branches-heading">
-          <span><GitBranch :size="14" />本地分支</span>
+          <span><GitBranch :size="14" />{{ t('uiLocalBranch9fdfe9') }}</span>
           <strong>{{ localBranches.length }}</strong>
         </header>
         <button
@@ -65,25 +66,25 @@ function selectTag(tag: TagSummary): void {
           :key="branch.fullName"
           class="ref-row"
           :class="{ selected: refsStore.selectedFullName === branch.fullName }"
-          :aria-label="`查看分支 ${branch.name}`"
+          :aria-label="t('msgViewBranch11278a', { p0: branch.name })"
           @click="selectBranch(branch)"
           @dblclick="switchBranch(branch)"
         >
           <span class="ref-main">
-            <span class="ref-name" data-testid="ref-name" :title="branch.current ? branch.name : `${branch.name} · 双击切换分支`">{{ branch.name }}</span>
+            <span class="ref-name" data-testid="ref-name" :title="branch.current ? branch.name : t('msgDoubleClickToSwitchBranchce20d4', { p0: branch.name })">{{ branch.name }}</span>
             <small>{{ branch.tip.shortHash }} · {{ branch.tip.subject }}</small>
           </span>
           <span class="ref-actions" data-testid="ref-actions">
-            <span v-if="branch.current" class="status-chip">当前</span>
+            <span v-if="branch.current" class="status-chip">{{ t('uiCurrent25e74d') }}</span>
             <span v-if="branch.ahead" class="divergence">↑{{ branch.ahead }}</span>
             <span v-if="branch.behind" class="divergence">↓{{ branch.behind }}</span>
           </span>
         </button>
-        <div v-if="localBranches.length === 0" class="group-empty">没有本地分支</div>
+        <div v-if="localBranches.length === 0" class="group-empty">{{ t('uiNoLocalBranches38fa45') }}</div>
       </section>
       <section class="ref-group" aria-labelledby="remote-branches-heading">
         <header id="remote-branches-heading">
-          <span><Wifi :size="14" />远程分支</span>
+          <span><Wifi :size="14" />{{ t('uiRemoteBranch9072f8') }}</span>
           <strong>{{ remoteBranches.length }}</strong>
         </header>
         <button
@@ -91,7 +92,7 @@ function selectTag(tag: TagSummary): void {
           :key="branch.fullName"
           class="ref-row"
           :class="{ selected: refsStore.selectedFullName === branch.fullName }"
-          :aria-label="`查看分支 ${branch.name}`"
+          :aria-label="t('msgViewBranch11278a', { p0: branch.name })"
           @click="selectBranch(branch)"
         >
           <span class="ref-main">
@@ -100,12 +101,12 @@ function selectTag(tag: TagSummary): void {
           </span>
           <span class="ref-actions" data-testid="ref-actions" />
         </button>
-        <div v-if="remoteBranches.length === 0" class="group-empty">没有远程分支</div>
+        <div v-if="remoteBranches.length === 0" class="group-empty">{{ t('uiNoRemoteBranches2267f7') }}</div>
       </section>
     </template>
     <section v-else class="ref-group" aria-labelledby="tags-heading">
       <header id="tags-heading">
-        <span><Tag :size="14" />标签</span>
+        <span><Tag :size="14" />{{ t('tags') }}</span>
         <strong>{{ tags.length }}</strong>
       </header>
       <button
@@ -113,7 +114,7 @@ function selectTag(tag: TagSummary): void {
         :key="tag.name"
         class="ref-row"
         :class="{ selected: refsStore.selectedFullName === `refs/tags/${tag.name}` }"
-        :aria-label="`查看标签 ${tag.name}`"
+        :aria-label="t('msgViewTag30d9e0', { p0: tag.name })"
         @click="selectTag(tag)"
       >
         <span class="ref-main">
@@ -121,10 +122,10 @@ function selectTag(tag: TagSummary): void {
           <small>{{ tag.commitSubject }}</small>
         </span>
         <span class="ref-actions" data-testid="ref-actions">
-          <span v-if="tag.annotated" class="status-chip">附注</span>
+          <span v-if="tag.annotated" class="status-chip">{{ t('uiAnnotated24f02e') }}</span>
         </span>
       </button>
-      <div v-if="tags.length === 0" class="group-empty">没有标签</div>
+      <div v-if="tags.length === 0" class="group-empty">{{ t('uiNoTagsd8ced4') }}</div>
     </section>
     <div v-if="refsStore.error && refsStore.snapshot" class="inline-error" role="alert">
       {{ refsStore.error.message }}

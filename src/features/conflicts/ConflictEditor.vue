@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Compartment, EditorState, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, EditorView, highlightWhitespace, keymap, lineNumbers, type DecorationSet } from "@codemirror/view";
@@ -47,7 +48,7 @@ function decorate(): void {
   const ranges = [...decorations].sort((a, b) => a[0] - b[0]).map(([line, value]) => Decoration.line({ attributes: {
     class: `cm-diff-${value.kind}${value.active ? ' cm-diff-current' : ''}`,
     "data-diff-kind": value.kind,
-    title: value.kind === "conflict" ? "双方改动冲突，需要确认解决结果" : value.kind === "mergeable" ? "单边改动或双方相同改动，可自动合并" : value.kind === "deletion" ? "对比版本的内容在此处被删除" : "与对比版本不同",
+    title: value.kind === "conflict" ? t('uiBothSidesConflictConfirmTheResolution27ce18') : value.kind === "mergeable" ? t('uiOneSidedOrIdenticalChangesCanMergeAutomatically2b1496') : value.kind === "deletion" ? t('uiContentInTheComparedVersionWasDeletedHere8b1e18') : t('uiDiffersFromTheComparedVersion7e34fd'),
   } }).range(view!.state.doc.line(line).from));
   view.dispatch({ effects: setHighlights.of(Decoration.set(ranges)) });
 }
@@ -181,9 +182,9 @@ onBeforeUnmount(() => {
 </script>
 <template><div class="conflict-editor">
   <div v-if="!hideNavigation && (compareText !== undefined || mergeHighlights !== undefined)" class="diff-navigation">
-    <span>{{ comparisonLabel || '版本差异' }} <small aria-live="polite">{{ changes.length ? `${active < 0 ? '—' : active + 1} / ${changes.length} 处差异` : '无差异' }}</small></span>
-    <button :aria-label="label + '：上一处差异'" title="上一处差异" :disabled="!changes.length" @click="jump(-1)"><ArrowUp :size="15" /></button>
-    <button :aria-label="label + '：下一处差异'" title="下一处差异" :disabled="!changes.length" @click="jump(1)"><ArrowDown :size="15" /></button>
+    <span>{{ comparisonLabel || t('uiVersionDifferencese3a4b1') }} <small aria-live="polite">{{ changes.length ? t('msgDifferences0b72b5', { p0: active < 0 ? '—' : active + 1, p1: changes.length }) : t('uiNoDifferences70e654') }}</small></span>
+    <button :aria-label="label + t('uiPreviousDifference0e50cd')" :title="t('uiPreviousDifferencef30de6')" :disabled="!changes.length" @click="jump(-1)"><ArrowUp :size="15" /></button>
+    <button :aria-label="label + t('uiNextDifference1f533b')" :title="t('uiNextDifference392010')" :disabled="!changes.length" @click="jump(1)"><ArrowDown :size="15" /></button>
   </div>
   <div ref="host" class="editor-host" />
 </div></template>

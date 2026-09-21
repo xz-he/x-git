@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { nextTick, onMounted, ref } from "vue";
 import { TriangleAlert, X } from "@lucide/vue";
 
@@ -14,7 +15,7 @@ const props = withDefaults(
   }>(),
   {
     description: undefined,
-    cancelLabel: "取消",
+    cancelLabel: undefined,
     confirmDisabled: false,
     busy: false,
     danger: false,
@@ -44,7 +45,7 @@ onMounted(async () => {
       <div class="dialog-content">
         <header>
           <h2 id="confirm-dialog-title">{{ props.title }}</h2>
-          <button class="icon-button" aria-label="关闭" title="关闭" @click="emit('cancel')">
+          <button class="icon-button" :aria-label="t('uiClose6c14bd')" :title="t('uiClose6c14bd')" @click="emit('cancel')">
             <X :size="16" />
           </button>
         </header>
@@ -58,11 +59,11 @@ onMounted(async () => {
           ref="cancelButton"
           data-action="cancel"
           class="secondary-button"
-          :aria-label="props.cancelLabel"
+          :aria-label="props.cancelLabel ?? t('uiCancel4d0b46')"
           :disabled="props.busy"
           @click="emit('cancel')"
         >
-          {{ props.cancelLabel }}
+          {{ props.cancelLabel ?? t('uiCancel4d0b46') }}
         </button>
         <button
           :class="props.danger ? 'danger-button' : 'primary-button'"
@@ -70,7 +71,7 @@ onMounted(async () => {
           :disabled="props.confirmDisabled || props.busy"
           @click="emit('confirm')"
         >
-          {{ props.busy ? "正在执行" : props.confirmLabel }}
+          {{ props.busy ? t('uiRunning0a7f07') : props.confirmLabel }}
         </button>
       </footer>
     </section>
@@ -97,6 +98,8 @@ onMounted(async () => {
   border-radius: var(--radius-md);
   background: var(--surface-panel);
   box-shadow: var(--shadow-lg);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
 }
 .dialog-content { min-width: 0; }
 .dialog-content > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -105,7 +108,7 @@ p { margin: 10px 0; color: var(--text-muted); font-size: 12px; line-height: 1.55
 .dialog-icon { display: grid; width: 36px; height: 36px; place-items: center; border-radius: var(--radius-md); background: var(--danger-soft); color: var(--danger); }
 .icon-button { display: grid; width: 28px; height: 28px; place-items: center; border-radius: var(--radius-sm); background: transparent; }
 .icon-button:hover { background: var(--surface-muted); }
-footer { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; padding-top: 6px; }
+footer { grid-column: 1 / -1; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding-top: 6px; }
 footer button { min-height: 34px; padding: 0 12px; border-radius: var(--radius-md); }
 .secondary-button { border: 1px solid var(--border); background: var(--surface-panel); }
 .primary-button { background: var(--primary); color: white; }

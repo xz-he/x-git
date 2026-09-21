@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { computed, ref, watch } from "vue";
 import { defineStore } from "pinia";
 import { backendClient } from "@/lib/backend/client";
@@ -70,13 +71,13 @@ export const useTerminalStore = defineStore("terminal", () => {
       history: () => history.value.map(entry => entry.command),
       complete: async (command, cursor) => {
         const repo = useRepositoryStore(), root = repo.snapshot?.rootPath, generation = repo.generation;
-        if (!root) throw new Error("请先打开仓库。");
+        if (!root) throw new Error(t('uiOpenARepositoryFirst4f776e'));
         const completion = await backendClient.terminalComplete(root, command, cursor);
-        if (repo.snapshot?.rootPath !== root || repo.generation !== generation) throw new Error("仓库已切换。");
+        if (repo.snapshot?.rootPath !== root || repo.generation !== generation) throw new Error(t('uiRepositoryChangedf8a15c'));
         return completion;
       },
     })).then(value => {
-      if (epoch !== lifetime) { value.dispose(); throw new Error("终端会话已关闭。"); }
+      if (epoch !== lifetime) { value.dispose(); throw new Error(t('uiTerminalSessionClosed7cff3e')); }
       screen = value; screenReady.value = true; syncPrompt(); return value;
     }).finally(() => { if (creatingScreen === pending) creatingScreen = undefined; });
     creatingScreen = pending; return pending;
@@ -99,8 +100,8 @@ export const useTerminalStore = defineStore("terminal", () => {
   async function run(): Promise<void> {
     const repo = useRepositoryStore();
     if (busy.value || repo.navigationBusy || !draft.value.trim()) return;
-    if (!repo.snapshot) { error.value = { code: "invalidRepository", message: "请先打开 Git 仓库。" }; return; }
-    if (useConflictsStore().hasDirtyDrafts) { error.value = { code: "gitOperationInProgress", message: "请先保存或放弃冲突编辑草稿，再运行 Git 命令。" }; return; }
+    if (!repo.snapshot) { error.value = { code: "invalidRepository", get message() { return t('uiOpenAGitRepositoryFirsta00a3e'); } }; return; }
+    if (useConflictsStore().hasDirtyDrafts) { error.value = { code: "gitOperationInProgress", get message() { return t('uiSaveOrDiscardConflictDraftsBeforeRunningGitCommandsa785fb'); } }; return; }
     const candidate: Owner = { runId: crypto.randomUUID(), root: repo.snapshot.rootPath, generation: repo.generation, command: draft.value, startedAt: Date.now(), dispatched: false, accepted: false, terminal: false, sequence: 0, output: Promise.resolve(), input: Promise.resolve() };
     owner = candidate; runId.value = candidate.runId; status.value = "starting"; error.value = undefined; refreshError.value = undefined; result.value = undefined; cancelRequested.value = false;
     draft.value = "";
@@ -112,7 +113,7 @@ export const useTerminalStore = defineStore("terminal", () => {
       candidate.dispatched = true;
       const accepted = await backendClient.terminalStart(candidate.root, candidate.runId, candidate.command, current.cols, current.rows);
       if (!owns(candidate)) return;
-      if (accepted.runId !== candidate.runId || !sameRoot(accepted.rootPath, candidate.root)) throw new Error("终端返回了不匹配的会话。");
+      if (accepted.runId !== candidate.runId || !sameRoot(accepted.rootPath, candidate.root)) throw new Error(t('uiTheTerminalReturnedAMismatchedSessionfbbe5e'));
       accept(candidate); if (!candidate.terminal) { status.value = "running"; current.focus(); }
     } catch (cause) {
       if (!owns(candidate) || candidate.terminal) return;
@@ -154,7 +155,7 @@ export const useTerminalStore = defineStore("terminal", () => {
         result.value = event; status.value = event.cancelled ? "cancelled" : event.error || event.exitCode !== 0 ? "failed" : "completed";
         error.value = event.error ?? undefined; cancelRequested.value = false; refreshing.value = true; updateHistory(candidate);
         if (status.value === "failed") reportGitFailure({ root: candidate.root, command: candidate.command,
-          error: event.error ?? { code: "gitCommandFailed", message: `Git 命令执行失败，退出码：${event.exitCode ?? '未知'}` },
+          error: event.error ?? { code: "gitCommandFailed", message: t('msgGitCommandFailedExitCode9ed91f', { p0: event.exitCode ?? t('uiUnknownd9c32a') }) },
           output: candidate.diagnosticOutput });
         await screen?.restoreInput();
         if (owns(candidate)) await refreshOwner(candidate);

@@ -12,6 +12,7 @@ export function createTestSettings(
 ): AppSettings {
   return {
     schemaVersion: 1,
+    language: "zh-CN",
     theme: "system",
     fontFamily: "",
     codeFontFamily: "",

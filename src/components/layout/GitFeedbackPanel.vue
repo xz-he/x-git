@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { CheckCircle2, ChevronDown, ChevronUp, CircleAlert, LoaderCircle, Square, X } from "@lucide/vue";
 import { cancelFeedback, clearCompletedFeedback, dismissFeedback, feedbackExpanded, gitFeedback } from "@/lib/gitFeedback";
@@ -11,36 +12,36 @@ let timer: ReturnType<typeof setInterval> | undefined;
 const running = computed(() => gitFeedback.value.filter(item => item.status === "running").length);
 const failed = computed(() => gitFeedback.value.filter(item => ["failed", "conflicted", "warning"].includes(item.status)).length);
 const displayed = computed(() => [...gitFeedback.value.filter(item => item.status === "running"), ...gitFeedback.value.filter(item => item.status !== "running")]);
-const labels = { running: "执行中", success: "成功", failed: "失败", cancelled: "已取消", conflicted: "需处理", warning: "已执行 · 刷新失败" };
+const labels = { get running() { return t('uiRunning1f425b'); }, get success() { return t('uiSucceeded51991a'); }, get failed() { return t('uiFailed3e3c80'); }, get cancelled() { return t('uiCancelleda5ffdc'); }, get conflicted() { return t('uiActionRequireded5909'); }, get warning() { return t('uiExecutedRefreshFailed7bdafa'); } };
 onMounted(() => { timer = setInterval(() => { if (running.value) now.value = Date.now(); }, CLOCK_INTERVAL_MS); });
 onBeforeUnmount(() => { if (timer) clearInterval(timer); });
-function duration(start: number, end?: number): string { return `${Math.max(0, Math.floor(((end ?? now.value) - start) / MILLISECONDS_PER_SECOND))} 秒`; }
+function duration(start: number, end?: number): string { return t('msgS186d77', { p0: Math.max(0, Math.floor(((end ?? now.value) - start) / MILLISECONDS_PER_SECOND)) }); }
 </script>
 <template>
   <Teleport to="body">
-    <aside v-if="gitFeedback.length" class="git-feedback" aria-label="Git 操作反馈">
+    <aside v-if="gitFeedback.length" class="git-feedback" :aria-label="t('uiGitOperationFeedbackcaa6fe')">
       <header>
-        <button class="heading" :aria-expanded="feedbackExpanded" aria-label="展开或收起 Git 操作反馈" @click="feedbackExpanded = !feedbackExpanded">
+        <button class="heading" :aria-expanded="feedbackExpanded" :aria-label="t('uiExpandOrCollapseGitOperationFeedback2e81c8')" @click="feedbackExpanded = !feedbackExpanded">
           <LoaderCircle v-if="running" :size="16" class="feedback-spin" /><CircleAlert v-else-if="failed" :size="16" /><CheckCircle2 v-else :size="16" />
-          <strong>操作反馈</strong><span>{{ running ? `${running} 项进行中` : failed ? `${failed} 项需关注` : '操作已完成' }}</span>
+          <strong>{{ t('uiOperationFeedbacka9e2ac') }}</strong><span>{{ running ? t('msgRunning5d5bf5', { p0: running }) : failed ? t('msgNeedAttentionc0d0b1', { p0: failed }) : t('uiOperationCompleted43afc7') }}</span>
           <ChevronDown v-if="feedbackExpanded" :size="15" /><ChevronUp v-else :size="15" />
         </button>
-        <button v-if="feedbackExpanded" class="clear" :disabled="gitFeedback.every(item => item.status === 'running')" @click="clearCompletedFeedback">清除已结束</button>
+        <button v-if="feedbackExpanded" class="clear" :disabled="gitFeedback.every(item => item.status === 'running')" @click="clearCompletedFeedback">{{ t('uiClearFinished1090a6') }}</button>
       </header>
       <div v-if="feedbackExpanded" class="feedback-list">
         <article v-for="item in displayed" :key="item.id" :class="['feedback-item', item.status]" :data-feedback-id="item.id">
           <div class="item-title"><strong>{{ item.title }}</strong><span class="badge">{{ labels[item.status] }}</span><span class="duration">{{ duration(item.startedAt, item.finishedAt) }}</span>
-            <button v-if="item.status !== 'running'" :aria-label="`关闭${item.title}反馈`" @click="dismissFeedback(item.id)"><X :size="14" /></button>
+            <button v-if="item.status !== 'running'" :aria-label="t('msgDismissFeedbackd9898f', { p0: item.title })" @click="dismissFeedback(item.id)"><X :size="14" /></button>
           </div>
           <p class="context" :title="formatDisplayPath(item.root)">{{ formatDisplayPath(item.root) }}</p><p v-if="item.target" class="target">{{ item.target }}</p>
           <p class="message" :role="item.status === 'failed' || item.status === 'conflicted' ? 'alert' : 'status'">{{ item.message }}</p>
           <template v-if="item.status === 'running'">
-            <div class="progress-label"><span>{{ item.cancelling ? '正在停止' : item.phase ?? '等待 Git 返回进度' }}</span><span v-if="item.percent !== undefined">当前阶段 {{ item.percent }}%</span></div>
-            <div class="progress-track" role="progressbar" :aria-label="`${item.title}进度${item.phase ? '：' + item.phase : ''}`" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="item.percent" :aria-valuetext="item.percent === undefined ? '执行中，暂无百分比' : `当前阶段 ${item.percent}%`"><span :class="{ indeterminate: item.percent === undefined }" :style="item.percent === undefined ? undefined : { width: item.percent + '%' }" /></div>
-            <p v-if="item.percent === 100" class="phase-note">当前阶段已完成，等待 Git 确认最终结果…</p>
-            <button v-if="item.canCancel" class="cancel" :disabled="item.cancelling" :aria-label="`停止${item.title}`" @click="cancelFeedback(item.id)"><Square :size="12" />{{ item.cancelling ? '正在停止…' : '停止操作' }}</button>
+            <div class="progress-label"><span>{{ item.cancelling ? t('uiStoppingcaa14e') : item.phase ?? t('uiWaitingForGitProgressc3bfae') }}</span><span v-if="item.percent !== undefined">{{ t('uiCurrentPhase0a2489') }} {{ item.percent }}%</span></div>
+            <div class="progress-track" role="progressbar" :aria-label="t('msgProgressc10723', { p0: item.title, p1: item.phase ? '：' + item.phase : '' })" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="item.percent" :aria-valuetext="item.percent === undefined ? t('uiRunningNoPercentageAvailable37549c') : t('msgCurrentPhase1e63aa', { p0: item.percent })"><span :class="{ indeterminate: item.percent === undefined }" :style="item.percent === undefined ? undefined : { width: item.percent + '%' }" /></div>
+            <p v-if="item.percent === 100" class="phase-note">{{ t('uiCurrentPhaseCompleteWaitingForGitToConfirmTheFinalResultd759aa') }}</p>
+            <button v-if="item.canCancel" class="cancel" :disabled="item.cancelling" :aria-label="t('msgStop4ee028', { p0: item.title })" @click="cancelFeedback(item.id)"><Square :size="12" />{{ item.cancelling ? t('uiStoppinga6dd18') : t('uiStopOperation6224bd') }}</button>
           </template>
-          <details v-if="item.diagnostics"><summary>查看诊断信息</summary><pre>{{ item.diagnostics }}</pre></details>
+          <details v-if="item.diagnostics"><summary>{{ t('uiViewDiagnostics2c150b') }}</summary><pre>{{ item.diagnostics }}</pre></details>
         </article>
       </div>
     </aside>

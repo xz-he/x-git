@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 
 const props = defineProps<{ hasStaged: boolean }>();
@@ -82,11 +83,11 @@ onBeforeUnmount(() => { stop(); observer?.disconnect(); window.removeEventListen
 
 <template>
   <div ref="container" class="change-groups-split" :class="{ dragging }" :style="{ gridTemplateRows: `${stagedHeight}px ${HANDLE_HEIGHT}px minmax(0, 1fr)` }">
-    <div class="staged-pane" role="region" aria-label="已暂存文件区域" tabindex="0"><slot name="staged" /></div>
-    <div class="change-groups-resizer" role="separator" aria-label="调整已暂存和未暂存区域高度" aria-orientation="horizontal"
+    <div class="staged-pane" role="region" :aria-label="t('uiStagedFilesAreaefd3e6')" tabindex="0"><slot name="staged" /></div>
+    <div class="change-groups-resizer" role="separator" :aria-label="t('uiResizeStagedAndUnstagedAreasfc1b31')" aria-orientation="horizontal"
       :aria-valuemin="Math.round(minHeight)" :aria-valuemax="Math.round(maxHeight)" :aria-valuenow="Math.round(stagedHeight)" tabindex="0"
-      title="上下拖动调整高度；双击恢复默认高度" @pointerdown="start" @pointermove="move" @pointerup="stop" @pointercancel="stop" @lostpointercapture="stop" @keydown="key" @dblclick="reset"><span /></div>
-    <div class="unstaged-pane" role="region" aria-label="未暂存文件区域" tabindex="0"><slot name="unstaged" /></div>
+      :title="t('uiDragVerticallyToResizeDoubleClickToReset2beb4c')" @pointerdown="start" @pointermove="move" @pointerup="stop" @pointercancel="stop" @lostpointercapture="stop" @keydown="key" @dblclick="reset"><span /></div>
+    <div class="unstaged-pane" role="region" :aria-label="t('uiUnstagedFilesArea68b987')" tabindex="0"><slot name="unstaged" /></div>
   </div>
 </template>
 

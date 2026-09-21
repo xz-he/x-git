@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { Archive, ArchiveRestore, ArrowUpFromLine, FileQuestion, LoaderCircle, RefreshCw } from "@lucide/vue";
 import { computed, ref, watch } from "vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
@@ -23,30 +24,30 @@ function cancelPop(): void { if (!stashes.submitting) pendingPop.value = undefin
 
 <template>
   <div class="detail-body stash-detail">
-    <div v-if="!stashes.selectedEntry" class="module-state"><Archive :size="22" />未选择贮藏</div>
+    <div v-if="!stashes.selectedEntry" class="module-state"><Archive :size="22" />{{ t('uiNoStashSelected3b3ff9') }}</div>
     <template v-else>
       <section class="stash-metadata">
-        <div class="detail-title"><Archive :size="18" /><div><span>{{ stashes.selectedEntry.selector }} · {{ stashes.selectedEntry.branch ?? "未知分支" }}</span><h1 :title="stashes.selectedEntry.description">{{ stashes.selectedEntry.description }}</h1></div></div>
+        <div class="detail-title"><Archive :size="18" /><div><span>{{ stashes.selectedEntry.selector }} · {{ stashes.selectedEntry.branch ?? t('uiUnknownBranch433d75') }}</span><h1 :title="stashes.selectedEntry.description">{{ stashes.selectedEntry.description }}</h1></div></div>
         <div class="metadata"><code :title="stashes.selectedEntry.objectId">{{ stashes.selectedEntry.objectId }}</code><time :datetime="stashes.selectedEntry.timestamp">{{ stashes.selectedEntry.timestamp }}</time></div>
         <div class="stash-actions">
-          <button data-action="apply-stash" :disabled="disabled" @click="apply"><ArchiveRestore :size="14" />应用 (Apply)</button>
-          <button data-action="pop-stash" :disabled="disabled" @click="askPop"><ArrowUpFromLine :size="14" />弹出 (Pop)</button>
+          <button data-action="apply-stash" :disabled="disabled" @click="apply"><ArchiveRestore :size="14" />{{ t('uiApplyac4f76') }}</button>
+          <button data-action="pop-stash" :disabled="disabled" @click="askPop"><ArrowUpFromLine :size="14" />{{ t('uiPop6fa24a') }}</button>
         </div>
       </section>
-      <div v-if="stashes.detailLoading" class="module-state"><LoaderCircle :size="18" class="spin" />正在读取贮藏详情</div>
-      <div v-else-if="stashes.detailError" class="local-error" role="alert"><span>{{ stashes.detailError.message }}</span><button aria-label="重新读取贮藏" @click="refresh"><RefreshCw :size="14" />重新读取</button></div>
+      <div v-if="stashes.detailLoading" class="module-state"><LoaderCircle :size="18" class="spin" />{{ t('uiLoadingStashDetails8a58cc') }}</div>
+      <div v-else-if="stashes.detailError" class="local-error" role="alert"><span>{{ stashes.detailError.message }}</span><button :aria-label="t('uiReloadStash5665ff')" @click="refresh"><RefreshCw :size="14" />{{ t('uiReload778497') }}</button></div>
       <section v-else-if="stashes.detail" class="stash-files">
-        <h2>变更文件 <span>{{ stashes.detail.files.length }}</span></h2>
-        <div v-if="stashes.detail.files.length === 0" class="module-state">没有文件差异</div>
-        <button v-for="file in stashes.detail.files" :key="file.path + ':' + file.untracked" :class="{ selected: stashes.selectedFilePath === file.path && stashes.selectedFileUntracked === file.untracked }" :aria-label="'查看贮藏文件 ' + file.path + (file.untracked ? '（未跟踪）' : '')" :disabled="stashes.submitting" @click="selectFile(file.path, file.untracked)">
-          <b>{{ file.status }}</b><span :title="file.oldPath ? file.oldPath + ' → ' + file.path : file.path">{{ file.path }}</span><small v-if="file.untracked">未跟踪</small><small v-if="file.binary">二进制</small><small v-else>+{{ file.additions ?? 0 }} / -{{ file.deletions ?? 0 }}</small>
+        <h2>{{ t('uiChangedFiles33bb4a') }} <span>{{ stashes.detail.files.length }}</span></h2>
+        <div v-if="stashes.detail.files.length === 0" class="module-state">{{ t('uiNoFileChanges42ef47') }}</div>
+        <button v-for="file in stashes.detail.files" :key="file.path + ':' + file.untracked" :class="{ selected: stashes.selectedFilePath === file.path && stashes.selectedFileUntracked === file.untracked }" :aria-label="(t('uiViewStashedFile99e1cc') + ' ') + file.path + (file.untracked ? t('uiUntrackedfd295b') : '')" :disabled="stashes.submitting" @click="selectFile(file.path, file.untracked)">
+          <b>{{ file.status }}</b><span :title="file.oldPath ? file.oldPath + ' → ' + file.path : file.path">{{ file.path }}</span><small v-if="file.untracked">{{ t('uiNotTracking2f345a') }}</small><small v-if="file.binary">{{ t('uiBinary78ff74') }}</small><small v-else>+{{ file.additions ?? 0 }} / -{{ file.deletions ?? 0 }}</small>
         </button>
       </section>
-      <section class="stash-diff" aria-label="贮藏文件差异">
-        <div v-if="stashes.diffLoading" class="module-state"><LoaderCircle :size="18" class="spin" />正在加载差异</div>
-        <div v-else-if="stashes.diffError" class="local-error" role="alert"><span>{{ stashes.diffError.message }}</span><button aria-label="重试贮藏差异" @click="stashes.selectedFilePath && selectFile(stashes.selectedFilePath, stashes.selectedFileUntracked)"><RefreshCw :size="14" />重试</button></div>
-        <div v-else-if="stashes.fileDiff?.binary" class="module-state"><FileQuestion :size="20" />二进制文件无法显示文本差异</div>
-        <div v-else-if="stashes.fileDiff && !stashes.fileDiff.hunks.length" class="module-state">没有文本差异</div>
+      <section class="stash-diff" :aria-label="t('uiStashFileDiff783967')">
+        <div v-if="stashes.diffLoading" class="module-state"><LoaderCircle :size="18" class="spin" />{{ t('uiLoadingDiff59e762') }}</div>
+        <div v-else-if="stashes.diffError" class="local-error" role="alert"><span>{{ stashes.diffError.message }}</span><button :aria-label="t('uiRetryStashDiff6bc16a')" @click="stashes.selectedFilePath && selectFile(stashes.selectedFilePath, stashes.selectedFileUntracked)"><RefreshCw :size="14" />{{ t('uiRetrye2d53a') }}</button></div>
+        <div v-else-if="stashes.fileDiff?.binary" class="module-state"><FileQuestion :size="20" />{{ t('uiBinaryFilesCannotDisplayATextDiff6deddb') }}</div>
+        <div v-else-if="stashes.fileDiff && !stashes.fileDiff.hunks.length" class="module-state">{{ t('uiNoTextDiff064f06') }}</div>
         <template v-else-if="stashes.fileDiff">
           <div v-for="hunk in stashes.fileDiff.hunks" :key="hunk.index" class="readonly-hunk">
             <header>{{ hunk.header }}</header>
@@ -55,7 +56,7 @@ function cancelPop(): void { if (!stashes.submitting) pendingPop.value = undefin
         </template>
       </section>
     </template>
-    <ConfirmDialog v-if="pendingPop" title="弹出贮藏" description="仅在无冲突成功后移除此条贮藏；发生冲突时保留条目和工作区变更。" confirm-label="确认弹出" :busy="stashes.submitting" :confirm-disabled="disabled" @cancel="cancelPop" @confirm="pop">
+    <ConfirmDialog v-if="pendingPop" :title="t('uiPopStash0d142f')" :description="t('uiRemovesThisStashOnlyAfterASuccessfulApplicationWithoutConfli0dcc1d')" :confirm-label="t('uiConfirmPop7f4037')" :busy="stashes.submitting" :confirm-disabled="disabled" @cancel="cancelPop" @confirm="pop">
       <p class="pop-target">{{ pendingPop.selector }} · {{ pendingPop.description }}</p>
     </ConfirmDialog>
   </div>

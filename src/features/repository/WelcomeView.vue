@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { formatDisplayPath } from "@/lib/formatPath";
 import { repositoryPathKey } from "@/lib/repositoryPaths";
 import UpdateButton from "@/components/layout/UpdateButton.vue";
@@ -22,20 +23,20 @@ const busy = computed(() => repositories.navigationBusy);
 
 async function openRepository() {
   if (busy.value) return;
-  const path = await dialogs.selectDirectory("打开本地仓库");
+  const path = await dialogs.selectDirectory(t('uiOpenLocalRepositoryfb19d9'));
   if (path && !busy.value) await repositories.open(path).catch(() => undefined);
 }
 
 async function initRepository() {
   if (busy.value) return;
-  const path = await dialogs.selectDirectory("选择初始化目录");
+  const path = await dialogs.selectDirectory(t('uiChooseDirectoryToInitialize080d9f'));
   if (!path || busy.value) return;
-  if (!window.confirm("确认在所选目录初始化 Git 仓库？")) return;
+  if (!window.confirm(t('uiInitializeAGitRepositoryInTheSelectedDirectory170995'))) return;
   await repositories.init(path).catch(() => undefined);
 }
 
 async function chooseCloneTarget() {
-  const path = await dialogs.selectDirectory("选择克隆目标目录");
+  const path = await dialogs.selectDirectory(t('uiChooseCloneDestinationc63ef6'));
   if (path) cloneTarget.value = path;
 }
 
@@ -43,11 +44,11 @@ async function submitClone() {
   if (busy.value) return;
   formError.value = "";
   if (!cloneUrl.value.trim()) {
-    formError.value = "请输入仓库地址。";
+    formError.value = t('uiEnterARepositoryURL822b7f');
     return;
   }
   if (!cloneTarget.value) {
-    formError.value = "请选择目标目录。";
+    formError.value = t('uiChooseADestinationDirectorye3cb62');
     return;
   }
   await repositories
@@ -73,57 +74,57 @@ async function removeRecent(path: string) {
     <header class="welcome-header">
       <div class="welcome-brand">
         <img :src="appIcon" alt="" />
-        <div><h1>HQ Git</h1><p>选择一个仓库开始工作</p></div>
+        <div><h1>HQ Git</h1><p>{{ t('uiChooseARepositoryToGetStarted0b8ca8') }}</p></div>
       </div>
-      <div class="welcome-actions"><UpdateButton /><button class="icon-button settings-button" aria-label="打开设置" title="打开设置" @click="ui.settingsDialogOpen = true"><Settings :size="18" /></button></div>
+      <div class="welcome-actions"><UpdateButton /><button class="icon-button settings-button" :aria-label="t('uiOpenSettings857329')" :title="t('uiOpenSettings857329')" @click="ui.settingsDialogOpen = true"><Settings :size="18" /></button></div>
     </header>
 
-    <section v-if="repositories.snapshot" class="current-repository" aria-label="当前仓库">
+    <section v-if="repositories.snapshot" class="current-repository" :aria-label="t('uiCurrentRepositorye2a5d1')">
       <div><strong :title="repositories.snapshot.name">{{ repositories.snapshot.name }}</strong><span :title="formatDisplayPath(repositories.snapshot.rootPath)">{{ formatDisplayPath(repositories.snapshot.rootPath) }}</span></div>
-      <button aria-label="继续当前仓库" @click="ui.homeVisible = false">继续当前仓库<ArrowRight :size="16" /></button>
+      <button :aria-label="t('uiContinueWithCurrentRepository7a449d')" @click="ui.homeVisible = false">{{ t('uiContinueWithCurrentRepository7a449d') }}<ArrowRight :size="16" /></button>
     </section>
 
     <div v-if="settingsStore.migrationWarning" class="notice">
       <span>{{ settingsStore.migrationWarning }}</span>
-      <button @click="ui.settingsDialogOpen = true"><Settings :size="15" />前往设置</button>
+      <button @click="ui.settingsDialogOpen = true"><Settings :size="15" />{{ t('uiGoToSettings9ea2c9') }}</button>
     </div>
 
-    <section class="entry-actions" aria-label="仓库入口">
-      <button class="primary-action" aria-label="打开本地仓库" :disabled="busy" @click="openRepository">
-        <FolderGit2 :size="20" /><span><strong>打开仓库</strong><small>选择本地 Git 工作目录</small></span>
+    <section class="entry-actions" :aria-label="t('uiRepositoryActions3d47ce')">
+      <button class="primary-action" :aria-label="t('uiOpenLocalRepositoryfb19d9')" :disabled="busy" @click="openRepository">
+        <FolderGit2 :size="20" /><span><strong>{{ t('uiOpenRepository47f538') }}</strong><small>{{ t('uiChooseALocalGitWorkingDirectory3a5061') }}</small></span>
       </button>
-      <button aria-label="克隆远程仓库" :disabled="busy" @click="cloneOpen = true">
-        <GitFork :size="20" /><span><strong>克隆仓库</strong><small>从远程地址创建本地副本</small></span>
+      <button :aria-label="t('uiCloneRemoteRepository319bf1')" :disabled="busy" @click="cloneOpen = true">
+        <GitFork :size="20" /><span><strong>{{ t('uiCloneRepository2d9186') }}</strong><small>{{ t('uiCreateALocalCopyFromARemoteURLe5b181') }}</small></span>
       </button>
-      <button aria-label="初始化本地仓库" :disabled="busy" @click="initRepository">
-        <Plus :size="20" /><span><strong>初始化仓库</strong><small>在本地目录创建 Git 仓库</small></span>
+      <button :aria-label="t('uiInitializeLocalRepository25fb4c')" :disabled="busy" @click="initRepository">
+        <Plus :size="20" /><span><strong>{{ t('uiInitializeRepositoryc681d9') }}</strong><small>{{ t('uiCreateAGitRepositoryInALocalDirectoryf1c17b') }}</small></span>
       </button>
     </section>
 
     <section v-if="settingsStore.settings.recentRepoPaths.length" class="recent">
-      <h2>最近仓库</h2>
+      <h2>{{ t('uiRecentRepositoriesd9de82') }}</h2>
       <div class="recent-list">
         <div v-for="path in settingsStore.settings.recentRepoPaths" :key="path" class="recent-row">
-          <button class="recent-open" :disabled="busy" :title="formatDisplayPath(path)" :aria-label="'打开最近仓库 ' + formatDisplayPath(path)" @click="repositories.open(path).catch(() => undefined)">
+          <button class="recent-open" :disabled="busy" :title="formatDisplayPath(path)" :aria-label="(t('uiOpenRecentRepository4c5b8b') + ' ') + formatDisplayPath(path)" @click="repositories.open(path).catch(() => undefined)">
             <FolderGit2 :size="16" /><span><strong>{{ path.split(/[\\/]/).filter(Boolean).at(-1) }}</strong><small>{{ formatDisplayPath(path) }}</small></span>
           </button>
-          <button class="icon-button" :aria-label="'移除最近仓库 ' + formatDisplayPath(path)" title="移除" @click="removeRecent(path)"><Trash2 :size="15" /></button>
+          <button class="icon-button" :aria-label="(t('uiRemoveRecentRepositoryc0fd02') + ' ') + formatDisplayPath(path)" :title="t('uiRemove2f752c')" @click="removeRecent(path)"><Trash2 :size="15" /></button>
         </div>
       </div>
     </section>
 
     <div v-if="repositories.error" class="error-message" role="alert">
       <strong>{{ repositories.error.message }}</strong>
-      <details v-if="repositories.error.diagnostics"><summary>诊断信息</summary><pre>{{ repositories.error.diagnostics }}</pre></details>
+      <details v-if="repositories.error.diagnostics"><summary>{{ t('uiDiagnostics0b673e') }}</summary><pre>{{ repositories.error.diagnostics }}</pre></details>
     </div>
 
     <div v-if="cloneOpen" class="modal-backdrop" @click.self="cloneOpen = false">
       <section class="modal" role="dialog" aria-modal="true" aria-labelledby="clone-title">
-        <header><h2 id="clone-title">克隆仓库</h2><button class="icon-button" aria-label="关闭克隆窗口" @click="cloneOpen = false"><X :size="17" /></button></header>
-        <label>仓库地址<input v-model="cloneUrl" type="text" placeholder="https://example.com/team/repository.git" /></label>
-        <label>目标目录<div class="target-input"><input v-model="cloneTarget" type="text" readonly /><button @click="chooseCloneTarget">选择</button></div></label>
+        <header><h2 id="clone-title">{{ t('uiCloneRepository2d9186') }}</h2><button class="icon-button" :aria-label="t('uiCloseCloneDialoge5dc17')" @click="cloneOpen = false"><X :size="17" /></button></header>
+        <label>{{ t('uiRepositoryURL6b470c') }}<input v-model="cloneUrl" type="text" placeholder="https://example.com/team/repository.git" /></label>
+        <label>{{ t('uiDestinationDirectory4b86a8') }}<div class="target-input"><input v-model="cloneTarget" type="text" readonly /><button @click="chooseCloneTarget">{{ t('uiSelect70b208') }}</button></div></label>
         <p v-if="formError" class="form-error">{{ formError }}</p>
-        <footer><button @click="cloneOpen = false">取消</button><button class="primary" aria-label="开始克隆" :disabled="busy" @click="submitClone">{{ busy ? "正在克隆..." : "克隆" }}</button></footer>
+        <footer><button @click="cloneOpen = false">{{ t('uiCancel4d0b46') }}</button><button class="primary" :aria-label="t('uiStartClone38554c')" :disabled="busy" @click="submitClone">{{ busy ? t('uiCloningf68114') : t('uiClone6e6045') }}</button></footer>
       </section>
     </div>
   </main>

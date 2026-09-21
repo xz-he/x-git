@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import {
   FileCode2,
   Minus,
@@ -91,10 +92,10 @@ const allReviewSelected = computed(() => stagedFiles.value.length > 0 && selecte
 const selectedUnstagedPaths = computed(() => unstagedFiles.value.filter(file => unstagedSelection.value.has(file.path)).map(file => file.path));
 const allUnstagedSelected = computed(() => unstagedFiles.value.length > 0 && selectedUnstagedPaths.value.length === unstagedFiles.value.length);
 const reviewReason = computed(() => {
-  if (reviewBusy.value) return "请等待当前操作结束。";
-  if (!selectedReviewPaths.value.length) return "勾选文件后，仅审查这些文件的暂存变更。";
-  if (!settings.settings.apiKey.trim() || !settings.settings.baseUrl.trim() || !settings.settings.model.trim()) return "请先在设置中完成 AI 服务配置。";
-  if (!skill.ready.value) return ai.skillLoading ? "正在读取仓库审查 SKILL…" : "仓库审查 SKILL 未就绪，请在 AI 助手中检查。";
+  if (reviewBusy.value) return t('uiWaitForTheCurrentOperationToFinish799cb7');
+  if (!selectedReviewPaths.value.length) return t('uiSelectFilesToReviewOnlyTheirStagedChangesb92bf4');
+  if (!settings.settings.apiKey.trim() || !settings.settings.baseUrl.trim() || !settings.settings.model.trim()) return t('uiConfigureAnAIServiceInSettingsFirstdf7408');
+  if (!skill.ready.value) return ai.skillLoading ? t('uiReadingRepositoryReviewSKILLe27583') : t('uiRepositoryReviewSKILLIsNotReadyCheckTheAIAssistant950220');
   return "";
 });
 
@@ -182,16 +183,16 @@ async function confirmDiscard(): Promise<void> {
   <div class="changes-list table-mode" :class="{ 'drag-selecting': dragging }" @click.capture="captureSelectionClick" @dragstart.prevent>
     <ChangeFileActions ref="fileActions" />
     <div class="changes-toolbar">
-    <div class="stats-caption">{{ statsLoading ? '统计中…' : '增删行数按暂存范围统计' }}</div>
-    <div v-if="statsError" class="stats-error" role="status">行数统计失败 <button @click="statsVersion++">重试</button></div>
+    <div class="stats-caption">{{ statsLoading ? t('uiCounting0f4490') : t('uiLineCountsCoverStagedChangesb00d2f') }}</div>
+    <div v-if="statsError" class="stats-error" role="status">{{ t('uiCouldNotCountLines447b64') }} <button @click="statsVersion++">{{ t('uiRetrye2d53a') }}</button></div>
     <NoiseCleanup />
     <div v-if="changesStore.error" class="error-banner" role="alert">
       <TriangleAlert :size="15" />
       <span>{{ changesStore.error.message }}</span>
       <button
         class="icon-button"
-        aria-label="关闭错误提示"
-        title="关闭错误提示"
+        :aria-label="t('uiDismissError7cc3cc')"
+        :title="t('uiDismissError7cc3cc')"
         @click="changesStore.error = undefined"
       >
         <X :size="14" />
@@ -203,21 +204,21 @@ async function confirmDiscard(): Promise<void> {
     <template #staged>
     <section class="change-group" aria-labelledby="staged-heading">
       <header id="staged-heading">
-        <span>已暂存</span>
+        <span>{{ t('staged') }}</span>
         <strong>{{ stagedFiles.length }}</strong>
       </header>
       <div v-if="stagedFiles.length === 0" class="group-empty">
-        没有已暂存文件
+        {{ t('uiNoStagedFilesb91e25') }}
       </div>
       <div v-else class="review-selection-bar">
         <div class="review-selection-actions">
-          <label class="review-select-all"><input type="checkbox" aria-label="全选已暂存文件" :checked="allReviewSelected" :indeterminate="selectedReviewPaths.length > 0 && !allReviewSelected" :disabled="busy" @change="toggleAllReview" />全选<span>已选 {{ selectedReviewPaths.length }}</span></label>
-          <button class="review-selected-button" aria-label="批量取消暂存" :disabled="busy || !selectedReviewPaths.length" @click="unstageSelected"><Minus :size="14" />取消暂存所选</button>
-          <button class="review-selected-button" aria-label="AI 审查所选暂存文件" :title="reviewReason || '使用仓库 SKILL 审查所选文件的暂存变更'" :disabled="!!reviewReason" @click="reviewSelected"><ScanSearch :size="14" />AI 审查所选</button>
+          <label class="review-select-all"><input type="checkbox" :aria-label="t('uiSelectAllStagedFilesbd8064')" :checked="allReviewSelected" :indeterminate="selectedReviewPaths.length > 0 && !allReviewSelected" :disabled="busy" @change="toggleAllReview" />{{ t('uiSelectAll3e44b2') }}<span>{{ t('uiSelectedf24ddc') }} {{ selectedReviewPaths.length }}</span></label>
+          <button class="review-selected-button" :aria-label="t('uiUnstageSelectedFileseaed74')" :disabled="busy || !selectedReviewPaths.length" @click="unstageSelected"><Minus :size="14" />{{ t('uiUnstageSelected2fcc99') }}</button>
+          <button class="review-selected-button" :aria-label="t('uiAIReviewSelectedStagedFiles104524')" :title="reviewReason || t('uiReviewSelectedStagedChangesWithTheRepositorySKILLa48a78')" :disabled="!!reviewReason" @click="reviewSelected"><ScanSearch :size="14" />{{ t('uiAIReviewSelectedca9eba') }}</button>
         </div>
-        <small>{{ reviewReason || '仅审查所选暂存变更，使用仓库 SKILL。' }}</small>
+        <small>{{ reviewReason || t('uiReviewOnlySelectedStagedChangesWithTheRepositorySKILLecc085') }}</small>
       </div>
-      <div v-if="stagedFiles.length" class="table-heading" aria-label="已暂存文件表头"><span /><span>Path</span><span>Extension</span><span>Status</span><span>Lines added</span><span>Lines removed</span><span>操作</span></div>
+      <div v-if="stagedFiles.length" class="table-heading" :aria-label="t('uiStagedFilesHeader3a9f5b')"><span /><span>Path</span><span>Extension</span><span>Status</span><span>Lines added</span><span>Lines removed</span><span>{{ t('uiOperationf3ea6d') }}</span></div>
       <div
         v-for="file in stagedFiles"
         :key="'staged:' + file.path"
@@ -233,7 +234,7 @@ async function confirmDiscard(): Promise<void> {
             changesStore.selectedScope === 'staged',
         }"
       >
-        <input class="review-file-checkbox" type="checkbox" :aria-label="'选择已暂存文件 ' + file.path" :title="'选择已暂存文件 ' + file.path" :checked="reviewSelection.has(file.path)" :disabled="busy" @change="toggleReviewFile(file.path, $event)" />
+        <input class="review-file-checkbox" type="checkbox" :aria-label="(t('uiSelectStagedFiled7dc0b') + ' ') + file.path" :title="(t('uiSelectStagedFiled7dc0b') + ' ') + file.path" :checked="reviewSelection.has(file.path)" :disabled="busy" @change="toggleReviewFile(file.path, $event)" />
         <button
           class="file-select"
           :data-change-key="'staged:' + file.path"
@@ -251,8 +252,8 @@ async function confirmDiscard(): Promise<void> {
           <span class="table-cell deletions">{{ count(file.path, 'staged', 'deletions') }}</span>
         <button
           class="icon-button"
-          :aria-label="'取消暂存 ' + file.path"
-          :title="'取消暂存 ' + file.path"
+          :aria-label="(t('uiUnstage807956') + ' ') + file.path"
+          :title="(t('uiUnstage807956') + ' ') + file.path"
           :disabled="busy"
           @click.stop="unstage(file.path)"
         >
@@ -265,19 +266,19 @@ async function confirmDiscard(): Promise<void> {
     <template #unstaged>
     <section class="change-group" aria-labelledby="unstaged-heading">
       <header id="unstaged-heading">
-        <span>未暂存</span>
+        <span>{{ t('unstaged') }}</span>
         <strong>{{ unstagedFiles.length }}</strong>
       </header>
       <div v-if="unstagedFiles.length === 0" class="group-empty">
-        没有未暂存文件
+        {{ t('uiNoUnstagedFiles15644c') }}
       </div>
       <div v-if="unstagedFiles.length" class="review-selection-bar">
         <div class="review-selection-actions">
-          <label class="review-select-all"><input type="checkbox" aria-label="全选未暂存文件" :checked="allUnstagedSelected" :indeterminate="selectedUnstagedPaths.length > 0 && !allUnstagedSelected" :disabled="busy" @change="toggleAllUnstaged" />全选<span>已选 {{ selectedUnstagedPaths.length }}</span></label>
-          <button class="review-selected-button" aria-label="批量暂存" :disabled="busy || !selectedUnstagedPaths.length" @click="stageSelected"><Plus :size="14" />暂存所选</button>
+          <label class="review-select-all"><input type="checkbox" :aria-label="t('uiSelectAllUnstagedFiles1ae1e1')" :checked="allUnstagedSelected" :indeterminate="selectedUnstagedPaths.length > 0 && !allUnstagedSelected" :disabled="busy" @change="toggleAllUnstaged" />{{ t('uiSelectAll3e44b2') }}<span>{{ t('uiSelectedf24ddc') }} {{ selectedUnstagedPaths.length }}</span></label>
+          <button class="review-selected-button" :aria-label="t('uiStageSelectedFiles6d66ba')" :disabled="busy || !selectedUnstagedPaths.length" @click="stageSelected"><Plus :size="14" />{{ t('uiStageSelectede6191d') }}</button>
         </div>
       </div>
-      <div v-if="unstagedFiles.length" class="table-heading" aria-label="未暂存文件表头"><span /><span>Path</span><span>Extension</span><span>Status</span><span>Lines added</span><span>Lines removed</span><span>操作</span></div>
+      <div v-if="unstagedFiles.length" class="table-heading" :aria-label="t('uiUnstagedFilesHeader1db7c8')"><span /><span>Path</span><span>Extension</span><span>Status</span><span>Lines added</span><span>Lines removed</span><span>{{ t('uiOperationf3ea6d') }}</span></div>
       <div
         v-for="file in unstagedFiles"
         :key="'unstaged:' + file.path"
@@ -293,7 +294,7 @@ async function confirmDiscard(): Promise<void> {
             changesStore.selectedScope === 'unstaged',
         }"
       >
-        <input class="review-file-checkbox" type="checkbox" :aria-label="'选择未暂存文件 ' + file.path" :checked="unstagedSelection.has(file.path)" :disabled="busy" @change="toggleUnstagedFile(file.path, $event)" />
+        <input class="review-file-checkbox" type="checkbox" :aria-label="(t('uiSelectUnstagedFile513421') + ' ') + file.path" :checked="unstagedSelection.has(file.path)" :disabled="busy" @change="toggleUnstagedFile(file.path, $event)" />
         <button
           class="file-select"
           :data-change-key="'unstaged:' + file.path"
@@ -316,8 +317,8 @@ async function confirmDiscard(): Promise<void> {
         <span class="row-actions">
           <button
             class="icon-button"
-            :aria-label="'丢弃 ' + file.path"
-            :title="'丢弃 ' + file.path"
+            :aria-label="(t('uiDiscardea4899') + ' ') + file.path"
+            :title="(t('uiDiscardea4899') + ' ') + file.path"
             :disabled="busy"
             @click.stop="requestDiscard(file.path)"
           >
@@ -325,8 +326,8 @@ async function confirmDiscard(): Promise<void> {
           </button>
           <button
             class="icon-button primary-action"
-            :aria-label="'暂存 ' + file.path"
-            :title="'暂存 ' + file.path"
+            :aria-label="(t('uiStagec4755b') + ' ') + file.path"
+            :title="(t('uiStagec4755b') + ' ') + file.path"
             :disabled="busy"
             @click.stop="stage(file.path)"
           >
@@ -353,10 +354,10 @@ async function confirmDiscard(): Promise<void> {
       >
         <div class="dialog-icon"><TriangleAlert :size="20" /></div>
         <div>
-          <h2 id="discard-title">丢弃文件变更？</h2>
+          <h2 id="discard-title">{{ t('uiDiscardFileChangesdeefee') }}</h2>
           <p id="discard-description">
-            将从仓库 <strong>{{ repositoryStore.snapshot?.name }}</strong>
-            丢弃以下路径的未暂存内容：
+            {{ t('uiInRepositorya23a72') }} <strong>{{ repositoryStore.snapshot?.name }}</strong>
+            {{ t('uidiscardUnstagedContentAtTheFollowingPaths762ae9') }}
           </p>
           <code>{{ pendingDiscard }}</code>
         </div>
@@ -364,19 +365,19 @@ async function confirmDiscard(): Promise<void> {
           <button
             ref="cancelDiscardButton"
             class="secondary-button"
-            aria-label="取消丢弃"
+            :aria-label="t('uiCancelDiscardd70bf7')"
             @click="pendingDiscard = undefined"
           >
-            取消
+            {{ t('uiCancel4d0b46') }}
           </button>
           <button
             class="danger-button"
-            :aria-label="'确认丢弃 ' + pendingDiscard"
+            :aria-label="(t('uiConfirmDiscard800299') + ' ') + pendingDiscard"
             :disabled="busy"
             @click="confirmDiscard"
           >
             <Trash2 :size="15" />
-            丢弃变更
+            {{ t('uiDiscardChangesf5e8d4') }}
           </button>
         </footer>
       </section>

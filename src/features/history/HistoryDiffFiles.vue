@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { ChevronRight, Copy, FileCode, FileQuestion, LoaderCircle } from "@lucide/vue";
 import { nextTick, ref, useId, watch } from "vue";
 import { useHistoryStore } from "@/stores/history";
@@ -18,8 +19,8 @@ function toggle(path: string): void {
   else { expanded.value.add(path); load(path); }
 }
 async function copyPath(path: string): Promise<void> {
-  try { await navigator.clipboard.writeText(path); copyStatus.value = `已复制 ${path}`; }
-  catch { copyStatus.value = "复制失败，请重试。"; }
+  try { await navigator.clipboard.writeText(path); copyStatus.value = t('msgCopiedbeee3a', { p0: path }); }
+  catch { copyStatus.value = t('uiCopyFailedPleaseTryAgain7bdd9c'); }
 }
 
 watch(() => history.fileRevealVersion, async () => {
@@ -36,32 +37,32 @@ if (history.selectedFilePath && history.fileDiffs.has(history.selectedFilePath))
 </script>
 
 <template>
-  <section ref="container" class="history-diff-files" aria-label="提交文件差异">
-    <div class="files-title"><h2>变更文件 <span>{{ history.detail?.files.length ?? 0 }}</span></h2><small>左右对比 · 点击文件展开</small></div>
+  <section ref="container" class="history-diff-files" :aria-label="t('uiCommitFileDiff2459ca')">
+    <div class="files-title"><h2>{{ t('uiChangedFiles33bb4a') }} <span>{{ history.detail?.files.length ?? 0 }}</span></h2><small>{{ t('uiSideBySideClickAFileToExpanddb0b44') }}</small></div>
     <p v-if="copyStatus" class="copy-status" role="status">{{ copyStatus }}</p>
     <article v-for="(file, index) in history.detail?.files" :key="file.path" class="file-card" :data-file-path="file.path">
       <header class="file-header">
-        <button class="file-toggle" :aria-label="`查看提交文件 ${file.path}`" :aria-expanded="expanded.has(file.path)" :aria-controls="`${id}-${index}`" :title="file.oldPath ? `${file.oldPath} → ${file.path}` : file.path" @click="toggle(file.path)">
+        <button class="file-toggle" :aria-label="t('msgViewCommittedFile4c6f58', { p0: file.path })" :aria-expanded="expanded.has(file.path)" :aria-controls="`${id}-${index}`" :title="file.oldPath ? `${file.oldPath} → ${file.path}` : file.path" @click="toggle(file.path)">
           <ChevronRight :size="14" class="chevron" :class="{ expanded: expanded.has(file.path) }" />
           <FileCode :size="15" />
           <b class="file-status">{{ file.status }}</b>
           <span class="file-path">{{ file.path }}</span>
         </button>
         <div class="file-stats"><span v-if="file.additions !== null" class="added">+{{ file.additions }}</span><span v-if="file.deletions !== null" class="removed">−{{ file.deletions }}</span></div>
-        <button class="copy-path" :aria-label="`复制文件路径 ${file.path}`" title="复制文件路径" @click="copyPath(file.path)"><Copy :size="14" /></button>
+        <button class="copy-path" :aria-label="t('msgCopyFilePathd099ee', { p0: file.path })" :title="t('uiCopyFilePathfcc7a6')" @click="copyPath(file.path)"><Copy :size="14" /></button>
       </header>
       <div v-if="expanded.has(file.path)" :id="`${id}-${index}`" class="file-body">
-        <div v-if="file.oldPath && file.oldPath !== file.path" class="rename-path">重命名：{{ file.oldPath }} → {{ file.path }}</div>
-        <div v-if="history.fileLoadingPaths.has(file.path)" class="file-state" role="status"><LoaderCircle :size="18" class="spin" />正在读取文件差异…</div>
-        <div v-else-if="history.fileErrors.has(file.path)" class="file-state error" role="alert"><span>{{ history.fileErrors.get(file.path)?.message }}</span><button :aria-label="`重试文件 ${file.path}`" @click="load(file.path)">重试</button></div>
+        <div v-if="file.oldPath && file.oldPath !== file.path" class="rename-path">{{ t('uiRenamed6ca0ef') }}{{ file.oldPath }} → {{ file.path }}</div>
+        <div v-if="history.fileLoadingPaths.has(file.path)" class="file-state" role="status"><LoaderCircle :size="18" class="spin" />{{ t('uiReadingFileDiff5ba3b4') }}</div>
+        <div v-else-if="history.fileErrors.has(file.path)" class="file-state error" role="alert"><span>{{ history.fileErrors.get(file.path)?.message }}</span><button :aria-label="t('msgRetryFileb628c1', { p0: file.path })" @click="load(file.path)">{{ t('uiRetrye2d53a') }}</button></div>
         <template v-else-if="history.fileDiffs.has(file.path)">
-          <div v-if="history.fileDiffs.get(file.path)!.binary" class="file-state"><FileQuestion :size="20" />二进制文件无法显示文本差异</div>
+          <div v-if="history.fileDiffs.get(file.path)!.binary" class="file-state"><FileQuestion :size="20" />{{ t('uiBinaryFilesCannotDisplayATextDiff6deddb') }}</div>
           <SplitDiff v-else-if="history.fileDiffs.get(file.path)!.hunks.length" :hunks="history.fileDiffs.get(file.path)!.hunks" />
-          <div v-else class="file-state">无文本差异（可能仅文件名或权限发生变化）</div>
+          <div v-else class="file-state">{{ t('uiNoTextDiffOnlyTheNameOrPermissionsMayHaveChanged334124') }}</div>
         </template>
       </div>
     </article>
-    <div v-if="!history.detail?.files.length" class="file-state">此提交没有变更文件</div>
+    <div v-if="!history.detail?.files.length" class="file-state">{{ t('uiThisCommitHasNoChangedFilesedca64') }}</div>
   </section>
 </template>
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { computed } from "vue";
 import { ArrowRight, GitBranch, Tag } from "@lucide/vue";
 
@@ -43,28 +44,28 @@ function openHistory(reference: string): void {
 <template>
   <div class="detail-body ref-detail">
     <template v-if="props.mode === 'branches' && branch">
-      <div class="detail-title"><GitBranch :size="18" /><div><span>{{ branch.kind === "local" ? "本地分支" : "远程分支" }}</span><h1>{{ branch.name }}</h1></div></div>
+      <div class="detail-title"><GitBranch :size="18" /><div><span>{{ branch.kind === "local" ? t('uiLocalBranch9fdfe9') : t('uiRemoteBranch9072f8') }}</span><h1>{{ branch.name }}</h1></div></div>
       <dl>
-        <div><dt>最新提交</dt><dd><code>{{ branch.tip.shortHash }}</code> {{ branch.tip.subject }}</dd></div>
-        <div><dt>作者</dt><dd>{{ branch.tip.author }}</dd></div>
-        <div><dt>提交时间</dt><dd>{{ branch.tip.authoredAt }}</dd></div>
-        <div v-if="branch.upstream"><dt>上游</dt><dd>{{ branch.upstream }}</dd></div>
-        <div v-if="branch.ahead !== undefined || branch.behind !== undefined"><dt>同步状态</dt><dd>领先 {{ branch.ahead ?? 0 }} · 落后 {{ branch.behind ?? 0 }}</dd></div>
+        <div><dt>{{ t('uiLatestCommitdfcc7b') }}</dt><dd><code>{{ branch.tip.shortHash }}</code> {{ branch.tip.subject }}</dd></div>
+        <div><dt>{{ t('uiAuthor698bea') }}</dt><dd>{{ branch.tip.author }}</dd></div>
+        <div><dt>{{ t('uiCommitDatee2ecfd') }}</dt><dd>{{ branch.tip.authoredAt }}</dd></div>
+        <div v-if="branch.upstream"><dt>{{ t('uiUpstreamed38f4') }}</dt><dd>{{ branch.upstream }}</dd></div>
+        <div v-if="branch.ahead !== undefined || branch.behind !== undefined"><dt>{{ t('uiSyncStatus015020') }}</dt><dd>{{ t('uiAheada6d477') }} {{ branch.ahead ?? 0 }} {{ t('uiBehindbe32a3') }} {{ branch.behind ?? 0 }}</dd></div>
       </dl>
       <BranchActionDialogs :branch="branch" />
-      <button class="primary-action" :aria-label="`在提交记录中查看 ${branch.name}`" @click="openHistory(branch.fullName)">在提交记录中查看<ArrowRight :size="15" /></button>
+      <button class="primary-action" :aria-label="t('msgViewInHistorydfc020', { p0: branch.name })" @click="openHistory(branch.fullName)">{{ t('uiViewInHistorya60753') }}<ArrowRight :size="15" /></button>
     </template>
     <template v-else-if="props.mode === 'tags' && tag">
-      <div class="detail-title"><Tag :size="18" /><div><span>{{ tag.annotated ? "附注标签" : "轻量标签" }}</span><h1>{{ tag.name }}</h1></div></div>
+      <div class="detail-title"><Tag :size="18" /><div><span>{{ tag.annotated ? t('uiAnnotatedTagd0bb33') : t('uiLightweightTag9f0a5e') }}</span><h1>{{ tag.name }}</h1></div></div>
       <p v-if="tag.annotation" class="annotation">{{ tag.annotation }}</p>
       <dl>
-        <div><dt>提交</dt><dd><code>{{ tag.peeledCommitHash.slice(0, 7) }}</code> {{ tag.commitSubject }}</dd></div>
-        <div v-if="tag.tagger"><dt>创建者</dt><dd>{{ tag.tagger }}</dd></div>
-        <div v-if="tag.taggedAt"><dt>创建时间</dt><dd>{{ tag.taggedAt }}</dd></div>
+        <div><dt>{{ t('commit') }}</dt><dd><code>{{ tag.peeledCommitHash.slice(0, 7) }}</code> {{ tag.commitSubject }}</dd></div>
+        <div v-if="tag.tagger"><dt>{{ t('uiCreator40f51f') }}</dt><dd>{{ tag.tagger }}</dd></div>
+        <div v-if="tag.taggedAt"><dt>{{ t('uiCreatedAt84e380') }}</dt><dd>{{ tag.taggedAt }}</dd></div>
       </dl>
-      <button class="primary-action" :aria-label="`在提交记录中查看 ${tag.name}`" @click="openHistory(`refs/tags/${tag.name}`)">在提交记录中查看<ArrowRight :size="15" /></button>
+      <button class="primary-action" :aria-label="t('msgViewInHistorydfc020', { p0: tag.name })" @click="openHistory(`refs/tags/${tag.name}`)">{{ t('uiViewInHistorya60753') }}<ArrowRight :size="15" /></button>
     </template>
-    <div v-else class="module-state">选择一个{{ props.mode === "tags" ? "标签" : "分支" }}</div>
+    <div v-else class="module-state">{{ t('uiSelectA791164') }}{{ props.mode === "tags" ? t('tags') : t('branches') }}</div>
     <BranchActionDialogs v-if="props.mode === 'branches' && !branch" />
   </div>
 </template>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import {
   Check,
   CircleAlert,
@@ -73,66 +74,66 @@ function retry(): void {
       <CircleAlert :size="16" />
       <span>{{ ai.error.message }}</span>
       <button
-        aria-label="重新生成提交信息"
+        :aria-label="t('uiRegenerateCommitMessage2c80c7')"
         :disabled="retrying"
         @click="retry"
       >
-        <RefreshCw :size="14" />重试
+        <RefreshCw :size="14" />{{ t('uiRetrye2d53a') }}
       </button>
     </div>
     <div v-else-if="ai.status === 'cancelled'" class="state-banner">
       <CircleAlert :size="16" />
-      <span>生成已停止，当前草稿不会填入提交框。</span>
+      <span>{{ t('uiGenerationStoppedThisDraftWillNotBeInsertedIntoTheCommitFiel6c2ad9') }}</span>
       <button
-        aria-label="重新生成提交信息"
+        :aria-label="t('uiRegenerateCommitMessage2c80c7')"
         :disabled="retrying"
         @click="retry"
       >
-        <RefreshCw :size="14" />重新生成
+        <RefreshCw :size="14" />{{ t('uiRegenerate2e1905') }}
       </button>
     </div>
 
     <section class="preview-section" aria-labelledby="commit-preview-heading">
       <header>
         <div>
-          <strong id="commit-preview-heading">提交信息草稿</strong>
-          <span v-if="ai.status === 'starting' || ai.status === 'running'">生成中</span>
-          <span v-else-if="ai.status === 'completed'" class="complete"><Check :size="12" />已完成</span>
+          <strong id="commit-preview-heading">{{ t('uiCommitMessageDraft09a9f4') }}</strong>
+          <span v-if="ai.status === 'starting' || ai.status === 'running'">{{ t('uiGenerating57c08c') }}</span>
+          <span v-else-if="ai.status === 'completed'" class="complete"><Check :size="12" />{{ t('uiCompletede99b48') }}</span>
         </div>
-        <small>{{ ai.context?.stagedFileCount ?? 0 }} 个已暂存文件</small>
+        <small>{{ ai.context?.stagedFileCount ?? 0 }} {{ t('uistagedFilesac70d0') }}</small>
       </header>
       <textarea
         v-model="ai.commitPreview"
-        aria-label="AI 提交信息草稿"
+        :aria-label="t('uiAICommitMessageDraftd58236')"
         maxlength="500"
         rows="8"
         spellcheck="false"
-        placeholder="正在生成提交信息..."
+        :placeholder="t('uiGeneratingCommitMessage725e6b')"
       />
       <p
         v-if="ai.status === 'completed' && ai.commitPreview.trim() && !validPreview"
         class="validation-error"
         role="alert"
       >
-        不符合 Conventional Commit 格式，请修改后再填入。
+        {{ t('uiNotAValidConventionalCommitEditBeforeInserting29ff86') }}
       </p>
     </section>
 
     <dl class="metadata">
       <div>
-        <dt><Fingerprint :size="13" />暂存指纹</dt>
-        <dd :title="fingerprint">{{ fingerprint || "等待上下文" }}</dd>
+        <dt><Fingerprint :size="13" />{{ t('uiIndexFingerprint596376') }}</dt>
+        <dd :title="fingerprint">{{ fingerprint || t('uiWaitingForContext9dc4da') }}</dd>
       </div>
     </dl>
 
     <button
       class="apply-button"
-      aria-label="填入提交框"
+      :aria-label="t('uiInsertIntoCommitFielda28ea6')"
       :disabled="!canApply"
       @click="requestApply"
     >
       <FileInput :size="16" />
-      填入提交框
+      {{ t('uiInsertIntoCommitFielda28ea6') }}
     </button>
 
     <div
@@ -150,15 +151,15 @@ function retry(): void {
       >
         <div class="dialog-icon"><FileInput :size="19" /></div>
         <div class="dialog-copy">
-          <h2 id="replace-title">替换现有提交信息？</h2>
-          <p id="replace-description">提交框中已有草稿，替换后原内容将被覆盖。</p>
+          <h2 id="replace-title">{{ t('uiReplaceTheCurrentCommitMessagea3e497') }}</h2>
+          <p id="replace-description">{{ t('uiTheCommitFieldAlreadyContainsADraftReplacingItWillOverwriteTe24a80') }}</p>
           <dl>
             <div>
-              <dt>现有草稿</dt>
+              <dt>{{ t('uiCurrentDraftcaea1c') }}</dt>
               <dd>{{ existingSubject }}</dd>
             </div>
             <div>
-              <dt>生成内容</dt>
+              <dt>{{ t('uiGeneratedContent7523b0') }}</dt>
               <dd>{{ generatedSubject }}</dd>
             </div>
           </dl>
@@ -167,17 +168,17 @@ function retry(): void {
           <button
             ref="keepButton"
             class="secondary-button"
-            aria-label="保留原内容"
+            :aria-label="t('uiKeepCurrentText9bf070')"
             @click="confirmingReplacement = false"
           >
-            保留原内容
+            {{ t('uiKeepCurrentText9bf070') }}
           </button>
           <button
             class="primary-button"
-            aria-label="替换提交信息"
+            :aria-label="t('uiReplaceCommitMessageda4496')"
             @click="replaceCommitMessage"
           >
-            替换提交信息
+            {{ t('uiReplaceCommitMessageda4496') }}
           </button>
         </footer>
       </section>

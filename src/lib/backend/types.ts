@@ -472,6 +472,7 @@ export interface RevertRequest {
 
 export interface HistoryMutationResult extends MutationWorkspace {
   history: HistoryPage;
+  error?: BackendError | null;
 }
 
 export interface CommitResult {
@@ -615,6 +616,7 @@ export interface AiRunEvent {
 
 export interface AppSettings {
   schemaVersion: number;
+  language: "zh-CN" | "en" | "bilingual";
   theme: ThemePreference;
   fontFamily: string;
   codeFontFamily: string;

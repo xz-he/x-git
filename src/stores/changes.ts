@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { defineStore } from "pinia";
 import { ref } from "vue";
 
@@ -57,7 +58,7 @@ export const useChangesStore = defineStore("changes", () => {
     if (!rootPath) {
       throw {
         code: "invalidRepository",
-        message: "请先打开 Git 仓库。",
+        get message() { return t('uiOpenAGitRepositoryFirsta00a3e'); },
       } satisfies BackendError;
     }
     return rootPath;
@@ -68,7 +69,7 @@ export const useChangesStore = defineStore("changes", () => {
     action: () => Promise<T>,
   ): Promise<T> {
     if (kind !== "load" && kind !== "diff" && useTerminalStore().busy) {
-      throw { code: "gitOperationInProgress", message: "请等待终端命令结束后再操作。" } satisfies BackendError;
+      throw { code: "gitOperationInProgress", get message() { return t('uiWaitForTheTerminalCommandToFinishFirst1978aa'); } } satisfies BackendError;
     }
     operation.value = { kind };
     error.value = undefined;
@@ -149,7 +150,7 @@ export const useChangesStore = defineStore("changes", () => {
     );
     if (!isCurrentlyStaged) {
       highlightedLine.value = undefined;
-      navigationError.value = "该位置已不在当前已暂存变更中。";
+      navigationError.value = t('uiThisLocationIsNoLongerPartOfTheStagedChanges50ded4');
       return false;
     }
 

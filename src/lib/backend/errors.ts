@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import type { BackendError, BackendErrorCode } from "./types";
 
 const knownCodes = new Set<BackendErrorCode>([
@@ -62,6 +63,6 @@ export function normalizeBackendError(error: unknown): BackendError {
 
   return {
     code: "unexpected",
-    message: "发生未知错误。",
+    get message() { return t('uiAnUnknownErrorOccurred211ee5'); },
   };
 }

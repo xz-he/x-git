@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { computed, ref, watch } from "vue";
 import { ScanLine, LoaderCircle } from "@lucide/vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
@@ -54,7 +55,9 @@ async function restore(): Promise<void> {
   try {
     const result = await changes.restoreNoise(selectedFiles.value.map(file => ({ ...file })));
     if (version !== revision) return;
-    message.value = `已还原 ${result.restored.length} 个文件${result.skipped.length ? `，${result.skipped.length} 个未还原，请重新检测。` : '。'}`;
+    message.value = result.skipped.length
+      ? t('noiseRestorePartial', { restored: result.restored.length, skipped: result.skipped.length })
+      : t('noiseRestoreComplete', { count: result.restored.length });
     // Fingerprints are single-use: index changes invalidate the previous scan.
     report.value = { candidates: [], skipped: result.skipped };
     selected.value = new Set();
@@ -69,23 +72,23 @@ async function restore(): Promise<void> {
 
 <template>
   <div class="noise-cleanup">
-    <button class="scan-button" aria-label="检测无实质变更" :disabled="busy || !changes.snapshot?.files.length" @click="scan">
+    <button class="scan-button" :aria-label="t('uiDetectNonSubstantiveChangesdeff45')" :disabled="busy || !changes.snapshot?.files.length" @click="scan">
       <LoaderCircle v-if="scanning" :size="14" class="spinning" /><ScanLine v-else :size="14" />
-      {{ scanning ? '正在检测…' : '检测无实质变更' }}
+      {{ scanning ? t('uiScanning0eda54') : t('uiDetectNonSubstantiveChangesdeff45') }}
     </button>
     <small v-if="message" role="status">{{ message }}</small>
   </div>
-  <ConfirmDialog v-if="opened" title="还原仅换行符变更" description="仅处理整份文件内容一致、只存在 CRLF/LF 换行差异的变更。已暂存候选会同时还原暂存区和工作区到 HEAD；未暂存候选还原到暂存版本。不生成新提交。" confirm-label="还原所选文件" :confirm-disabled="!selectedFiles.length || repositories.navigationBusy" :busy="restoring" danger @cancel="!restoring && (opened = false)" @confirm="restore">
+  <ConfirmDialog v-if="opened" :title="t('uiRestoreLineEndingOnlyChangesae95d3')" :description="t('uiOnlyHandlesFilesWhoseEntireContentIsUnchangedExceptForCRLFLFe2b3bd')" :confirm-label="t('uiRestoreSelectedFiles06a343')" :confirm-disabled="!selectedFiles.length || repositories.navigationBusy" :busy="restoring" danger @cancel="!restoring && (opened = false)" @confirm="restore">
     <div class="noise-report">
-      <p>可还原 {{ report?.candidates.length ?? 0 }} 个 · 已选 {{ selectedFiles.length }} 个</p>
-      <p v-if="report && !report.candidates.length">没有可安全批量还原的文件。</p>
+      <p>{{ t('uiRestorable479b76') }} {{ report?.candidates.length ?? 0 }} {{ t('uiSelected8f8c98') }} {{ selectedFiles.length }} {{ t('uiitemsf7b2a6') }}</p>
+      <p v-if="report && !report.candidates.length">{{ t('uiNoFilesCanBeSafelyRestoredInBulk5af8c3') }}</p>
       <label v-for="file in report?.candidates ?? []" :key="file.path" class="noise-file">
-        <input type="checkbox" :aria-label="'还原 ' + file.path" :checked="selected.has(file.path)" :disabled="restoring" @change="toggle(file.path, $event)" />
-        <span>{{ file.path }}<small>{{ file.staged ? '暂存区 + 工作区 → HEAD' : '工作区 → 暂存版本' }} · 仅换行符或字节一致</small></span>
+        <input type="checkbox" :aria-label="(t('uiRestore457d44') + ' ') + file.path" :checked="selected.has(file.path)" :disabled="restoring" @change="toggle(file.path, $event)" />
+        <span>{{ file.path }}<small>{{ file.staged ? t('uiIndexWorkingTreeHEAD44627f') : t('uiWorkingTreeIndex3684fc') }} {{ t('uiOnlyLineEndingsDifferOrBytesAreIdenticald8e918') }}</small></span>
       </label>
-      <details v-if="report?.skipped.length"><summary>不自动还原（{{ report.skipped.length }}）</summary><p v-for="file in report.skipped" :key="file.path"><strong>{{ file.path }}</strong><br />{{ file.reason }}</p></details>
-      <p>空格、缩进、末尾空行和编码变化不等于无效改动，均不会自动丢弃。确认前请停止外部编辑器写入。</p>
-      <p v-if="changes.error" role="alert" class="noise-error">{{ changes.error.message }} 请关闭后重新检测。</p>
+      <details v-if="report?.skipped.length"><summary>{{ t('uiNotRestoredAutomatically507a45') }}{{ report.skipped.length }}）</summary><p v-for="file in report.skipped" :key="file.path"><strong>{{ file.path }}</strong><br />{{ file.reason }}</p></details>
+      <p>{{ t('uiWhitespaceIndentationTrailingBlankLinesAndEncodingChangesAre839c5e') }}</p>
+      <p v-if="changes.error" role="alert" class="noise-error">{{ changes.error.message }} {{ t('uiCloseAndScanAgaind59275') }}</p>
     </div>
   </ConfirmDialog>
 </template>

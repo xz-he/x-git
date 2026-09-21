@@ -327,4 +327,26 @@ describe("history store", () => {
     expect(store.commits).toEqual(authoritative.commits);
     expect(store.loading).toBe(false);
   });
+
+  it("applies cherry-pick conflict state before reporting retained unstaged backup", async () => {
+    const failure = { code: "gitConflict" as const, message: "Local changes retained in stash backup" };
+    const result: HistoryMutationResult = {
+      workspace: {
+        repository: { rootPath: "C:/repo", name: "repo", currentBranch: "release", headShortHash: "1234567", isClean: false, changedFileCount: 1, conflictCount: 1, remotes: [], upstream: null },
+        changes: { files: [], stagedCount: 0, unstagedCount: 1 },
+      },
+      history: page([commit(1)], null),
+      operationState: { kind: "cherryPick", conflicts: [], abortAction: "cherryPick" },
+      error: failure,
+    };
+    vi.mocked(backend.historyCherryPick).mockResolvedValue(result);
+    useRepositoryStore().snapshot = { ...result.workspace.repository, currentBranch: "main" };
+    const store = useHistoryStore();
+    store.resetForRepository("C:/repo", 1);
+    await expect(store.cherryPick({ commit: commit(1).hash, targetBranch: "release", returnAfterSuccess: true })).rejects.toEqual(failure);
+    expect(store.error).toEqual(failure);
+    expect(useRepositoryStore().snapshot?.currentBranch).toBe("release");
+    expect(useOperationStore().state.kind).toBe("cherryPick");
+    expect(store.submitting).toBe(false);
+  });
 });

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { FileSearch, RefreshCw, Copy } from "@lucide/vue";
 import { computed, ref } from "vue";
 import type { AiReviewIssue } from "@/lib/backend/types";
@@ -21,7 +22,7 @@ const navigationError = ref("");
 const copyStatus = ref("");
 const copying = ref(false);
 const result = computed(() => ai.status === "completed" ? ai.reviewResult : ai.partialReviewResult);
-const reportSummary = computed(() => ai.status === "completed" ? result.value?.summary ?? "" : `审查未完成（${ai.completedBatchCount}/${ai.totalBatchCount} 批）\n${result.value?.summary ?? ""}`);
+const reportSummary = computed(() => ai.status === "completed" ? result.value?.summary ?? "" : t('msgReviewIncompleteBatches52f716', { p0: ai.completedBatchCount, p1: ai.totalBatchCount, p2: result.value?.summary ?? "" }));
 const frozen = computed(() => result.value?.context ?? ai.context?.review ?? undefined);
 const source = computed(() => frozen.value?.source ?? ai.reviewSource);
 const issues = computed(() => ai.partialIssues.map((issue, index) => ({ issue, index }))
@@ -52,7 +53,7 @@ async function reveal(issue: AiReviewIssue): Promise<void> {
       await changes.revealStagedLine(issue.path, line);
     }
   } catch {
-    navigationError.value = "无法打开该审查位置，请刷新提交或文件后重试。";
+    navigationError.value = t('uiCouldNotOpenThisReviewLocationRefreshTheCommitOrFileAndTryAgd34792');
   } finally { navigating.value = false; }
 }
 
@@ -69,39 +70,39 @@ async function copyReport(): Promise<void> {
   copyStatus.value = "";
   try {
     await navigator.clipboard.writeText(reviewReport(issues.value, source.value, frozen.value, reportSummary.value, warnings.value, uncovered.value, result.value?.reviewedFiles, skippedBinaries.value));
-    copyStatus.value = "审查结果已复制。";
-  } catch { copyStatus.value = "复制失败，请重试。"; }
+    copyStatus.value = t('uiReviewResultsCopied0c0353');
+  } catch { copyStatus.value = t('uiCopyFailedPleaseTryAgain7bdd9c'); }
   finally { copying.value = false; }
 }
 </script>
 
 <template>
   <div class="review-view">
-    <section class="review-context" aria-label="本次审查范围">
-      <strong>{{ source?.kind === 'commit' ? '历史提交审查' : source?.kind === 'stagedFiles' ? '所选暂存文件审查' : '已暂存变更审查' }}</strong>
-      <template v-if="source?.kind === 'commit'"><code>{{ frozen?.resolvedCommit ?? source.revision }}</code><span>比较基准：{{ frozen ? frozen.baseCommit ?? '空树（首次提交）' : '正在解析第一父提交' }}</span><small>合并提交按第一父提交比较；相关证据取自历史快照。</small></template>
-      <small v-else>仅审查已暂存变更；按需读取索引中的相关定义作为证据。</small>
-      <details v-if="source?.kind === 'stagedFiles'" open><summary>所选文件（{{ source.paths.length }}）</summary><ul class="selected-review-paths"><li v-for="path in source.paths" :key="path">{{ path }}</li></ul><small>只审查上述文件的暂存变更；重命名包含对应旧路径。其他索引文件仅按需作为相关证据。</small></details>
-      <template v-if="frozen"><span>变更文件：{{ frozen.changedFileCount }} · 规则：{{ frozen.skill.directory }}/SKILL.md</span><span>{{ frozen.skill.name }} {{ frozen.skill.version }}</span><details><summary>本次规则与证据来源</summary><code>规则指纹：{{ frozen.skill.fingerprint }}</code><ul><li v-for="file in frozen.skill.files" :key="file">{{ file }}</li></ul><ul v-if="frozen.evidenceSources.length"><li v-for="entry in frozen.evidenceSources" :key="`${entry.path}:${entry.startLine}:${entry.revision}`"><code>{{ entry.path }}:{{ entry.startLine }}–{{ entry.endLine }} @ {{ entry.revision }}</code></li></ul></details></template>
+    <section class="review-context" :aria-label="t('uiReviewScope00ba71')">
+      <strong>{{ source?.kind === 'commit' ? t('uiCommitReview85cfa0') : source?.kind === 'stagedFiles' ? t('uiSelectedStagedFilesReview88649d') : t('uiStagedChangesReview95ae0d') }}</strong>
+      <template v-if="source?.kind === 'commit'"><code>{{ frozen?.resolvedCommit ?? source.revision }}</code><span>{{ t('uiComparedWith2b1cdd') }}{{ frozen ? frozen.baseCommit ?? t('uiEmptyTreeInitialCommitb82617') : t('uiResolvingFirstParentbfa5cb') }}</span><small>{{ t('uiMergeCommitsAreComparedWithTheirFirstParentEvidenceComesFrom8544d6') }}</small></template>
+      <small v-else>{{ t('uiReviewsStagedChangesOnlyRelatedDefinitionsAreReadFromTheInde826afc') }}</small>
+      <details v-if="source?.kind === 'stagedFiles'" open><summary>{{ t('uiSelectedFiles6db64a') }}{{ source.paths.length }}）</summary><ul class="selected-review-paths"><li v-for="path in source.paths" :key="path">{{ path }}</li></ul><small>{{ t('uiReviewsOnlyStagedChangesInTheFilesAboveIncludingOriginalPath5542e4') }}</small></details>
+      <template v-if="frozen"><span>{{ t('uiChangedFiles4e7b91') }}{{ frozen.changedFileCount }} {{ t('uiRulesde2be5') }}{{ frozen.skill.directory }}/SKILL.md</span><span>{{ frozen.skill.name }} {{ frozen.skill.version }}</span><details><summary>{{ t('uiRulesAndEvidenceSources31d499') }}</summary><code>{{ t('uiRulesFingerprint4c4f14') }}{{ frozen.skill.fingerprint }}</code><ul><li v-for="file in frozen.skill.files" :key="file">{{ file }}</li></ul><ul v-if="frozen.evidenceSources.length"><li v-for="entry in frozen.evidenceSources" :key="`${entry.path}:${entry.startLine}:${entry.revision}`"><code>{{ entry.path }}:{{ entry.startLine }}–{{ entry.endLine }} @ {{ entry.revision }}</code></li></ul></details></template>
     </section>
 
-    <div v-if="ai.status === 'failed' && ai.error" class="state-banner error" role="alert"><span>{{ ai.error.message }}</span><button aria-label="重试审查" :disabled="retrying || wrongRoot" @click="retry"><RefreshCw :size="14" />重试</button></div>
-    <div v-else-if="ai.status === 'cancelled'" class="state-banner"><span>已停止，保留已完成的审查结果。</span><button aria-label="重新审查" :disabled="retrying || wrongRoot" @click="retry"><RefreshCw :size="14" />重新审查</button></div>
-    <details v-if="ai.status === 'failed' && ai.error?.diagnostics" class="error-details"><summary>查看失败原因</summary><pre>{{ ai.error.diagnostics }}</pre></details>
-    <p v-if="wrongRoot" class="error">此结果属于其他仓库，无法在当前仓库定位。</p>
+    <div v-if="ai.status === 'failed' && ai.error" class="state-banner error" role="alert"><span>{{ ai.error.message }}</span><button :aria-label="t('uiRetryReview658592')" :disabled="retrying || wrongRoot" @click="retry"><RefreshCw :size="14" />{{ t('uiRetrye2d53a') }}</button></div>
+    <div v-else-if="ai.status === 'cancelled'" class="state-banner"><span>{{ t('uiStoppedCompletedReviewResultsHaveBeenKepte44f71') }}</span><button :aria-label="t('uiReviewAgain1d68a5')" :disabled="retrying || wrongRoot" @click="retry"><RefreshCw :size="14" />{{ t('uiReviewAgain1d68a5') }}</button></div>
+    <details v-if="ai.status === 'failed' && ai.error?.diagnostics" class="error-details"><summary>{{ t('uiViewFailureDetailsc0f740') }}</summary><pre>{{ ai.error.diagnostics }}</pre></details>
+    <p v-if="wrongRoot" class="error">{{ t('uiThisResultBelongsToAnotherRepositoryAndCannotBeLocatedHere1c423c') }}</p>
     <p v-if="navigationError || changes.navigationError" class="error" role="alert">{{ navigationError || changes.navigationError }}</p>
 
-    <section v-if="issues.length" class="findings" aria-label="审查问题"><ReviewFinding v-for="(issue, index) in issues" :key="`${issue.path}:${issue.startLine}:${index}`" :issue="issue" :navigation-disabled="navigating || wrongRoot || repositories.navigationBusy" @reveal="reveal" /></section>
-    <section v-else-if="ai.status === 'completed'" class="empty-state" aria-label="审查完成"><FileSearch :size="24" /><strong>未发现需要处理的问题</strong><span>{{ result?.summary }}</span><small>结论仅适用于已审范围，未覆盖部分见下方。</small></section>
-    <section v-else-if="ai.running" class="empty-state" aria-label="正在审查"><FileSearch :size="24" /><strong>正在审查{{ source?.kind === 'commit' ? '历史提交' : '已暂存变更' }}</strong><span>{{ ai.progressMessage || '结果会按批次显示' }}</span></section>
+    <section v-if="issues.length" class="findings" :aria-label="t('uiReviewFindings19460b')"><ReviewFinding v-for="(issue, index) in issues" :key="`${issue.path}:${issue.startLine}:${index}`" :issue="issue" :navigation-disabled="navigating || wrongRoot || repositories.navigationBusy" @reveal="reveal" /></section>
+    <section v-else-if="ai.status === 'completed'" class="empty-state" :aria-label="t('uiReviewComplete544b13')"><FileSearch :size="24" /><strong>{{ t('uiNoIssuesRequiringActionFound0534f0') }}</strong><span>{{ result?.summary }}</span><small>{{ t('uiThisConclusionAppliesOnlyToReviewedContentSeeUncoveredAreasBb75ba0') }}</small></section>
+    <section v-else-if="ai.running" class="empty-state" :aria-label="t('uiReviewingb0742f')"><FileSearch :size="24" /><strong>{{ t('uiReviewingb0742f') }}{{ source?.kind === 'commit' ? t('uiHistoricalCommite60d56') : t('uiStagedChanges2fe2df') }}</strong><span>{{ ai.progressMessage || t('uiResultsAppearInBatches343095') }}</span></section>
 
-    <p v-if="result && ai.status !== 'completed'" class="state-banner">审查未完成（{{ ai.completedBatchCount }}/{{ ai.totalBatchCount }} 批），以下仅包含已完成部分。</p>
-    <section v-if="result" class="compact-list" aria-label="实际已审文件"><h3>实际已审文件（{{ result.reviewedFiles.length }}）</h3><ul v-if="result.reviewedFiles.length"><li v-for="path in result.reviewedFiles" :key="path">{{ path }}</li></ul><p v-else>无已审文件。</p></section>
-    <section v-if="result" class="compact-list"><h3>未覆盖范围</h3><ul v-if="uncovered.length"><li v-for="item in uncovered" :key="item">{{ item }}</li></ul><p v-else>无额外报告；不代表覆盖未提供的代码。</p></section>
-    <section v-if="skippedBinaries.length" class="compact-list"><h3>已跳过二进制文件</h3><ul><li v-for="path in skippedBinaries" :key="path">{{ path }}</li></ul></section>
-    <section v-if="frozen?.excludedFiles.length" class="compact-list"><h3>按技能排除的构建产物</h3><ul><li v-for="path in frozen.excludedFiles" :key="path">{{ path }}</li></ul></section>
-    <section v-if="warnings.length" class="compact-list warnings"><h3>审查提示</h3><ul><li v-for="warning in warnings" :key="warning">{{ warning }}</li></ul></section>
-    <div v-if="issues.length || result" class="copy-result"><button aria-label="复制审查结果" :disabled="copying" @click="copyReport"><Copy :size="14" />复制审查结果</button><small role="status">{{ copyStatus }}</small></div>
+    <p v-if="result && ai.status !== 'completed'" class="state-banner">{{ t('uiReviewIncomplete4ee5ac') }}{{ ai.completedBatchCount }}/{{ ai.totalBatchCount }} {{ t('uibatchesOnlyCompletedResultsAreShownBelowf58c0e') }}</p>
+    <section v-if="result" class="compact-list" :aria-label="t('uiReviewedFilesff189d')"><h3>{{ t('uiReviewedFilesb08701') }}{{ result.reviewedFiles.length }}）</h3><ul v-if="result.reviewedFiles.length"><li v-for="path in result.reviewedFiles" :key="path">{{ path }}</li></ul><p v-else>{{ t('uiNoFilesReviewedcb936d') }}</p></section>
+    <section v-if="result" class="compact-list"><h3>{{ t('uiUncoveredAreas02a9f5') }}</h3><ul v-if="uncovered.length"><li v-for="item in uncovered" :key="item">{{ item }}</li></ul><p v-else>{{ t('uiNothingElseReportedThisDoesNotImplyCoverageOfCodeThatWasNotPb4a470') }}</p></section>
+    <section v-if="skippedBinaries.length" class="compact-list"><h3>{{ t('uiSkippedBinaryFiles1b81e2') }}</h3><ul><li v-for="path in skippedBinaries" :key="path">{{ path }}</li></ul></section>
+    <section v-if="frozen?.excludedFiles.length" class="compact-list"><h3>{{ t('uiBuildArtifactsExcludedByTheSkillc9a33b') }}</h3><ul><li v-for="path in frozen.excludedFiles" :key="path">{{ path }}</li></ul></section>
+    <section v-if="warnings.length" class="compact-list warnings"><h3>{{ t('uiReviewNotes3eb706') }}</h3><ul><li v-for="warning in warnings" :key="warning">{{ warning }}</li></ul></section>
+    <div v-if="issues.length || result" class="copy-result"><button :aria-label="t('uiCopyReviewResults952fd9')" :disabled="copying" @click="copyReport"><Copy :size="14" />{{ t('uiCopyReviewResults952fd9') }}</button><small role="status">{{ copyStatus }}</small></div>
   </div>
 </template>
 

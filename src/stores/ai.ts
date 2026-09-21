@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 
@@ -125,13 +126,13 @@ export const useAiStore = defineStore("ai", () => {
   async function start(task: AiTaskKind, source?: ReviewSource, conflict?: { relativePath: string; token: string }): Promise<void> {
     const repositories = useRepositoryStore();
     if (running.value || useAiChatStore().running || cancellation || repositories.navigationBusy) {
-      throw { code: "gitOperationInProgress", message: "请等待当前操作结束。" } satisfies BackendError;
+      throw { code: "gitOperationInProgress", get message() { return t('uiWaitForTheCurrentOperationToFinish799cb7'); } } satisfies BackendError;
     }
     const rootPath = repositories.snapshot?.rootPath;
     if (!rootPath) {
       const missingRepository: BackendError = {
         code: "invalidRepository",
-        message: "请先打开 Git 仓库。",
+        get message() { return t('uiOpenAGitRepositoryFirsta00a3e'); },
       };
       error.value = missingRepository;
       status.value = "failed";
@@ -148,7 +149,7 @@ export const useAiStore = defineStore("ai", () => {
     try {
       await initialize();
       if (version !== lifecycleVersion || !unlisten || runId.value !== nextRunId || cancelRequestedFor === nextRunId) {
-        throw { code: "cancelled", message: "AI 任务已取消。" } satisfies BackendError;
+        throw { code: "cancelled", get message() { return t('uiAITaskCancelled3f208d'); } } satisfies BackendError;
       }
       const accepted =
         task === "reviewChanges"

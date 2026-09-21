@@ -313,7 +313,6 @@ impl TaskBranchService {
     }
     async fn pick(&self, root: &Path, b: &mut TaskBranchBinding) -> Result<(), BackendError> {
         self.ensure_idle(root, MutationIntent::CherryPick).await?;
-        self.ensure_clean(root).await?;
         let source = b
             .source_commit
             .clone()
@@ -336,31 +335,42 @@ impl TaskBranchService {
         if current != b.source_branch && current != b.target_branch {
             return Err(invalid("当前不在任务的开发或目标分支。"));
         }
-        b.pick_base = Some(target);
-        b.phase = TaskBranchPhase::Picking;
-        b.message = Some("正在切换并移植已保存提交。".into());
-        self.repository.save(b)?;
-        if current != b.target_branch {
-            self.git(root, &["switch", "--", &b.target_branch]).await?;
-        }
-        // -x provides durable source identity for recovery after a successful Git write.
-        let result = self.git(root, &["cherry-pick", "-x", &source]).await;
-        if let Err(error) = result {
-            if read_operation_state(root, &self.runner).await?.kind
-                == RepositoryOperationKind::CherryPick
-            {
-                b.phase = TaskBranchPhase::Conflict;
-                b.message = Some("请在冲突工作台继续或中止，然后核对任务状态。".into());
-                self.repository.save(b)?;
+        let saved =
+            super::cherry_pick_worktree::CherryPickWorktree::save(root, &self.runner).await?;
+        let result = async {
+            b.pick_base = Some(target);
+            b.phase = TaskBranchPhase::Picking;
+            b.message = Some("正在切换并移植已保存提交。".into());
+            self.repository.save(b)?;
+            if current != b.target_branch {
+                self.git(root, &["switch", "--", &b.target_branch]).await?;
             }
-            return Err(error);
+            // -x provides durable source identity for recovery after a successful Git write.
+            let result = self.git(root, &["cherry-pick", "-x", &source]).await;
+            if let Err(error) = result {
+                if read_operation_state(root, &self.runner).await?.kind
+                    == RepositoryOperationKind::CherryPick
+                {
+                    b.phase = TaskBranchPhase::Conflict;
+                    b.message = Some("请在冲突工作台继续或中止，然后核对任务状态。".into());
+                    self.repository.save(b)?;
+                }
+                return Err(error);
+            }
+            b.target_commit = Some(self.oid(root, "HEAD").await?);
+            self.picked(b)?;
+            if b.return_after_success {
+                self.return_to_source(root, b).await?;
+            }
+            Ok(())
         }
-        b.target_commit = Some(self.oid(root, "HEAD").await?);
-        self.picked(b)?;
-        if b.return_after_success {
-            self.return_to_source(root, b).await?;
+        .await;
+        let result = saved.finish(root, &self.runner, result).await;
+        if let Err(error) = &result {
+            b.message = Some(error.message.clone());
+            self.repository.save(b)?;
         }
-        Ok(())
+        result
     }
     fn picked(&self, b: &mut TaskBranchBinding) -> Result<(), BackendError> {
         b.phase = if b.return_after_success {

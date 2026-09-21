@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -25,15 +26,15 @@ const selected = computed(
     ) ?? remotes.snapshot?.remotes[0],
 );
 const statusLabel = computed(() => {
-  if (remotes.error?.code === "gitRefreshFailed") return "同步成功，状态刷新失败";
+  if (remotes.error?.code === "gitRefreshFailed") return t('uiSyncSucceededRefreshFailed2d44eb');
   const labels = {
-    idle: "等待同步操作",
-    starting: "正在启动",
-    running: "同步进行中",
-    completed: "同步已完成",
-    conflicted: "同步产生冲突",
-    cancelled: "同步已取消",
-    failed: "同步失败",
+    get idle() { return t('uiWaitingForASyncOperation87fd7f'); },
+    get starting() { return t('uiStarting6017dc'); },
+    get running() { return t('uiSyncInProgress573137'); },
+    get completed() { return t('uiSyncCompleted2870ba'); },
+    get conflicted() { return t('uiSyncHasConflictsd75da9'); },
+    get cancelled() { return t('uiSyncCancelleddd26f7'); },
+    get failed() { return t('uiSyncFaileda8f14c'); },
   };
   return labels[remotes.status];
 });
@@ -61,51 +62,51 @@ function fetchSelected(): void {
       <header class="remote-title">
         <RadioTower :size="19" />
         <div>
-          <span>远程仓库</span>
+          <span>{{ t('uiRemoteRepository36ecf0') }}</span>
           <h1>{{ selected.name }}</h1>
         </div>
       </header>
 
       <dl class="remote-metadata">
         <div>
-          <dt>获取地址</dt>
+          <dt>{{ t('uiFetchURLa1cda4') }}</dt>
           <dd><code tabindex="0">{{ selected.fetchUrl }}</code></dd>
         </div>
         <div>
-          <dt>推送地址</dt>
+          <dt>{{ t('uiPushURL8ec0e9') }}</dt>
           <dd><code tabindex="0">{{ selected.pushUrl }}</code></dd>
         </div>
         <div>
-          <dt>远程分支</dt>
+          <dt>{{ t('uiRemoteBranch9072f8') }}</dt>
           <dd>{{ selected.branches.length }}</dd>
         </div>
       </dl>
 
-      <div class="remote-actions" aria-label="远程同步操作" :inert="repositories.navigationBusy || undefined">
+      <div class="remote-actions" :aria-label="t('uiRemoteSyncActions080b45')" :inert="repositories.navigationBusy || undefined">
         <button
-          :aria-label="'获取 ' + selected.name"
+          :aria-label="(t('fetch') + ' ') + selected.name"
           :disabled="remotes.running"
           @click="fetchSelected"
         >
-          <CloudDownload :size="15" />获取
+          <CloudDownload :size="15" />{{ t('fetch') }}
         </button>
         <button
-          aria-label="打开拉取对话框"
+          :aria-label="t('uiOpenPullDialog8f1445')"
           :disabled="remotes.running || selected.branches.length === 0"
           @click="remotes.requestAction('pull')"
         >
-          <ArrowDownToLine :size="15" />拉取
+          <ArrowDownToLine :size="15" />{{ t('pull') }}
         </button>
         <button
-          aria-label="打开推送对话框"
+          :aria-label="t('uiOpenPushDialogae84e4')"
           :disabled="remotes.running"
           @click="remotes.requestAction('push')"
         >
-          <ArrowUpFromLine :size="15" />推送
+          <ArrowUpFromLine :size="15" />{{ t('push') }}
         </button>
       </div>
     </template>
-    <div v-else class="module-state">选择一个远程仓库</div>
+    <div v-else class="module-state">{{ t('uiSelectARemoteRepositoryc010e0') }}</div>
 
     <section
       class="sync-surface"
@@ -121,26 +122,26 @@ function fetchSelected(): void {
         <span>
           <strong>{{ statusLabel }}</strong>
           <small v-if="remotes.progress">{{ remotes.progress.text }}</small>
-          <small v-else-if="remotes.status === 'cancelled'">仓库状态已刷新</small>
+          <small v-else-if="remotes.status === 'cancelled'">{{ t('uiRepositoryStateRefreshed69de4c') }}</small>
         </span>
       </div>
       <button
         v-if="remotes.running"
         class="stop-button"
-        aria-label="停止远程同步"
-        title="停止远程同步"
+        :aria-label="t('uiStopRemoteSync7629b3')"
+        :title="t('uiStopRemoteSync7629b3')"
         :disabled="remotes.cancelRequested"
         @click="void remotes.cancel()"
       >
         <Square :size="13" />
-        {{ remotes.cancelRequested ? "正在停止" : "停止" }}
+        {{ remotes.cancelRequested ? t('uiStoppingcaa14e') : t('uiStopa17f70') }}
       </button>
     </section>
 
     <section v-if="remotes.error" class="failure" role="alert">
       <strong>{{ remotes.error.message }}</strong>
       <details v-if="remotes.error.diagnostics">
-        <summary>诊断信息</summary>
+        <summary>{{ t('uiDiagnostics0b673e') }}</summary>
         <pre>{{ remotes.error.diagnostics }}</pre>
       </details>
     </section>

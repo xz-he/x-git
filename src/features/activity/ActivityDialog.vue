@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { History, RefreshCw, Undo2, X } from "@lucide/vue";
 import { useActivityStore } from "@/stores/activity";
@@ -11,7 +12,7 @@ const activity = useActivityStore(), repositories = useRepositoryStore();
 const selectedId = ref<string>(), confirming = ref(false);
 const closeButton = ref<HTMLButtonElement>();
 const selected = computed(() => activity.entries.find(entry => entry.id === selectedId.value));
-const labels = { pending: "未确认完成", success: "成功", failed: "失败" };
+const labels = { get pending() { return t('uiCompletionUnconfirmed80f917'); }, get success() { return t('uiSucceeded51991a'); }, get failed() { return t('uiFailed3e3c80'); } };
 function close(): void { if (!activity.submitting) emit("close"); }
 function updated(event: Event): void { if ((event as CustomEvent).detail === repositories.snapshot?.rootPath) void activity.load(); }
 function keydown(event: KeyboardEvent): void { if (event.key === "Escape" && !activity.submitting) { if (confirming.value) confirming.value = false; else close(); } }
@@ -24,25 +25,25 @@ onBeforeUnmount(() => { window.removeEventListener(ACTIVITY_UPDATED, updated); w
   <Teleport to="body">
     <div class="activity-backdrop" @click.self="close">
       <section class="activity-dialog" role="dialog" aria-modal="true" aria-labelledby="activity-title" :inert="confirming || undefined">
-        <header><h2 id="activity-title"><History :size="19" /> 操作历史</h2><button ref="closeButton" aria-label="关闭操作历史" :disabled="activity.submitting" @click="close"><X :size="18" /></button></header>
-        <div class="toolbar"><span>{{ repositories.snapshot?.name }} · 最近 200 条</span><button :disabled="activity.loading || activity.submitting" @click="activity.load"><RefreshCw :size="14" />刷新记录</button></div>
-        <p class="hint">点击记录查看回滚选项。仅记录启用此功能后在 HQ Git 中执行的操作。</p>
+        <header><h2 id="activity-title"><History :size="19" /> {{ t('uiOperationHistory56833a') }}</h2><button ref="closeButton" :aria-label="t('uiCloseOperationHistoryc252eb')" :disabled="activity.submitting" @click="close"><X :size="18" /></button></header>
+        <div class="toolbar"><span>{{ repositories.snapshot?.name }} {{ t('uiLatest200Entries161804') }}</span><button :disabled="activity.loading || activity.submitting" @click="activity.load"><RefreshCw :size="14" />{{ t('uiRefreshHistory7b0ae4') }}</button></div>
+        <p class="hint">{{ t('uiClickAnEntryToViewRollbackOptionsOnlyOperationsPerformedInHQba702f') }}</p>
         <p v-if="activity.error" role="alert" class="error">{{ activity.error }}</p>
         <p v-if="activityWarning" role="alert" class="error">{{ activityWarning }}</p>
         <div class="records" :aria-busy="activity.loading">
-          <p v-if="!activity.entries.length" class="empty">{{ activity.loading ? '正在加载操作历史…' : '暂无操作记录' }}</p>
+          <p v-if="!activity.entries.length" class="empty">{{ activity.loading ? t('uiLoadingOperationHistory9dbfa9') : t('uiNoOperationsRecorded33dbc8') }}</p>
           <article v-for="entry in activity.entries" :key="entry.id" :class="{ selected: entry.id === selectedId }">
             <button class="record" :aria-expanded="entry.id === selectedId" :disabled="activity.submitting" @click="selectedId = selectedId === entry.id ? undefined : entry.id; confirming = false">
               <span class="record-main"><strong>{{ entry.title }}</strong><time>{{ new Date(entry.createdAt).toLocaleString() }}</time></span><span class="status" :class="entry.status">{{ labels[entry.status] }}</span>
             </button>
             <div v-if="entry.id === selectedId" class="details">
               <p>{{ entry.message }}</p><p>{{ entry.rollbackReason }}</p>
-              <button class="rollback" :disabled="!entry.rollbackKind || !!entry.rollbackId || repositories.navigationBusy" @click="confirming = true"><Undo2 :size="15" />{{ entry.rollbackId ? '已发起回滚' : '回滚此操作' }}</button>
+              <button class="rollback" :disabled="!entry.rollbackKind || !!entry.rollbackId || repositories.navigationBusy" @click="confirming = true"><Undo2 :size="15" />{{ entry.rollbackId ? t('uiRollbackRequestede84d34') : t('uiRollBackThisOperation8c9e17') }}</button>
             </div>
           </article>
         </div>
       </section>
-      <ConfirmDialog v-if="confirming && selected" title="确认回滚此操作？" :description="selected.title + '：' + selected.rollbackReason" confirm-label="确认回滚" :busy="activity.submitting" :confirm-disabled="repositories.navigationBusy || !selected.rollbackKind || !!selected.rollbackId" @cancel="!activity.submitting && (confirming = false)" @confirm="rollback">
+      <ConfirmDialog v-if="confirming && selected" :title="t('uiRollBackThisOperation72dced')" :description="selected.title + '：' + selected.rollbackReason" :confirm-label="t('uiConfirmRollback2a814f')" :busy="activity.submitting" :confirm-disabled="repositories.navigationBusy || !selected.rollbackKind || !!selected.rollbackId" @cancel="!activity.submitting && (confirming = false)" @confirm="rollback">
         <p v-if="activity.error" role="alert" class="error">{{ activity.error }}</p>
       </ConfirmDialog>
     </div>

@@ -20,6 +20,7 @@ async fn fixture() -> tempfile::TempDir {
     git(d.path(), &["init", "-b", "dev"]).await;
     git(d.path(), &["config", "user.name", "Task Test"]).await;
     git(d.path(), &["config", "user.email", "task@example.test"]).await;
+    git(d.path(), &["config", "core.autocrlf", "false"]).await;
     std::fs::write(d.path().join("base.txt"), "base\n").unwrap();
     git(d.path(), &["add", "."]).await;
     git(d.path(), &["commit", "-m", "base"]).await;
@@ -210,37 +211,104 @@ async fn commit_pick_supports_both_destinations_and_retry_is_idempotent() {
 }
 
 #[tokio::test]
-async fn unstaged_work_preserves_commit_and_can_resume_after_restart() {
+async fn unstaged_work_is_excluded_and_restored_for_both_destinations() {
+    for return_after in [true, false] {
+        let d = fixture().await;
+        let store = tempfile::tempdir().unwrap();
+        let s = service(store.path());
+        let b = create(&s, d.path(), "remoteMaster").await;
+        stage(d.path()).await;
+        std::fs::write(d.path().join("task.txt"), "unstaged changes\n").unwrap();
+        std::fs::write(d.path().join("local.txt"), "local").unwrap();
+        let result = run(&s, d.path(), &b.id, "commit", return_after).await;
+        assert!(result.error.is_none(), "{:?}", result.error);
+        assert_eq!(
+            serde_json::to_value(&result.bindings[0]).unwrap()["phase"],
+            "completed"
+        );
+        let oid = result.bindings[0].source_commit.clone().unwrap();
+        assert_eq!(git(d.path(), &["show", "HEAD:task.txt"]).await, "task");
+        assert_eq!(
+            std::fs::read_to_string(d.path().join("task.txt")).unwrap(),
+            "unstaged changes\n"
+        );
+        assert_eq!(oid.len(), 40);
+        assert_eq!(
+            git(d.path(), &["branch", "--show-current"]).await,
+            if return_after {
+                "dev"
+            } else {
+                &b.target_branch
+            }
+        );
+        assert_eq!(
+            std::fs::read_to_string(d.path().join("local.txt")).unwrap(),
+            "local"
+        );
+        assert_eq!(git(d.path(), &["diff", "--cached"]).await, "");
+        assert_eq!(git(d.path(), &["stash", "list"]).await, "");
+        assert_eq!(
+            git(
+                d.path(),
+                &["show", &format!("{}:task.txt", b.target_branch)]
+            )
+            .await,
+            "task"
+        );
+        assert_eq!(
+            service(store.path()).snapshot(d.path()).await.unwrap()[0]
+                .source_commit
+                .as_deref(),
+            Some(oid.as_str())
+        );
+    }
+}
+
+#[tokio::test]
+async fn conflict_retains_unstaged_backup_across_restart_and_abort() {
     let d = fixture().await;
+    let root = d.path();
     let store = tempfile::tempdir().unwrap();
     let s = service(store.path());
-    let b = create(&s, d.path(), "remoteMaster").await;
-    stage(d.path()).await;
-    std::fs::write(d.path().join("task.txt"), "unstaged changes\n").unwrap();
-    std::fs::write(d.path().join("local.txt"), "local").unwrap();
-    let result = run(&s, d.path(), &b.id, "commit", true).await;
+    git(root, &["switch", "master"]).await;
+    std::fs::write(root.join("base.txt"), "master\n").unwrap();
+    git(root, &["add", "."]).await;
+    git(root, &["commit", "-m", "master edit"]).await;
+    git(root, &["switch", "dev"]).await;
+    let b = create(&s, root, "remoteMaster").await;
+    std::fs::write(root.join("base.txt"), "staged dev\n").unwrap();
+    git(root, &["add", "base.txt"]).await;
+    std::fs::write(root.join("base.txt"), "unstaged local\n").unwrap();
+    std::fs::write(root.join("local.txt"), "untracked\n").unwrap();
+    let result = run(&s, root, &b.id, "commit", true).await;
+    assert!(result.error.unwrap().message.contains("自动贮藏备份"));
     assert_eq!(
         serde_json::to_value(&result.bindings[0]).unwrap()["phase"],
-        "pendingPick"
+        "conflict"
     );
-    let oid = result.bindings[0].source_commit.clone().unwrap();
-    assert_eq!(git(d.path(), &["show", "HEAD:task.txt"]).await, "task");
+    assert_eq!(git(root, &["show", "dev:base.txt"]).await, "staged dev");
     assert_eq!(
-        std::fs::read_to_string(d.path().join("task.txt")).unwrap(),
-        "unstaged changes\n"
+        git(root, &["show", "stash@{0}:base.txt"]).await,
+        "unstaged local"
     );
-    assert_eq!(oid.len(), 40);
-    assert_eq!(git(d.path(), &["branch", "--show-current"]).await, "dev");
-    run(&s, d.path(), &b.id, "commit", true).await;
-    assert_eq!(git(d.path(), &["rev-parse", "HEAD"]).await, oid);
-    std::fs::remove_file(d.path().join("local.txt")).unwrap();
-    std::fs::write(d.path().join("task.txt"), "task\n").unwrap();
-    let result = run(&service(store.path()), d.path(), &b.id, "pick", true).await;
-    assert!(result.error.is_none(), "{:?}", result.error);
     assert_eq!(
-        serde_json::to_value(&result.bindings[0]).unwrap()["phase"],
-        "completed"
+        git(root, &["show", "stash@{0}^3:local.txt"]).await,
+        "untracked"
     );
+    let saved = service(store.path()).snapshot(root).await.unwrap();
+    assert!(saved[0].message.as_ref().unwrap().contains("自动贮藏备份"));
+    git(root, &["cherry-pick", "--abort"]).await;
+    git(root, &["switch", "dev"]).await;
+    git(root, &["stash", "apply", "stash@{0}"]).await;
+    assert_eq!(
+        std::fs::read_to_string(root.join("base.txt")).unwrap(),
+        "unstaged local\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(root.join("local.txt")).unwrap(),
+        "untracked\n"
+    );
+    assert_eq!(git(root, &["diff", "--cached"]).await, "");
 }
 
 #[tokio::test]
@@ -435,10 +503,31 @@ async fn pending_pick_rejects_target_changes_after_the_source_commit() {
     let store = tempfile::tempdir().unwrap();
     let s = service(store.path());
     let b = create(&s, d.path(), "remoteMaster").await;
+    let linked = tempfile::tempdir().unwrap();
+    git(
+        d.path(),
+        &[
+            "worktree",
+            "add",
+            linked.path().to_str().unwrap(),
+            &b.target_branch,
+        ],
+    )
+    .await;
     stage(d.path()).await;
     std::fs::write(d.path().join("local.txt"), "local").unwrap();
     let result = run(&s, d.path(), &b.id, "commit", true).await;
+    assert!(
+        result.error.is_some(),
+        "Target is checked out in another worktree"
+    );
     let source = result.bindings[0].source_commit.clone().unwrap();
+    git(linked.path(), &["switch", "--detach"]).await;
+    let reconciled = run(&s, d.path(), &b.id, "reconcile", true).await;
+    assert_eq!(
+        reconciled.bindings[0].phase,
+        hq_git_lib::domain::task_branch::TaskBranchPhase::PendingPick
+    );
     std::fs::remove_file(d.path().join("local.txt")).unwrap();
     git(d.path(), &["switch", &b.target_branch]).await;
     std::fs::write(d.path().join("external.txt"), "external").unwrap();

@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { defineStore } from "pinia";
 import { ref } from "vue";
 import { backendClient } from "@/lib/backend/client";
@@ -36,7 +37,7 @@ export const useActivityStore = defineStore("activity", () => {
         useOperationStore().applyMutationResult(result);
         // Invalidate cached commits/refs/files, including hidden views.
         try { await repositories.refreshAfterTerminal(root, generation); }
-        catch (cause) { failure = `回滚已完成，但界面刷新失败：${normalizeBackendError(cause).message}`; }
+        catch (cause) { failure = t('msgRollbackCompletedButTheInterfaceCouldNotRefresh06c423', { p0: normalizeBackendError(cause).message }); }
       }
       return true;
     } catch (cause) { failure = normalizeBackendError(cause).message; return false; }

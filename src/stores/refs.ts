@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { defineStore } from "pinia";
 import { computed, ref, watch } from "vue";
 
@@ -133,7 +134,7 @@ export const useRefsStore = defineStore("refs", () => {
     if (!rootPath) {
       throw {
         code: "invalidRepository",
-        message: "请先打开 Git 仓库。",
+        get message() { return t('uiOpenAGitRepositoryFirsta00a3e'); },
       } satisfies BackendError;
     }
     return rootPath;
@@ -145,7 +146,7 @@ export const useRefsStore = defineStore("refs", () => {
     if (submitting.value || useTerminalStore().busy) {
       throw {
         code: "gitOperationInProgress",
-        message: "已有 Git 操作正在提交。",
+        get message() { return t('uiAGitOperationIsAlreadyBeingSubmittedb4d501'); },
       } satisfies BackendError;
     }
     submitting.value = true;
@@ -200,7 +201,7 @@ export const useRefsStore = defineStore("refs", () => {
   }
 
   function integrationBusyError(): BackendError {
-    return { code: "gitOperationInProgress", message: "请先完成当前 Git 操作或解决冲突。" };
+    return { code: "gitOperationInProgress", get message() { return t('uiFinishTheCurrentGitOperationOrResolveConflictsFirst020dd7'); } };
   }
 
   function integrationIsCurrent(request: IntegrationRequest): boolean {

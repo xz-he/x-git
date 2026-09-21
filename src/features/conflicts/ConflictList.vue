@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { computed } from "vue";
 import { FileWarning, RefreshCw, Play } from "@lucide/vue";
 import { useConflictsStore } from "@/stores/conflicts";
@@ -7,18 +8,18 @@ const retained = computed(() => Object.keys(conflicts.drafts).filter(path => con
 </script>
 <template>
   <div class="conflict-list">
-    <header><strong>解决冲突 <span>{{ conflicts.snapshot?.files.length ?? 0 }}</span></strong><button title="刷新冲突" aria-label="刷新冲突" :disabled="conflicts.busy || conflicts.loading" @click="conflicts.refresh"><RefreshCw :size="15" /></button></header>
-    <div v-if="conflicts.loading" class="state" role="status">正在读取冲突...</div>
-    <div v-if="conflicts.error" class="state error" role="alert">{{ conflicts.error.message }}<details v-if="conflicts.error.diagnostics"><summary>诊断信息</summary><pre>{{ conflicts.error.diagnostics }}</pre></details></div>
-    <details v-if="conflicts.recoveryPath" class="recovery"><summary>原文件恢复副本</summary><code>{{ conflicts.recoveryPath }}</code></details>
+    <header><strong>{{ t('conflicts') }} <span>{{ conflicts.snapshot?.files.length ?? 0 }}</span></strong><button :title="t('uiRefreshConflictsffe69c')" :aria-label="t('uiRefreshConflictsffe69c')" :disabled="conflicts.busy || conflicts.loading" @click="conflicts.refresh"><RefreshCw :size="15" /></button></header>
+    <div v-if="conflicts.loading" class="state" role="status">{{ t('uiLoadingConflicts8530a3') }}</div>
+    <div v-if="conflicts.error" class="state error" role="alert">{{ conflicts.error.message }}<details v-if="conflicts.error.diagnostics"><summary>{{ t('uiDiagnostics0b673e') }}</summary><pre>{{ conflicts.error.diagnostics }}</pre></details></div>
+    <details v-if="conflicts.recoveryPath" class="recovery"><summary>{{ t('uiOriginalFileRecoveryCopy7aa41f') }}</summary><code>{{ conflicts.recoveryPath }}</code></details>
     <div class="files">
-      <button v-for="file in conflicts.snapshot?.files" :key="file.path" :aria-label="'查看冲突 ' + file.path" :aria-current="conflicts.selectedPath === file.path ? 'true' : undefined" :disabled="conflicts.busy" :class="{ selected: conflicts.selectedPath === file.path }" @click="conflicts.selectFile(file.path)">
-        <FileWarning :size="16" /><span class="path">{{ file.path }}<small v-if="!file.supported">{{ file.reason }}</small></span><span class="badge">{{ conflicts.drafts[file.path]?.dirty ? '草稿' : file.status }}</span>
+      <button v-for="file in conflicts.snapshot?.files" :key="file.path" :aria-label="(t('uiViewConflictb33027') + ' ') + file.path" :aria-current="conflicts.selectedPath === file.path ? 'true' : undefined" :disabled="conflicts.busy" :class="{ selected: conflicts.selectedPath === file.path }" @click="conflicts.selectFile(file.path)">
+        <FileWarning :size="16" /><span class="path">{{ file.path }}<small v-if="!file.supported">{{ file.reason }}</small></span><span class="badge">{{ conflicts.drafts[file.path]?.dirty ? t('uiDraft0f4368') : file.status }}</span>
       </button>
-      <button v-for="path in retained" :key="path" :aria-label="'查看保留草稿 ' + path" :disabled="conflicts.busy" @click="conflicts.selectFile(path)"><FileWarning :size="16" /><span class="path">{{ path }}</span><span class="badge">保留草稿</span></button>
-      <div v-if="!conflicts.loading && conflicts.snapshot && !conflicts.snapshot.files.length" class="state">没有未解决的冲突</div>
+      <button v-for="path in retained" :key="path" :aria-label="(t('uiViewPreservedDraft9ebded') + ' ') + path" :disabled="conflicts.busy" @click="conflicts.selectFile(path)"><FileWarning :size="16" /><span class="path">{{ path }}</span><span class="badge">{{ t('uiPreservedDraft5a0045') }}</span></button>
+      <div v-if="!conflicts.loading && conflicts.snapshot && !conflicts.snapshot.files.length" class="state">{{ t('uiNoUnresolvedConflicts8fb25d') }}</div>
     </div>
-    <footer v-if="conflicts.snapshot?.continueAction"><button class="continue" :disabled="!conflicts.canContinue" @click="conflicts.requestContinue"><Play :size="15" />继续{{ conflicts.snapshot.continueAction === 'merge' ? '合并' : conflicts.snapshot.continueAction === 'rebase' ? '变基' : conflicts.snapshot.continueAction === 'revert' ? ' Revert' : ' Cherry-pick' }}</button><p v-if="conflicts.hasDirtyDrafts">仍有未保存的解决草稿</p></footer>
+    <footer v-if="conflicts.snapshot?.continueAction"><button class="continue" :disabled="!conflicts.canContinue" @click="conflicts.requestContinue"><Play :size="15" />{{ t('uiContinue1fc1af') }}{{ conflicts.snapshot.continueAction === 'merge' ? t('merge') : conflicts.snapshot.continueAction === 'rebase' ? t('rebase') : conflicts.snapshot.continueAction === 'revert' ? ' Revert' : ' Cherry-pick' }}</button><p v-if="conflicts.hasDirtyDrafts">{{ t('uiUnsavedResolutionDraftsRemain52a3c3') }}</p></footer>
   </div>
 </template>
 <style scoped>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { GitCommitHorizontal, ScanSearch, LoaderCircle } from "@lucide/vue";
 import { computed } from "vue";
 
@@ -32,20 +33,20 @@ function selectParent(hash: string): void {
 
 <template>
   <div class="detail-body history-detail">
-    <div v-if="history.detailLoading" class="module-state" role="status"><LoaderCircle :size="22" class="spin" />正在读取提交详情…</div>
-    <div v-else-if="!history.detail && history.error && history.selectedHash" class="module-state error" role="alert">{{ history.error.message }}<button @click="selectParent(history.selectedHash!)">重试读取提交</button></div>
-    <div v-else-if="!history.detail" class="module-state"><GitCommitHorizontal :size="22" />选择一个提交查看详情</div>
+    <div v-if="history.detailLoading" class="module-state" role="status"><LoaderCircle :size="22" class="spin" />{{ t('uiReadingCommitDetails912152') }}</div>
+    <div v-else-if="!history.detail && history.error && history.selectedHash" class="module-state error" role="alert">{{ history.error.message }}<button @click="selectParent(history.selectedHash!)">{{ t('uiRetryLoadingCommit2c6316') }}</button></div>
+    <div v-else-if="!history.detail" class="module-state"><GitCommitHorizontal :size="22" />{{ t('uiSelectACommitToViewDetails426466') }}</div>
     <template v-else>
       <section class="commit-metadata">
-        <div class="detail-title"><GitCommitHorizontal :size="18" /><div><span>提交 {{ history.detail.shortHash }}</span><h1>{{ history.detail.message.split("\n")[0] }}</h1></div></div>
+        <div class="detail-title"><GitCommitHorizontal :size="18" /><div><span>{{ t('commit') }} {{ history.detail.shortHash }}</span><h1>{{ history.detail.message.split("\n")[0] }}</h1></div></div>
         <pre v-if="history.detail.message.includes('\n')">{{ history.detail.message }}</pre>
         <dl>
-          <div><dt>作者</dt><dd>{{ history.detail.authorName }} &lt;{{ history.detail.authorEmail }}&gt;</dd></div>
-          <div><dt>提交者</dt><dd>{{ history.detail.committerName }} &lt;{{ history.detail.committerEmail }}&gt;</dd></div>
-          <div v-if="history.detail.parentHashes.length"><dt>父提交</dt><dd class="parent-list"><button v-for="parent in history.detail.parentHashes" :key="parent" :aria-label="`查看父提交 ${parent.slice(0, 7)}`" @click="selectParent(parent)"><code>{{ parent.slice(0, 7) }}</code></button></dd></div>
+          <div><dt>{{ t('uiAuthor698bea') }}</dt><dd>{{ history.detail.authorName }} &lt;{{ history.detail.authorEmail }}&gt;</dd></div>
+          <div><dt>{{ t('uiCommitter293371') }}</dt><dd>{{ history.detail.committerName }} &lt;{{ history.detail.committerEmail }}&gt;</dd></div>
+          <div v-if="history.detail.parentHashes.length"><dt>{{ t('uiParents5ffcd8') }}</dt><dd class="parent-list"><button v-for="parent in history.detail.parentHashes" :key="parent" :aria-label="t('msgViewParentCommit0466e1', { p0: parent.slice(0, 7) })" @click="selectParent(parent)"><code>{{ parent.slice(0, 7) }}</code></button></dd></div>
         </dl>
         <HistoryActionDialogs :detail="history.detail" />
-        <div class="review-action"><button aria-label="AI 审查此提交" :disabled="!canReview" @click="reviewCommit"><ScanSearch :size="15" />AI 审查此提交</button><small>{{ history.detail.parentHashes.length ? '与第一父提交比较' : '首次提交，与空树比较' }} · 使用当前仓库 SKILL</small><small v-if="!skill.ready.value">{{ ai.skillLoading ? '正在读取审查技能…' : ai.reviewSkill?.error?.message ?? '请在 AI 设置中配置仓库审查技能。' }}</small></div>
+        <div class="review-action"><button :aria-label="t('uiAIReviewThisCommitf8d013')" :disabled="!canReview" @click="reviewCommit"><ScanSearch :size="15" />{{ t('uiAIReviewThisCommitf8d013') }}</button><small>{{ history.detail.parentHashes.length ? t('uiCompareWithFirstParentfaa8eb') : t('uiInitialCommitCompareWithEmptyTreea60d53') }} {{ t('uiUsesCurrentRepositorySKILL9e241e') }}</small><small v-if="!skill.ready.value">{{ ai.skillLoading ? t('uiReadingReviewSkilla2b209') : ai.reviewSkill?.error?.message ?? t('uiConfigureTheRepositoryReviewSkillInAISettings89d26c') }}</small></div>
       </section>
       <HistoryDiffFiles :key="`${history.loadedRootPath}:${history.generation}:${history.detail.hash}`" />
     </template>

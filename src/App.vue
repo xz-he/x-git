@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { language, t } from '@/lib/i18n';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { applyFontPreferences } from "@/lib/fonts";
 import AppSidebar from "@/components/layout/AppSidebar.vue";
@@ -40,7 +41,7 @@ const consoleStore = useConsoleStore();
 const terminal = useTerminalStore();
 const updates = useUpdatesStore();
 const viewportWidth = ref(window.innerWidth);
-const sidebarWidth = computed(() => ui.sidebarCollapsed ? 56 : 200);
+const sidebarWidth = computed(() => ui.sidebarCollapsed ? 56 : language.value === 'bilingual' ? 252 : 200);
 const maxContextWidth = computed(() => Math.max(270, Math.min(1000, Math.max(1100, viewportWidth.value) - sidebarWidth.value - (settingsStore.settings.aiDrawerOpen ? drawerWidth.value : 0) - 280)));
 const contextWidth = computed(() => Math.min(ui.contextWidth, maxContextWidth.value));
 function updateViewport(): void { viewportWidth.value = window.innerWidth; }
@@ -111,7 +112,7 @@ onBeforeUnmount(() => {
     <AiDrawerShell v-if="settingsStore.settings.aiDrawerOpen" v-show="!ui.diffFullscreen" :width="drawerWidth" @close="updateDrawer(false)" @resize="resizeDrawer" @resize-end="persistDrawerWidth" />
   </div>
   <WelcomeView v-else />
-  <div v-if="repositories.snapshot && !ui.homeVisible && switchingRepository" class="repository-loading" role="status" aria-label="仓库加载状态">正在切换仓库...</div>
+  <div v-if="repositories.snapshot && !ui.homeVisible && switchingRepository" class="repository-loading" role="status" :aria-label="t('uiRepositoryLoadingStatus3285fd')">{{ t('uiSwitchingRepositories049d92') }}</div>
   <SettingsDialog v-if="ui.settingsDialogOpen" @close="ui.settingsDialogOpen = false" />
   <UpdateDialog v-if="ui.updateDialogOpen" />
   <ConflictDialogs />

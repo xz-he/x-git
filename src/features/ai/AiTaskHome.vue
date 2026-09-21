@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import {
   ChevronRight,
   MessageSquareText,
@@ -51,52 +52,52 @@ const actionsDisabled = computed(
 
 <template>
   <div class="task-home">
-    <section class="scope-summary" aria-label="AI 数据范围">
+    <section class="scope-summary" :aria-label="t('uiAIDataScope21bbd7')">
       <span class="scope-icon"><ShieldCheck :size="17" /></span>
       <span>
-        <strong>仅审查已暂存变更</strong>
-        <small>已暂存 {{ stagedCount }} 个文件</small>
-        <small>审查时按需读取索引中的相关定义作为证据；提交信息仅发送已暂存变更。</small>
+        <strong>{{ t('uiReviewStagedChangesOnly08ac42') }}</strong>
+        <small>{{ t('staged') }} {{ stagedCount }} {{ t('uifiles621862') }}</small>
+        <small>{{ t('uiReviewsReadRelatedIndexedDefinitionsAsNeededForEvidenceCommi49be95') }}</small>
       </span>
     </section>
 
     <ReviewSkillStatus />
 
     <p v-if="!configured" class="configuration-error" role="alert">
-      请先在设置中完成 AI 服务配置。
+      {{ t('uiConfigureAnAIServiceInSettingsFirstdf7408') }}
     </p>
 
-    <section class="task-list" aria-label="AI 任务">
-      <button class="task-row" aria-label="AI 冲突解决建议"
+    <section class="task-list" :aria-label="t('uiAITasks26be93')">
+      <button class="task-row" :aria-label="t('uiAIConflictSuggestions657d89')"
         :disabled="repositories.navigationBusy || running || (!!conflicts.current && !!suggestion.startReason)"
         :title="suggestion.startReason" @click="startConflict">
         <span class="task-icon review"><ScanSearch :size="19" /></span>
-        <span class="task-copy"><strong>冲突解决建议</strong><small>{{ conflicts.current ? suggestion.startReason || '三方版本与磁盘内容 · 预览后填入草稿' : '前往冲突工作台选择文件' }}</small><small>未保存草稿不发送；无需审查 SKILL</small></span>
+        <span class="task-copy"><strong>{{ t('uiConflictSuggestionsa6130e') }}</strong><small>{{ conflicts.current ? suggestion.startReason || t('uiThreeVersionsAndOnDiskContentPreviewBeforeInsertinga04ced') : t('uiSelectAFileInTheConflictWorkbench657016') }}</small><small>{{ t('uiUnsavedDraftsAreExcludedNoReviewSKILLRequired1b3f00') }}</small></span>
         <ChevronRight :size="17" />
       </button>
       <button
         class="task-row"
-        aria-label="审查已暂存变更"
+        :aria-label="t('uiReviewStagedChanges4ac49e')"
         :disabled="actionsDisabled || !skill.ready.value"
         @click="emit('review')"
       >
         <span class="task-icon review"><ScanSearch :size="19" /></span>
         <span class="task-copy">
-          <strong>审查已暂存变更</strong>
-          <small>使用目标仓库 SKILL，输出等级与证据</small>
+          <strong>{{ t('uiReviewStagedChanges4ac49e') }}</strong>
+          <small>{{ t('uiUsesTheRepositorySKILLToReportSeverityAndEvidence8d9aae') }}</small>
         </span>
         <ChevronRight :size="17" />
       </button>
       <button
         class="task-row"
-        aria-label="生成已暂存提交信息"
+        :aria-label="t('uiGenerateMessageForStagedChangesf0e6d7')"
         :disabled="actionsDisabled"
         @click="emit('commit')"
       >
         <span class="task-icon commit"><MessageSquareText :size="19" /></span>
         <span class="task-copy">
-          <strong>生成提交信息</strong>
-          <small>生成 Conventional Commit 草稿</small>
+          <strong>{{ t('uiGenerateCommitMessagefaa200') }}</strong>
+          <small>{{ t('uiGenerateAConventionalCommitDraft7f0cd8') }}</small>
         </span>
         <ChevronRight :size="17" />
       </button>
@@ -105,7 +106,7 @@ const actionsDisabled = computed(
     <footer class="provider-summary">
       <span>{{ settingsStore.settings.aiProvider }}</span>
       <strong :title="settingsStore.settings.model">
-        {{ settingsStore.settings.model || "未配置模型" }}
+        {{ settingsStore.settings.model || t('uiNoModelConfigured454f9e') }}
       </strong>
     </footer>
     <AiChatPanel />

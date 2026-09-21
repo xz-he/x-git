@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { computed, nextTick, onMounted, onBeforeUnmount, ref, useSlots, watch } from "vue";
 import type { DiffHunk } from "@/lib/backend/types";
 import { splitDiffRows } from "./splitDiffRows";
@@ -75,9 +76,9 @@ watch([rows, () => props.highlightedLine], async () => {
 
 <template>
   <div class="split-diff" :class="{ 'fill-height': fillHeight }" :style="{ '--row-height': `${rowHeight}px`, '--diff-font-size': `${fontSize}px` }">
-    <div class="side-labels"><span>修改前</span><span>修改后</span></div>
+    <div class="side-labels"><span>{{ t('uiBeforec9a559') }}</span><span>{{ t('uiAfterb53173') }}</span></div>
     <div ref="viewport" class="split-panes">
-      <div v-for="side in sides" :key="side" ref="panes" class="diff-pane" :aria-label="side === 'left' ? '修改前' : '修改后'" role="region" tabindex="0" :style="{ height: fillHeight ? '100%' : `${height}px` }" @scroll="syncScroll">
+      <div v-for="side in sides" :key="side" ref="panes" class="diff-pane" :aria-label="side === 'left' ? t('uiBeforec9a559') : t('uiAfterb53173')" role="region" tabindex="0" :style="{ height: fillHeight ? '100%' : `${height}px` }" @scroll="syncScroll">
         <div class="diff-canvas" :style="{ minWidth: `calc(${columns}ch + ${slots.cell ? 120 : 80}px)` }">
           <div aria-hidden="true" :style="{ height: `${start * rowHeight}px` }" />
           <div v-for="(row, index) in visible" :key="start + index" class="diff-cell" :class="[row[side]?.kind, { empty: !row[side], 'hunk-header': row.kind === 'header', 'custom-cell': !!slots.cell }]" :data-row="start + index">

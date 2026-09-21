@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { computed, ref, watch } from "vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import AppSelect from "@/components/common/AppSelect.vue";
@@ -30,7 +31,7 @@ function close() { if (!tasks.submitting) { stop(); emit("close"); } }
 async function copyTitle() {
   copied.value = false; copyError.value = "";
   try { await navigator.clipboard.writeText(preview.value.title); copied.value = true; }
-  catch { copyError.value = "复制失败，请选择上方标题手动复制。"; }
+  catch { copyError.value = t('uiCopyFailedSelectTheTitleAboveAndCopyItManually6976d1'); }
 }
 async function create() {
   if (invalid.value || !initial.branch || !initial.head || initial.root !== repositories.snapshot?.rootPath || initial.generation !== repositories.generation) return;
@@ -44,28 +45,28 @@ async function create() {
 </script>
 
 <template>
-  <ConfirmDialog class="task-dialog" title="快速建分支" confirm-label="确认创建任务分支" :confirm-disabled="invalid" :busy="tasks.submitting" @cancel="close" @confirm="create">
+  <ConfirmDialog class="task-dialog" :title="t('uiQuickBranch2c5f2e')" :confirm-label="t('uiConfirmTaskBranchCreation0bec86')" :confirm-disabled="invalid" :busy="tasks.submitting" @cancel="close" @confirm="create">
     <p class="task-context">{{ formatDisplayPath(initial.root ?? '') }} · {{ initial.branch }}</p>
     <fieldset class="task-fields" :disabled="tasks.submitting">
-      <label>任务类型<AppSelect v-model="kind" aria-label="任务类型" :disabled="tasks.submitting" :options="[{ value: 'feature', label: '需求 / 优化（feature）' }, { value: 'hotfix', label: 'Bug 修复（hotfix）' }] as const" /></label>
-      <label>完整任务单号<input v-model="ticket" aria-label="完整任务单号" :placeholder="kind === 'feature' ? 'R2026082681825' : 'B2026082681825'" /></label>
-      <label>中文说明<input :value="description" aria-label="中文说明" placeholder="新增采购订单" @input="updateDescription(($event.target as HTMLInputElement).value, ($event as InputEvent).isComposing)" @compositionstart="stop" @compositionend="updateDescription(($event.target as HTMLInputElement).value)" /></label>
-      <label>简短英文描述<input :value="slug" aria-label="英文描述" title="根据中文说明通过 AI 自动生成，也可以手动修改" placeholder="输入中文说明后自动生成" @input="updateSlug(($event.target as HTMLInputElement).value)" /></label>
+      <label>{{ t('uiTaskType4a6f41') }}<AppSelect v-model="kind" :aria-label="t('uiTaskType4a6f41')" :disabled="tasks.submitting" :options="[{ value: 'feature', label: t('uiFeatureEnhancementFeature573e6f') }, { value: 'hotfix', label: t('uiBugFixHotfixeb5e14') }] as const" /></label>
+      <label>{{ t('uiFullTaskIDa2cb26') }}<input v-model="ticket" :aria-label="t('uiFullTaskIDa2cb26')" :placeholder="kind === 'feature' ? 'R2026082681825' : 'B2026082681825'" /></label>
+      <label>{{ t('uiChineseDescription02d25c') }}<input :value="description" :aria-label="t('uiChineseDescription02d25c')" :placeholder="t('uiAddPurchaseOrdersEnterInChinese95bf31')" @input="updateDescription(($event.target as HTMLInputElement).value, ($event as InputEvent).isComposing)" @compositionstart="stop" @compositionend="updateDescription(($event.target as HTMLInputElement).value)" /></label>
+      <label>{{ t('uiShortEnglishDescription3ae64a') }}<input :value="slug" :aria-label="t('uiEnglishDescription3bbed2')" :title="t('uiAIGeneratesThisFromTheChineseDescriptionYouCanAlsoEditItManu0cdfb3')" :placeholder="t('uiGeneratedAfterEnteringAChineseDescriptiona28972')" @input="updateSlug(($event.target as HTMLInputElement).value)" /></label>
       <div class="task-translation">
-        <span class="task-hint" role="status">{{ translating ? '正在生成英文描述…' : '通过已配置的 AI 自动翻译；手动修改后保留你的输入。' }}</span>
-        <button type="button" :disabled="!description.trim() || translating" @click="regenerate">重新生成</button>
+        <span class="task-hint" role="status">{{ translating ? t('uiGeneratingEnglishDescriptionec0df9') : t('uiTranslatedByYourConfiguredAIServiceManualEditsArePreservedc36e1a') }}</span>
+        <button type="button" :disabled="!description.trim() || translating" @click="regenerate">{{ t('uiRegenerate2e1905') }}</button>
       </div>
       <p v-if="translationError" role="alert" class="task-error">{{ translationError }}</p>
-      <label>创建方式<AppSelect v-model="mode" aria-label="创建方式" :disabled="tasks.submitting" :options="[{ value: 'current', label: '从当前分支创建并切换' }, { value: 'remoteMaster', label: '从远端 master 创建，留在开发分支' }] as const" /></label>
-      <label v-if="mode === 'remoteMaster'">远端<AppSelect v-model="remote" aria-label="任务分支远端" placeholder="选择远端" :disabled="tasks.submitting" :options="remoteNames.map(name => ({ value: name, label: name }))" /></label>
+      <label>{{ t('uiCreationMode32d8a7') }}<AppSelect v-model="mode" :aria-label="t('uiCreationMode32d8a7')" :disabled="tasks.submitting" :options="[{ value: 'current', label: t('uiCreateFromCurrentBranchAndSwitch67bac5') }, { value: 'remoteMaster', label: t('uiCreateFromRemoteMasterStayOnDevelopmentBranch8619cb') }] as const" /></label>
+      <label v-if="mode === 'remoteMaster'">{{ t('uiRemotee28c4a') }}<AppSelect v-model="remote" :aria-label="t('uiTaskBranchRemote1dec25')" :placeholder="t('uiSelectRemote01c506')" :disabled="tasks.submitting" :options="remoteNames.map(name => ({ value: name, label: name }))" /></label>
     </fieldset>
-    <p class="task-hint">{{ mode === 'current' ? '基于当前 HEAD 创建并切换，后续在新分支开发。' : '先获取最新远端 master，再创建任务分支。继续在当前分支开发，在提交面板选择“提交并移植”。' }}</p>
-    <div class="task-preview"><small>分支名称</small><code>{{ preview.name }}</code><small>MR 标题</small><span>{{ preview.title }}</span><button type="button" :disabled="!!preview.error" @click="copyTitle">{{ copied ? '已复制' : '复制 MR 标题' }}</button></div>
+    <p class="task-hint">{{ mode === 'current' ? t('uiCreatesAndSwitchesToABranchAtTheCurrentHEADContinueDevelopmed6011c') : t('uiFetchesTheLatestRemoteMasterAndCreatesTheTaskBranchKeepDevela06a94') }}</p>
+    <div class="task-preview"><small>{{ t('uiBranchName01571f') }}</small><code>{{ preview.name }}</code><small>{{ t('uiMRTitle41774b') }}</small><span>{{ preview.title }}</span><button type="button" :disabled="!!preview.error" @click="copyTitle">{{ copied ? t('uiCopiede381a5') : t('uiCopyMRTitledb55cf') }}</button></div>
     <p v-if="preview.error && (ticket || slug || description)" class="task-hint">{{ preview.error }}</p>
-    <p v-if="mode === 'remoteMaster' && !remoteNames.length" class="task-error">当前仓库没有配置远端。</p>
+    <p v-if="mode === 'remoteMaster' && !remoteNames.length" class="task-error">{{ t('uiNoRemotesConfiguredInThisRepository848758') }}</p>
     <p v-if="copyError" role="alert" class="task-error">{{ copyError }}</p>
     <p v-if="tasks.error" role="alert" class="task-error">{{ tasks.error.message }}</p>
-    <button v-if="tasks.uncertain" :disabled="tasks.loading || tasks.submitting" aria-label="刷新任务状态" @click="tasks.refreshState">刷新任务状态</button>
+    <button v-if="tasks.uncertain" :disabled="tasks.loading || tasks.submitting" :aria-label="t('uiRefreshTaskStatus7ac37a')" @click="tasks.refreshState">{{ t('uiRefreshTaskStatus7ac37a') }}</button>
   </ConfirmDialog>
 </template>
 

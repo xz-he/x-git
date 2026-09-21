@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
-import { ref } from "vue";
+import { ref, watch } from "vue";
+import { applyLanguage, normalizeLanguage } from "@/lib/i18n";
 
 import { backendClient } from "@/lib/backend/client";
 import { normalizeBackendError } from "@/lib/backend/errors";
@@ -36,6 +37,7 @@ export function defaultSettings(
 ): AppSettings {
   const settings: AppSettings = {
     schemaVersion: 1,
+    language: "zh-CN",
     theme: "system",
     fontFamily: "",
     codeFontFamily: "",
@@ -69,6 +71,7 @@ export function normalizeSettings(settings: AppSettings): AppSettings {
   );
   return {
     ...settings,
+    language: normalizeLanguage(settings.language),
     checkUpdatesOnStartup: settings.checkUpdatesOnStartup !== false,
     aiApiFormat: settings.aiApiFormat === "responses" ? "responses" : "chatCompletions",
     fontFamily: normalizeFontFamily(settings.fontFamily),
@@ -125,6 +128,7 @@ export function applyAiApiFormat(settings: AppSettings, format: AiApiFormat): Ap
 
 export const useSettingsStore = defineStore("settings", () => {
   const settings = ref<AppSettings>(defaultSettings());
+  watch(() => settings.value.language, applyLanguage, { immediate: true, flush: "sync" });
   const migrationWarning = ref<string>();
   const loading = ref(false);
   const saving = ref(false);

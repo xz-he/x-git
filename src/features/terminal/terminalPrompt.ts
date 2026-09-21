@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import type { IMarker, Terminal } from "@xterm/xterm";
 import type { TerminalCompletion } from "@/lib/backend/types";
 import { commonPrefix, replaceCompletion } from "./completion";
@@ -131,7 +132,7 @@ export class TerminalPrompt {
         this.cursor = this.draft.length;
         await this.draw(); await this.write("\r\n");
         await this.write(result.items.map(item => `${safeText(item.label)}  ${safeText(item.description)}`).join("\r\n") + "\r\n");
-        if (result.hasMore) await this.write("还有更多匹配，请继续输入缩小范围。\r\n");
+        if (result.hasMore) await this.write((t('uiMoreMatchesAvailableKeepTypingToNarrowTheList910ca2') + "\r\n"));
         this.marker?.dispose(); this.marker = undefined; await this.draw();
       });
     } catch { /* Completion is optional; command editing stays available. */ }

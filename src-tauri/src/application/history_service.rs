@@ -23,7 +23,7 @@ use crate::domain::history::{
 use crate::domain::operation::{
     MutationWorkspace, RepositoryOperationKind, RepositoryOperationState,
 };
-use crate::infrastructure::git_runner::{GitCommandRunner, GitOutput};
+use crate::infrastructure::git_runner::GitCommandRunner;
 
 pub const HISTORY_PAGE_SIZE: usize = 200;
 const MAX_CURSOR_BYTES: usize = 16 * 1024;
@@ -215,26 +215,36 @@ impl HistoryService {
             None => source_branch.clone(),
         };
         let switched = target_branch != source_branch;
-        if switched {
-            self.runner
-                .run(Some(&root), ["switch", "--", target_branch.as_str()])
-                .await?;
-        }
+        let saved =
+            super::cherry_pick_worktree::CherryPickWorktree::save(&root, &self.runner).await?;
+        let outcome = async {
+            if switched {
+                self.runner
+                    .run(Some(&root), ["switch", "--", target_branch.as_str()])
+                    .await?;
+            }
 
-        let output = self
-            .runner
-            .run_allowing_failure(Some(&root), ["cherry-pick", "--", hash.as_str()])
-            .await?;
-        let result = self.refreshed_mutation_result(&root).await?;
-        if !output.is_success() {
-            return recover_cherry_pick_result(output, result);
-        }
-        if switched && request.return_after_success {
-            self.runner
-                .run(Some(&root), ["switch", "--", source_branch.as_str()])
+            let output = self
+                .runner
+                .run_allowing_failure(Some(&root), ["cherry-pick", "--", hash.as_str()])
                 .await?;
-            return self.refreshed_mutation_result(&root).await;
+            if !output.is_success() {
+                if is_recoverable_cherry_pick(&read_operation_state(&root, &self.runner).await?) {
+                    return Ok(());
+                }
+                output.into_result()?;
+            }
+            if switched && request.return_after_success {
+                self.runner
+                    .run(Some(&root), ["switch", "--", source_branch.as_str()])
+                    .await?;
+            }
+            Ok(())
         }
+        .await;
+        let outcome = saved.finish(&root, &self.runner, outcome).await;
+        let mut result = self.refreshed_mutation_result(&root).await?;
+        result.error = outcome.err();
         Ok(result)
     }
 
@@ -553,6 +563,7 @@ impl HistoryService {
             workspace,
             history: history?,
             operation_state,
+            error: None,
         })
     }
 
@@ -678,17 +689,6 @@ fn parse_file_stats(output: &str) -> Result<HashMap<&str, LineStats>, BackendErr
         }
     }
     Ok(statistics)
-}
-
-fn recover_cherry_pick_result(
-    output: GitOutput,
-    result: HistoryMutationResult,
-) -> Result<HistoryMutationResult, BackendError> {
-    if is_recoverable_cherry_pick(&result.operation_state) {
-        return Ok(result);
-    }
-    output.into_result()?;
-    unreachable!("non-zero Git output must produce an error")
 }
 
 fn is_recoverable_cherry_pick(state: &RepositoryOperationState) -> bool {

@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { computed, ref, watch } from "vue";
 import { defineStore } from "pinia";
 import { backendClient } from "@/lib/backend/client";
@@ -14,8 +15,8 @@ interface Identity { rootPath: string; generation: number; branch: string | null
 interface FileConfirmation extends Identity { intent: FileOperationIntent; selectedPath?: string; prepared?: PreparedFileOperation }
 export const parentDirectory = (path: string): string => path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
 export function fileNameError(name: string): string | undefined {
-  if (!name || /[\\/:*?"<>|\u0000-\u001f]/.test(name) || /[. ]$/.test(name) || name === "." || name === "..") return "请输入单个有效名称，不含路径分隔符、非法字符或末尾空格和点。";
-  if (/^(?:\.git|git~1)$/i.test(name) || /^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i.test(name)) return "此名称为系统或 Git 保留名称。";
+  if (!name || /[\\/:*?"<>|\u0000-\u001f]/.test(name) || /[. ]$/.test(name) || name === "." || name === "..") return t('uiEnterASingleValidNameWithoutPathSeparatorsInvalidCharactersT3a2863');
+  if (/^(?:\.git|git~1)$/i.test(name) || /^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i.test(name)) return t('uiThisNameIsReservedByTheSystemOrGit5c5533');
 }
 
 export const useFilesStore = defineStore("files", () => {

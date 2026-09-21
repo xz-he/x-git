@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { computed, ref, watch } from "vue";
 
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
@@ -57,17 +58,19 @@ watch(
       ?? selectedRemote.value?.branches[0]?.name ?? "";
     pullLocalBranch.value = currentLocal?.name ?? repositories.snapshot?.currentBranch ?? "";
     localBranch.value = currentLocal?.name ?? "";
-    pushBranch.value =
-      selectedRemote.value?.branches.find(
-        (branch) => branch.trackingLocal === currentLocal?.name,
-      )?.name ??
-      currentLocal?.name ??
-      "";
+    pushBranch.value = localBranch.value;
     establishUpstream.value = !currentLocal?.upstream;
     forceWithLease.value = false;
   },
   { immediate: true },
 );
+
+watch(localBranch, (name) => {
+  if (remotes.requestedAction !== "push") return;
+  pushBranch.value = name;
+  establishUpstream.value = !localBranches.value.find(branch => branch.name === name)?.upstream;
+  forceWithLease.value = false;
+});
 
 async function confirmPull(): Promise<void> {
   const remote = selectedRemote.value;
@@ -108,33 +111,33 @@ async function confirmPush(): Promise<void> {
 <template>
   <ConfirmDialog
     v-if="remotes.requestedAction === 'pull'"
-    title="拉取远程分支"
-    :description="selectedRemote ? `将 ${selectedRemote.name}/${pullBranch || '远程分支'} 拉取到本地 ${pullLocalBranch || '目标分支'}。执行后停留在目标分支，Git 的仓库配置决定合并或变基策略。` : '当前没有可用的远程仓库。'"
-    confirm-label="确认拉取"
+    :title="t('uiPullRemoteBranchb188c0')"
+    :description="selectedRemote ? t('msgPullIntoLocalBranchThenStayOnTheTargetBranchGitRep1b89e3', { p0: selectedRemote.name, p1: pullBranch || t('uiRemoteBranch9072f8'), p2: pullLocalBranch || t('uiTargetBranch55b297') }) : t('uiNoRemoteRepositoryAvailable33fe14')"
+    :confirm-label="t('uiConfirmPull4e5514')"
     :confirm-disabled="pullDisabled"
     :busy="remotes.running"
     @cancel="remotes.dismissAction()"
     @confirm="confirmPull"
   >
     <label class="field">
-      远程仓库
-      <AppSelect v-model="remotes.selectedRemoteName" aria-label="拉取远程仓库" :disabled="remotes.running" :options="(remotes.snapshot?.remotes ?? []).map(remote => ({ value: remote.name, label: remote.name }))" />
+      {{ t('uiRemoteRepository36ecf0') }}
+      <AppSelect v-model="remotes.selectedRemoteName" :aria-label="t('uiPullRemote899926')" :disabled="remotes.running" :options="(remotes.snapshot?.remotes ?? []).map(remote => ({ value: remote.name, label: remote.name }))" />
     </label>
-    <label class="field">远程源分支
-      <BranchInput v-model="pullBranch" label="远程分支" :options="selectedRemote?.branches.map(branch => branch.name) ?? []" :disabled="remotes.running" />
+    <label class="field">{{ t('uiSourceRemoteBranche6b299') }}
+      <BranchInput v-model="pullBranch" :label="t('uiRemoteBranch9072f8')" :options="selectedRemote?.branches.map(branch => branch.name) ?? []" :disabled="remotes.running" />
     </label>
-    <label class="field">本地目标分支
-      <BranchInput v-model="pullLocalBranch" label="拉取目标本地分支" :options="localBranches.map(branch => branch.name)" :disabled="remotes.running" />
+    <label class="field">{{ t('uiTargetLocalBranchcaec31') }}
+      <BranchInput v-model="pullLocalBranch" :label="t('uiPullTargetLocalBranchc944dc')" :options="localBranches.map(branch => branch.name)" :disabled="remotes.running" />
     </label>
-    <p class="target-hint">支持输入联想；本地目标分支必须已存在。跨分支拉取前请先提交或贮藏未提交修改。</p>
+    <p class="target-hint">{{ t('uiTypeForSuggestionsTheLocalTargetBranchMustAlreadyExistCommitfa0537') }}</p>
     <p v-if="remotes.error" class="lease-warning" role="alert">{{ remotes.error.message }}</p>
   </ConfirmDialog>
 
   <ConfirmDialog
     v-else-if="remotes.requestedAction === 'push'"
-    title="推送本地分支"
-    :description="selectedRemote ? '将指定本地分支推送到 ' + selectedRemote.name + '。' : '当前没有可用的远程仓库。'"
-    confirm-label="确认推送"
+    :title="t('uiPushLocalBranch9fd0a6')"
+    :description="selectedRemote ? (t('uiPushTheSelectedLocalBranchTo870749') + ' ') + selectedRemote.name + '。' : t('uiNoRemoteRepositoryAvailable33fe14')"
+    :confirm-label="t('uiConfirmPush13123f')"
     :confirm-disabled="pushDisabled"
     :busy="remotes.running"
     :danger="forceWithLease"
@@ -143,33 +146,34 @@ async function confirmPush(): Promise<void> {
   >
     <div class="target-grid">
       <label class="field">
-        本地分支
-        <AppSelect v-model="localBranch" aria-label="本地分支" :disabled="remotes.running" :options="localBranches.map(branch => ({ value: branch.name, label: branch.name }))" />
+        {{ t('uiLocalBranch9fdfe9') }}
+        <AppSelect v-model="localBranch" :aria-label="t('uiLocalBranch9fdfe9')" :disabled="remotes.running" :options="localBranches.map(branch => ({ value: branch.name, label: branch.name }))" />
       </label>
       <label class="field">
-        远程分支
-        <input
+        {{ t('uiRemoteBranch9072f8') }}
+        <BranchInput
           v-model="pushBranch"
-          aria-label="推送远程分支"
-          autocomplete="off"
+          :label="t('uiPushRemoteBranch1c1302')"
+          :options="selectedRemote?.branches.map(branch => branch.name) ?? []"
+          :disabled="remotes.running"
         />
       </label>
     </div>
     <label class="check-field">
       <input v-model="establishUpstream" type="checkbox" />
-      建立上游跟踪
+      {{ t('uiSetUpstreamTracking78264b') }}
     </label>
     <label class="check-field force-choice">
       <input
         v-model="forceWithLease"
         type="checkbox"
-        aria-label="使用 Force With Lease"
+        :aria-label="t('uiUseForceWithLeasea0315d')"
       />
-      使用 Force With Lease
+      {{ t('uiUseForceWithLeasea0315d') }}
     </label>
     <p v-if="forceWithLease" class="lease-warning">
-      仅当 {{ selectedRemote?.name }}/{{ pushBranch }} 仍指向
-      <code>{{ leaseBranch?.objectId ?? "未知对象" }}</code> 时覆盖远程分支。
+      {{ t('uiOverwriteTheRemoteBranchOnlyIfe023f7') }} {{ selectedRemote?.name }}/{{ pushBranch }} {{ t('uistillPointsTo668a22') }}
+      <code>{{ leaseBranch?.objectId ?? t('uiUnknownObjectda5e88') }}</code> {{ t('uia2b2b4') }}
     </p>
   </ConfirmDialog>
 </template>

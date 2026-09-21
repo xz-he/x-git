@@ -167,6 +167,57 @@ describe("remote workbench", () => {
     wrapper.unmount();
   });
 
+  it("defaults push destination to the local branch and offers remote branch suggestions", async () => {
+    const store = useRemotesStore();
+    store.resetForRepository("C:/repo", 1);
+    store.applySnapshot({ remotes: [{ ...remotes.remotes[0]!, branches: [
+      { ...remotes.remotes[0]!.branches[0]!, trackingLocal: "feature/demo" },
+      { ...remotes.remotes[0]!.branches[0]!, name: "release", fullName: "refs/remotes/origin/release", objectId: "d".repeat(40), trackingLocal: undefined },
+    ] }] });
+    store.selectedRemoteName = "origin";
+    useRefsStore().applySnapshot({
+      localBranches: ["feature/demo", "hotfix/next"].map(name => ({
+        name, fullName: `refs/heads/${name}`, kind: "local", current: name === "feature/demo",
+        tip: { fullHash: "c".repeat(40), shortHash: "ccccccc", subject: "local", author: "HQ", authoredAt: "2026-09-10T00:00:00Z" },
+      })), remoteBranches: [], tags: [],
+    }, "C:/repo");
+    store.requestAction("push");
+    const wrapper = mount(RemoteSyncDialogs, { attachTo: document.body, global: { plugins: [pinia] } });
+    await flushPromises();
+    const destination = () => wrapper.get<HTMLInputElement>('[aria-label="推送远程分支"]');
+    expect(destination().element.value).toBe("feature/demo");
+    await wrapper.get('[aria-label="本地分支"]').trigger("click");
+    (document.querySelector('[role="option"][data-value="hotfix/next"]') as HTMLElement).click();
+    await flushPromises();
+    expect(destination().element.value).toBe("hotfix/next");
+    await wrapper.get('[aria-label="推送远程分支"]').trigger("click");
+    expect(document.querySelector('[role="listbox"]')?.textContent).toContain("main");
+    await destination().setValue("rel");
+    expect(document.querySelector('[role="listbox"]')?.textContent).toContain("release");
+    expect(document.querySelector('[role="listbox"]')?.textContent).not.toContain("main");
+    (document.querySelector('[role="option"][data-value="release"]') as HTMLElement).click();
+    await flushPromises();
+    expect(destination().element.value).toBe("release");
+    vi.mocked(backend.remoteStartPush).mockImplementation(async (_root, runId) => ({ runId, operation: "push" }));
+    await wrapper.get('[aria-label="使用 Force With Lease"]').setValue(true);
+    await wrapper.get('[aria-label="确认推送"]').trigger("click");
+    await vi.waitFor(() => expect(backend.remoteStartPush).toHaveBeenCalledWith("C:/repo", expect.any(String), {
+      remote: "origin", localBranch: "hotfix/next", remoteBranch: "release", establishUpstream: true,
+      forceWithLease: { expectedRemoteOid: "d".repeat(40) },
+    }));
+    store.status = "idle";
+    store.requestAction("push");
+    await flushPromises();
+    expect(destination().element.value).toBe("feature/demo");
+    await destination().setValue("feature/new-remote");
+    await destination().trigger("keydown", { key: "Escape" });
+    await wrapper.get('[aria-label="确认推送"]').trigger("click");
+    await vi.waitFor(() => expect(backend.remoteStartPush).toHaveBeenLastCalledWith("C:/repo", expect.any(String), {
+      remote: "origin", localBranch: "feature/demo", remoteBranch: "feature/new-remote", establishUpstream: true, forceWithLease: null,
+    }));
+    wrapper.unmount();
+  });
+
   it("keeps a fixed progress surface and coalesces Stop requests", async () => {
     const store = useRemotesStore();
     store.runId = "run-1";

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
 import { Play, LoaderCircle } from "@lucide/vue";
 import { backendClient } from "@/lib/backend/client";
@@ -95,17 +96,17 @@ onBeforeUnmount(close);
 
 <template>
   <div class="terminal-command">
-    <div v-if="popup" :id="`${id}-list`" class="completion-menu" role="listbox" aria-label="Git 命令提示">
+    <div v-if="popup" :id="`${id}-list`" class="completion-menu" role="listbox" :aria-label="t('uiGitCommandSuggestions9e4d3f')">
       <button v-for="(item, index) in completion!.items" :id="`${id}-option-${index}`" :key="`${item.value}:${index}`" type="button" role="option" :aria-selected="index === selected" :class="{ selected: index === selected }" @mousedown.prevent @click="apply(index)"><code>{{ item.label }}</code><span>{{ item.description }}</span></button>
-      <small v-if="completion!.hasMore">还有更多匹配项，请继续输入缩小范围</small>
+      <small v-if="completion!.hasMore">{{ t('uiMoreMatchesAvailableKeepTypingToNarrowTheList906531') }}</small>
     </div>
     <div class="input-row">
       <span class="prompt" aria-hidden="true">❯</span>
-      <input ref="input" v-model="terminal.draft" role="combobox" aria-label="Git 命令" :aria-expanded="popup" :aria-controls="popup ? `${id}-list` : undefined" :aria-activedescendant="popup ? `${id}-option-${selected}` : undefined" aria-autocomplete="list" :disabled="blocked" spellcheck="false" autocomplete="off" placeholder="git status" @input="edited" @keydown="keydown" @blur="close" @click="close" />
+      <input ref="input" v-model="terminal.draft" role="combobox" :aria-label="t('terminal')" :aria-expanded="popup" :aria-controls="popup ? `${id}-list` : undefined" :aria-activedescendant="popup ? `${id}-option-${selected}` : undefined" aria-autocomplete="list" :disabled="blocked" spellcheck="false" autocomplete="off" placeholder="git status" @input="edited" @keydown="keydown" @blur="close" @click="close" />
       <LoaderCircle v-if="querying" :size="15" class="spin" />
-      <button class="run" aria-label="运行命令" :disabled="blocked || !terminal.draft.trim()" @click="close(); terminal.run()"><Play :size="14" />运行</button>
+      <button class="run" :aria-label="t('uiRunCommand6f2732')" :disabled="blocked || !terminal.draft.trim()" @click="close(); terminal.run()"><Play :size="14" />{{ t('uiRun0c3acd') }}</button>
     </div>
-    <p>Enter 执行 · Tab 补全 · ↑↓ 历史 · 运行时在终端内输入，Ctrl+C 中断</p>
+    <p>{{ t('uiEnterRunTabCompleteHistoryTypeInTheTerminalWhileRunningCtrlC05b828') }}</p>
   </div>
 </template>
 

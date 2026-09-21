@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { computed, ref } from "vue";
 import { defineStore } from "pinia";
 import { backendClient } from "@/lib/backend/client";
@@ -83,7 +84,7 @@ export const useConsoleStore = defineStore("console", () => {
     const repository = useRepositoryStore();
     if (busy.value || repository.operation.kind !== "idle") return;
     if (!repository.snapshot) {
-      error.value = { code: "invalidRepository", message: "请先打开 Git 仓库。" };
+      error.value = { code: "invalidRepository", get message() { return t('uiOpenAGitRepositoryFirsta00a3e'); } };
       return;
     }
     const candidate: Owner = {
@@ -108,7 +109,7 @@ export const useConsoleStore = defineStore("console", () => {
       const response = await backendClient.consoleStart(candidate.rootPath, candidate.runId, candidate.command);
       if (!owns(candidate)) return;
       if (response.runId !== candidate.runId || !sameRoot(response.rootPath, candidate.rootPath)) {
-        throw { code: "unexpected", message: "Git 控制台返回了不匹配的任务信息。" };
+        throw { code: "unexpected", get message() { return t('uiTheGitConsoleReturnedMismatchedTaskInformation594c74'); } };
       }
       accepted(candidate);
       if (!candidate.terminal) status.value = "running";
@@ -156,7 +157,7 @@ export const useConsoleStore = defineStore("console", () => {
       status.value = payload.outcome;
       error.value = payload.error ?? undefined;
       if (payload.outcome === "failed") reportGitFailure({ root: candidate.rootPath, command: candidate.command,
-        error: payload.error ?? { code: "gitCommandFailed", message: `Git 命令执行失败，退出码：${payload.exitCode}` },
+        error: payload.error ?? { code: "gitCommandFailed", message: t('msgGitCommandFailedExitCode9ed91f', { p0: payload.exitCode }) },
         output: (stderr.value || stdout.value).slice(-12_000) });
       candidate.terminal = true;
       cancelRequested.value = false;

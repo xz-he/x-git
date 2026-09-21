@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::domain::changes::WorkingTreeSnapshot;
+use crate::domain::error::BackendError;
 use crate::domain::operation::RepositoryOperationState;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -113,4 +114,6 @@ pub struct HistoryMutationResult {
     pub workspace: WorkingTreeSnapshot,
     pub history: HistoryPage,
     pub operation_state: RepositoryOperationState,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<BackendError>,
 }

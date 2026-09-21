@@ -829,6 +829,236 @@ async fn cherry_pick_conflict_stays_on_target_and_exposes_abort() {
 }
 
 #[tokio::test]
+async fn cherry_pick_preserves_unstaged_and_untracked_changes_and_existing_stashes() {
+    for target in [None, Some(false), Some(true)] {
+        let fixture = repository_fixture().await;
+        let root = fixture.path();
+        commit_file(root, "base\n", "base").await;
+        commit_file(root, "original stash\n", "temporary").await;
+        std::fs::write(root.join("history.txt"), "old backup\n").unwrap();
+        run_git(root, &["stash", "push", "-m", "user backup"]).await;
+        let old_stashes = git_text(root, &["stash", "list", "--format=%H"]).await;
+        run_git(root, &["branch", "release"]).await;
+        run_git(root, &["switch", "-c", "topic"]).await;
+        std::fs::write(root.join("picked.txt"), "committed\n").unwrap();
+        run_git(root, &["add", "picked.txt"]).await;
+        run_git(root, &["commit", "-m", "picked change"]).await;
+        let commit = head_hash(root).await;
+        run_git(root, &["switch", "main"]).await;
+        std::fs::write(root.join("history.txt"), "local unstaged\n").unwrap();
+        let binary = [0, 255, 10, 128, 13];
+        std::fs::write(root.join("本地文件.bin"), binary).unwrap();
+        let result = HistoryService::default()
+            .cherry_pick(
+                root,
+                CherryPickRequest {
+                    commit,
+                    target_branch: target.map(|_| "release".into()),
+                    return_after_success: target == Some(true),
+                },
+            )
+            .await
+            .unwrap();
+        assert!(result.error.is_none(), "{:?}", result.error);
+        assert_eq!(
+            result.workspace.repository.current_branch.as_deref(),
+            Some(if target == Some(false) {
+                "release"
+            } else {
+                "main"
+            })
+        );
+        assert_eq!(
+            std::fs::read_to_string(root.join("history.txt")).unwrap(),
+            "local unstaged\n"
+        );
+        assert_eq!(std::fs::read(root.join("本地文件.bin")).unwrap(), binary);
+        assert_eq!(
+            git_text(root, &["stash", "list", "--format=%H"]).await,
+            old_stashes
+        );
+        assert_eq!(git_text(root, &["diff", "--cached"]).await, "");
+        let picked_branch = if target.is_some() { "release" } else { "main" };
+        assert_eq!(
+            git_text(root, &["show", &format!("{picked_branch}:history.txt")]).await,
+            "original stash"
+        );
+        assert_eq!(
+            git_text(root, &["show", &format!("{picked_branch}:picked.txt")]).await,
+            "committed"
+        );
+    }
+}
+
+async fn git_text(root: &Path, args: &[&str]) -> String {
+    GitCommandRunner::default()
+        .run(Some(root), args)
+        .await
+        .unwrap()
+        .stdout
+        .trim()
+        .to_owned()
+}
+
+#[tokio::test]
+async fn cherry_pick_restore_conflict_retains_recoverable_backup_and_completed_commit() {
+    let fixture = repository_fixture().await;
+    let root = fixture.path();
+    commit_file(root, "base\n", "base").await;
+    run_git(root, &["switch", "-c", "topic"]).await;
+    commit_file(root, "picked\n", "picked change").await;
+    let commit = head_hash(root).await;
+    run_git(root, &["switch", "main"]).await;
+    std::fs::write(root.join("history.txt"), "unsaved local\n").unwrap();
+    let result = HistoryService::default()
+        .cherry_pick(
+            root,
+            CherryPickRequest {
+                commit,
+                target_branch: None,
+                return_after_success: false,
+            },
+        )
+        .await
+        .unwrap();
+    assert!(result.error.unwrap().message.contains("移植操作已完成"));
+    assert_eq!(
+        git_text(root, &["show", "HEAD:history.txt"]).await,
+        "picked"
+    );
+    assert_eq!(
+        git_text(root, &["show", "stash@{0}:history.txt"]).await,
+        "unsaved local"
+    );
+    assert_eq!(result.operation_state.kind, RepositoryOperationKind::None);
+    assert!(!result.operation_state.conflicts.is_empty());
+}
+
+#[tokio::test]
+async fn cherry_pick_does_not_hide_or_commit_staged_changes() {
+    let fixture = repository_fixture().await;
+    let root = fixture.path();
+    commit_file(root, "base\n", "base").await;
+    let commit = head_hash(root).await;
+    std::fs::write(root.join("history.txt"), "staged\n").unwrap();
+    run_git(root, &["add", "history.txt"]).await;
+    std::fs::write(root.join("history.txt"), "unstaged\n").unwrap();
+    let index = git_text(root, &["write-tree"]).await;
+    let error = HistoryService::default()
+        .cherry_pick(
+            root,
+            CherryPickRequest {
+                commit: commit.clone(),
+                target_branch: None,
+                return_after_success: false,
+            },
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, ErrorCode::DirtyWorktree);
+    assert_eq!(head_hash(root).await, commit);
+    assert_eq!(git_text(root, &["write-tree"]).await, index);
+    assert_eq!(
+        std::fs::read_to_string(root.join("history.txt")).unwrap(),
+        "unstaged\n"
+    );
+    assert_eq!(git_text(root, &["stash", "list"]).await, "");
+}
+
+#[tokio::test]
+async fn cherry_pick_failed_switch_restores_unstaged_work() {
+    let fixture = repository_fixture().await;
+    let linked = tempfile::tempdir().unwrap();
+    let root = fixture.path();
+    commit_file(root, "base\n", "base").await;
+    let commit = head_hash(root).await;
+    run_git(
+        root,
+        &[
+            "worktree",
+            "add",
+            "-b",
+            "occupied",
+            linked.path().to_str().unwrap(),
+        ],
+    )
+    .await;
+    std::fs::write(root.join("history.txt"), "local\n").unwrap();
+    let result = HistoryService::default()
+        .cherry_pick(
+            root,
+            CherryPickRequest {
+                commit: commit.clone(),
+                target_branch: Some("occupied".into()),
+                return_after_success: true,
+            },
+        )
+        .await
+        .unwrap();
+    assert!(result.error.is_some());
+    assert_eq!(head_hash(root).await, commit);
+    assert_eq!(
+        result.workspace.repository.current_branch.as_deref(),
+        Some("main")
+    );
+    assert_eq!(
+        std::fs::read_to_string(root.join("history.txt")).unwrap(),
+        "local\n"
+    );
+    assert_eq!(git_text(root, &["stash", "list"]).await, "");
+}
+
+#[tokio::test]
+async fn cherry_pick_conflict_keeps_unstaged_backup_out_of_conflict_index() {
+    let fixture = repository_fixture().await;
+    let root = fixture.path();
+    commit_file(root, "base\n", "base").await;
+    run_git(root, &["switch", "-c", "topic"]).await;
+    commit_file(root, "topic\n", "topic").await;
+    let commit = head_hash(root).await;
+    run_git(root, &["switch", "main"]).await;
+    commit_file(root, "main\n", "main").await;
+    std::fs::write(root.join("history.txt"), "unstaged\n").unwrap();
+    std::fs::write(root.join("local.txt"), "untracked\n").unwrap();
+    let result = HistoryService::default()
+        .cherry_pick(
+            root,
+            CherryPickRequest {
+                commit,
+                target_branch: None,
+                return_after_success: false,
+            },
+        )
+        .await
+        .unwrap();
+    assert!(result.error.unwrap().message.contains("自动贮藏备份"));
+    assert_eq!(
+        result.operation_state.kind,
+        RepositoryOperationKind::CherryPick
+    );
+    assert_eq!(git_text(root, &["show", ":2:history.txt"]).await, "main");
+    assert_eq!(git_text(root, &["show", ":3:history.txt"]).await, "topic");
+    assert_eq!(
+        git_text(root, &["show", "stash@{0}:history.txt"]).await,
+        "unstaged"
+    );
+    assert_eq!(
+        git_text(root, &["show", "stash@{0}^3:local.txt"]).await,
+        "untracked"
+    );
+    run_git(root, &["cherry-pick", "--abort"]).await;
+    run_git(root, &["stash", "apply", "stash@{0}"]).await;
+    assert_eq!(
+        std::fs::read_to_string(root.join("history.txt")).unwrap(),
+        "unstaged\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(root.join("local.txt")).unwrap(),
+        "untracked\n"
+    );
+}
+
+#[tokio::test]
 async fn cherry_pick_rejects_invalid_commits_and_non_local_target_branches() {
     let fixture = repository_fixture().await;
     commit_file(fixture.path(), "base\n", "base").await;

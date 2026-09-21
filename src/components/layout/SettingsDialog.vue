@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import {
   Eye,
   EyeOff,
@@ -24,6 +25,7 @@ import {
 } from "@/stores/settings";
 import { useUiStore } from "@/stores/ui";
 import FontSettings from "./FontSettings.vue";
+import LanguageSettings from "./LanguageSettings.vue";
 import UpdateSettings from "./UpdateSettings.vue";
 import AppSelect from "@/components/common/AppSelect.vue";
 
@@ -45,16 +47,16 @@ const themes: Array<{
   ariaLabel: string;
   icon: typeof Sun;
 }> = [
-  { value: "light", label: "浅色", ariaLabel: "使用浅色主题", icon: Sun },
-  { value: "dark", label: "深色", ariaLabel: "使用深色主题", icon: Moon },
-  { value: "system", label: "跟随系统", ariaLabel: "使用系统主题", icon: Monitor },
+  { value: "light", get label() { return t('light'); }, get ariaLabel() { return t('uiUseLightTheme854b21'); }, icon: Sun },
+  { value: "dark", get label() { return t('dark'); }, get ariaLabel() { return t('uiUseDarkThemee4f737'); }, icon: Moon },
+  { value: "system", get label() { return t('system'); }, get ariaLabel() { return t('uiUseSystemThemef19d5f'); }, icon: Monitor },
 ];
 
 const providers: Array<{ value: AiProvider; label: string }> = [
   { value: "openAi", label: "OpenAI" },
-  { value: "qwen", label: "通义千问" },
+  { value: "qwen", get label() { return t('uiQwenb1663a'); } },
   { value: "gemini", label: "Gemini" },
-  { value: "custom", label: "自定义兼容服务" },
+  { value: "custom", get label() { return t('uiCustomCompatibleServicec025f7'); } },
 ];
 
 function selectTheme(theme: ThemePreference): void {
@@ -101,6 +103,7 @@ async function saveAiSettings(): Promise<void> {
     fontFamily: settingsStore.settings.fontFamily,
     codeFontFamily: settingsStore.settings.codeFontFamily,
     theme: settingsStore.settings.theme,
+    language: settingsStore.settings.language,
     checkUpdatesOnStartup: settingsStore.settings.checkUpdatesOnStartup,
     reviewRuleFiles: [...aiForm.reviewRuleFiles],
   });
@@ -122,44 +125,45 @@ async function saveAiSettings(): Promise<void> {
     >
       <header>
         <div>
-          <h2 id="settings-title">设置</h2>
-          <p>应用外观、AI 服务与版本更新</p>
+          <h2 id="settings-title">{{ t('settings') }}</h2>
+          <p>{{ t('uiAppearanceAIServicesAndUpdatese367ee') }}</p>
         </div>
         <button
           class="icon-button"
-          aria-label="关闭设置"
-          title="关闭设置"
+          :aria-label="t('uiCloseSettings7346c0')"
+          :title="t('uiCloseSettings7346c0')"
           @click="$emit('close')"
         >
           <X :size="17" />
         </button>
       </header>
 
-      <nav class="tabs" aria-label="设置分类">
+      <nav class="tabs" :aria-label="t('uiSettingsCategoriesf7bbde')">
         <button
           :class="{ active: activeTab === 'appearance' }"
-          aria-label="外观设置"
+          :aria-label="t('uiAppearanceSettings24d0f5')"
           @click="activeTab = 'appearance'"
         >
-          外观
+          {{ t('appearance') }}
         </button>
         <button
           :class="{ active: activeTab === 'ai' }"
-          aria-label="AI 设置"
+          :aria-label="t('uiAISettingsa9d730')"
           @click="activeTab = 'ai'"
         >
           AI
         </button>
-        <button :class="{ active: activeTab === 'updates' }" @click="activeTab = 'updates'">版本更新</button>
+        <button :class="{ active: activeTab === 'updates' }" @click="activeTab = 'updates'">{{ t('uiUpdatesca9576') }}</button>
       </nav>
 
       <div v-if="activeTab === 'appearance'" class="panel appearance-panel">
+        <LanguageSettings />
         <div class="setting-row">
           <div>
-            <strong>主题</strong>
-            <span>选择应用的显示方式</span>
+            <strong>{{ t('theme') }}</strong>
+            <span>{{ t('themeHint') }}</span>
           </div>
-          <div class="segmented" role="group" aria-label="主题">
+          <div class="segmented" role="group" :aria-label="t('theme')">
             <button
               v-for="theme in themes"
               :key="theme.value"
@@ -179,16 +183,16 @@ async function saveAiSettings(): Promise<void> {
       <form v-else class="panel ai-panel" @submit.prevent="saveAiSettings">
         <fieldset :disabled="ai.connectionStatus === 'testing'">
           <label>
-            <span>提供商</span>
-            <AppSelect :model-value="aiForm.aiProvider" aria-label="AI 提供商" :options="providers" :disabled="ai.connectionStatus === 'testing'" @update:model-value="selectProvider" />
+            <span>{{ t('uiProvider219c09') }}</span>
+            <AppSelect :model-value="aiForm.aiProvider" :aria-label="t('uiAIProvider282494')" :options="providers" :disabled="ai.connectionStatus === 'testing'" @update:model-value="selectProvider" />
           </label>
 
           <label v-if="aiForm.aiProvider !== 'gemini'">
-            <span>接口格式</span>
-            <AppSelect :model-value="aiForm.aiApiFormat" aria-label="AI 接口格式" :disabled="ai.connectionStatus === 'testing'" :options="[{ value: 'chatCompletions', label: 'Chat Completions' }, { value: 'responses', label: 'OpenAI Responses' }] as const" @update:model-value="selectApiFormat" />
+            <span>{{ t('uiAPIFormat29a279') }}</span>
+            <AppSelect :model-value="aiForm.aiApiFormat" :aria-label="t('uiAIAPIFormat2d4e6a')" :disabled="ai.connectionStatus === 'testing'" :options="[{ value: 'chatCompletions', label: 'Chat Completions' }, { value: 'responses', label: 'OpenAI Responses' }] as const" @update:model-value="selectApiFormat" />
           </label>
           <p v-if="aiForm.aiProvider !== 'gemini' && aiForm.aiApiFormat === 'responses'" class="storage-warning">
-            使用 Responses API。服务地址可填写 /v1 基础地址或完整 /responses 地址；需要服务端支持此格式。
+            {{ t('uiUsesTheResponsesAPIEnterAV1BaseURLOrTheFullResponsesEndpoint039bcd') }}
           </p>
 
           <label>
@@ -205,8 +209,8 @@ async function saveAiSettings(): Promise<void> {
               <button
                 type="button"
                 class="icon-button input-action"
-                :aria-label="revealKey ? '隐藏 API Key' : '显示 API Key'"
-                :title="revealKey ? '隐藏 API Key' : '显示 API Key'"
+                :aria-label="revealKey ? t('uiHideAPIKeyf3d942') : t('uiShowAPIKeycaddc8')"
+                :title="revealKey ? t('uiHideAPIKeyf3d942') : t('uiShowAPIKeycaddc8')"
                 @click="revealKey = !revealKey"
               >
                 <EyeOff v-if="revealKey" :size="16" />
@@ -216,31 +220,31 @@ async function saveAiSettings(): Promise<void> {
           </label>
 
           <label>
-            <span>服务地址</span>
+            <span>{{ t('uiServiceURL86e118') }}</span>
             <input
               v-model="aiForm.baseUrl"
-              aria-label="服务地址"
+              :aria-label="t('uiServiceURL86e118')"
               spellcheck="false"
               @input="saved = false"
             />
           </label>
 
           <label>
-            <span>模型</span>
+            <span>{{ t('uiModel98fd0c') }}</span>
             <input
               v-model="aiForm.model"
-              aria-label="模型"
+              :aria-label="t('uiModel98fd0c')"
               spellcheck="false"
               @input="saved = false"
             />
           </label>
 
-          <label><span>仓库审查技能目录</span><input v-model="aiForm.reviewSkillDirectory" aria-label="仓库审查技能目录" placeholder="留空自动查找，例如 code-review-expert" spellcheck="false" @input="saved = false" /></label>
-          <p class="storage-warning">填写当前仓库内包含 SKILL.md 的相对目录。留空查找 code-review-expert 或 code-review-export；同时存在时请指定。审查完整加载技能及引用规则，历史提交也使用当前仓库的规则。</p>
-          <p v-if="aiForm.reviewRuleFiles.length" class="storage-warning">旧规则文件配置已保留，审查规则现由仓库 SKILL 提供，不再合并旧列表。</p>
+          <label><span>{{ t('uiRepositoryReviewSkillDirectoryd54a9e') }}</span><input v-model="aiForm.reviewSkillDirectory" :aria-label="t('uiRepositoryReviewSkillDirectoryd54a9e')" :placeholder="t('uiBlankToAutoDetectEGCodeReviewExpertab3738')" spellcheck="false" @input="saved = false" /></label>
+          <p class="storage-warning">{{ t('uiEnterARelativeDirectoryContainingSKILLMdInThisRepositoryIfBle0fb35') }}</p>
+          <p v-if="aiForm.reviewRuleFiles.length" class="storage-warning">{{ t('uiLegacyRuleFileSettingsArePreservedReviewsNowUseTheRepository49157c') }}</p>
 
           <p class="storage-warning">
-            API Key 为兼容旧版设置而以明文保存在本机，请仅在受信任的设备上使用。
+            {{ t('uiForCompatibilityWithOlderSettingsTheAPIKeyIsStoredInPlainTex47228d') }}
           </p>
 
           <div
@@ -257,33 +261,33 @@ async function saveAiSettings(): Promise<void> {
           >
             {{ ai.connectionError?.message }}
             <details v-if="ai.connectionError?.diagnostics">
-              <summary>诊断信息</summary>
+              <summary>{{ t('uiDiagnostics0b673e') }}</summary>
               <pre>{{ ai.connectionError.diagnostics }}</pre>
             </details>
           </div>
           <div v-if="saved" class="feedback success" role="status">
-            设置已保存。
+            {{ t('uiSettingsSavedc1943c') }}
           </div>
 
           <footer>
             <button
               type="button"
               class="secondary-button"
-              aria-label="测试 AI 连接"
+              :aria-label="t('uiTestAIConnection2a6bab')"
               @click="testConnection"
             >
               {{
-                ai.connectionStatus === "testing" ? "正在测试..." : "测试连接"
+                ai.connectionStatus === "testing" ? t('uiTesting2360a4') : t('uiTestConnection10b7d8')
               }}
             </button>
             <button
               type="button"
               class="primary-button"
-              aria-label="保存 AI 设置"
+              :aria-label="t('uiSaveAISettings974e74')"
               :disabled="settingsStore.saving"
               @click="saveAiSettings"
             >
-              {{ settingsStore.saving ? "保存中..." : "保存" }}
+              {{ settingsStore.saving ? t('uiSavingd70d42') : t('uiSavefadf24') }}
             </button>
           </footer>
         </fieldset>
@@ -306,9 +310,9 @@ header p, .setting-row span, .rules-heading span { margin-top: 4px; color: var(-
 .panel { min-height: 0; overflow-y: auto; padding: 18px; }
 header, .tabs { flex-shrink: 0; }
 .appearance-panel { min-height: 92px; }
-.setting-row { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.setting-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
 .setting-row > div:first-child, .rules-heading > div { display: grid; gap: 2px; }
-.segmented { display: flex; padding: 3px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-muted); }
+.segmented { display: flex; flex-wrap: wrap; padding: 3px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-muted); }
 .segmented button { display: inline-flex; height: 30px; align-items: center; gap: 5px; padding: 0 10px; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); white-space: nowrap; }
 .segmented button.active { background: var(--surface-panel); color: var(--primary); box-shadow: 0 1px 3px rgb(22 34 50 / 12%); }
 fieldset { display: grid; gap: 13px; min-width: 0; margin: 0; padding: 0; border: 0; }

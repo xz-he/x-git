@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { computed, ref } from "vue";
 import { defineStore } from "pinia";
 
@@ -201,7 +202,7 @@ export const useRemotesStore = defineStore("remotes", () => {
     if (running.value || useTerminalStore().busy) {
       throw {
         code: "gitOperationInProgress",
-        message: "已有远程同步操作正在运行。",
+        get message() { return t('uiARemoteSyncOperationIsAlreadyRunningec9a25'); },
       } satisfies BackendError;
     }
     const repository = useRepositoryStore();
@@ -209,7 +210,7 @@ export const useRemotesStore = defineStore("remotes", () => {
     if (!rootPath) {
       const missing: BackendError = {
         code: "invalidRepository",
-        message: "请先打开 Git 仓库。",
+        get message() { return t('uiOpenAGitRepositoryFirsta00a3e'); },
       };
       error.value = missing;
       status.value = "failed";
@@ -222,7 +223,7 @@ export const useRemotesStore = defineStore("remotes", () => {
     beginGitFeedback(feedbackActions[nextOperation], [rootPath, nextRunId, request]);
     try {
       await initialize();
-      if (!ownsRun(nextRunId)) { failGitFeedback(nextRunId, { code: "cancelled", message: "操作启动前已取消。" }); return; }
+      if (!ownsRun(nextRunId)) { failGitFeedback(nextRunId, { code: "cancelled", get message() { return t('uiCancelledBeforeTheOperationStarteda347a1'); } }); return; }
       const accepted = await action(rootPath, nextRunId);
       if (
         accepted.runId === nextRunId &&
@@ -292,7 +293,7 @@ export const useRemotesStore = defineStore("remotes", () => {
         break;
       case "conflicted":
         if (runOwner) reportGitFailure({ root: runOwner.rootPath, command: `git ${operation.value}`,
-          error: { code: "gitConflict", message: "Git 操作产生冲突，请检查冲突文件。" }, output: progress.value?.text });
+          error: { code: "gitConflict", get message() { return t('uiTheGitOperationHasConflictsCheckConflictedFiles20a0cc'); } }, output: progress.value?.text });
         applyTerminalResult(payload.result);
         status.value = "conflicted";
         finishRun();

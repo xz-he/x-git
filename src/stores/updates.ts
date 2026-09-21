@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { getVersion } from "@tauri-apps/api/app";
 import { isTauri } from "@tauri-apps/api/core";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -40,9 +41,9 @@ export const useUpdatesStore = defineStore("updates", () => {
     ? Math.min(100, Math.round(downloadedBytes.value / totalBytes.value * 100)) : undefined);
   const installBlockReason = computed(() => {
     if (useRepositoryStore().navigationBusy || useConsoleStore().busy || useAiStore().running || useAiChatStore().running)
-      return "请等待 Git / AI 任务结束后再安装。";
-    if (useSettingsStore().saving) return "请等待设置保存完成后再安装。";
-    if (useConflictsStore().hasDirtyDrafts) return "请先保存或放弃未保存的冲突解决草稿。";
+      return t('uiWaitForGitAITasksToFinishBeforeInstalling7d77a8');
+    if (useSettingsStore().saving) return t('uiWaitForSettingsToFinishSavingBeforeInstalling621a0a');
+    if (useConflictsStore().hasDirtyDrafts) return t('uiSaveOrDiscardUnsavedResolutionDraftsFirst575b22');
     return "";
   });
 
@@ -51,7 +52,7 @@ export const useUpdatesStore = defineStore("updates", () => {
     initialized = true;
     const currentLifecycle = ++lifecycle;
     try { currentVersion.value = await getVersion(); }
-    catch { error.value = "无法读取当前应用版本，请重启应用后重试。"; return; }
+    catch { error.value = t('uiCouldNotReadTheCurrentAppVersionRestartTheAppAndTryAgain70347a'); return; }
     if (currentLifecycle !== lifecycle || import.meta.env.DEV) return;
     autoTimer = setInterval(checkAutomatically, AUTO_CHECK_INTERVAL_MS);
     window.addEventListener("focus", checkAutomatically);
@@ -111,7 +112,7 @@ export const useUpdatesStore = defineStore("updates", () => {
       }
     } catch (cause) {
       phase.value = candidate ? previousPhase : "idle";
-      error.value = `检查更新失败。请确认网络可访问 GitHub，且 Release 已发布 latest.json。${errorDetail(cause)}`;
+      error.value = t('msgUpdateCheckFailedCheckThatGitHubIsAccessibleAndThef33398', { p0: errorDetail(cause) });
     }
   }
 
@@ -135,7 +136,7 @@ export const useUpdatesStore = defineStore("updates", () => {
       noticeVisible.value = true;
     } catch (cause) {
       phase.value = "available";
-      error.value = `下载或签名校验失败，未安装任何更新，可以重试。${errorDetail(cause)}`;
+      error.value = t('msgDownloadOrSignatureVerificationFailedNoUpdateWasIn96a9ba', { p0: errorDetail(cause) });
     }
   }
 
@@ -152,7 +153,7 @@ export const useUpdatesStore = defineStore("updates", () => {
     } catch (cause) {
       // The native plugin may have consumed the downloaded resource on failure.
       phase.value = "available";
-      error.value = `安装未完成，请重新下载后重试。${errorDetail(cause)}`;
+      error.value = t('msgInstallationDidNotCompleteDownloadAgainAndRetryc18ad7', { p0: errorDetail(cause) });
       return;
     }
     phase.value = "installed";
@@ -166,7 +167,7 @@ export const useUpdatesStore = defineStore("updates", () => {
     try { await relaunch(); }
     catch (cause) {
       phase.value = "installed";
-      error.value = `更新已安装，请手动退出并重新打开应用。${errorDetail(cause)}`;
+      error.value = t('msgUpdateInstalledCloseAndReopenTheAppManually3e0608', { p0: errorDetail(cause) });
     }
   }
 

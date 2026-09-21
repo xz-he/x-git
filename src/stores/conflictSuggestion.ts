@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { defineStore } from "pinia";
 import { computed, ref, watch } from "vue";
 import type { AiConflictSuggestionResult, BackendError, ConflictDetail } from "@/lib/backend/types";
@@ -20,7 +21,7 @@ interface SuggestionPreview {
   beforeDeleted: boolean;
   candidate: string;
 }
-const stale = (): BackendError => ({ code: "staleConflict", message: "冲突内容、草稿或任务已变化，请重新检查并预览；原草稿已保留。" });
+const stale = (): BackendError => ({ code: "staleConflict", get message() { return t('uiConflictContentDraftOrTaskChangedCheckAgainAndPreviewYourOri3d997d'); } });
 
 export const useConflictSuggestionStore = defineStore("conflictSuggestion", () => {
   const ai = useAiStore();
@@ -40,10 +41,10 @@ export const useConflictSuggestionStore = defineStore("conflictSuggestion", () =
     && conflicts.generation === repository.generation
     && !!conflicts.snapshot?.files.some(file => file.path === conflicts.current?.detail.path));
   const startReason = computed(() => {
-    if (!settings.settings.apiKey.trim() || !settings.settings.baseUrl.trim() || !settings.settings.model.trim()) return "请先完成 AI 服务配置。";
-    if (ai.running || useAiChatStore().running) return "请等待或停止当前 AI 任务。";
-    if (conflicts.busy || conflicts.detailLoading || conflicts.loading || conflicts.confirmation) return "请等待当前操作结束。";
-    if (!readyTarget.value) return "请在冲突工作台选择仍未解决的文件。";
+    if (!settings.settings.apiKey.trim() || !settings.settings.baseUrl.trim() || !settings.settings.model.trim()) return t('uiConfigureAnAIServiceFirsted3727');
+    if (ai.running || useAiChatStore().running) return t('uiWaitForOrStopTheCurrentAITask3c0649');
+    if (conflicts.busy || conflicts.detailLoading || conflicts.loading || conflicts.confirmation) return t('uiWaitForTheCurrentOperationToFinish799cb7');
+    if (!readyTarget.value) return t('uiSelectAnUnresolvedFileInTheConflictWorkbenchb63cde');
     return conflictSuggestionUnavailable(conflicts.current?.detail);
   });
   const canPreview = computed(() => !!result.value && result.value.kind === "text" && result.value.resolvedText !== null
@@ -123,7 +124,7 @@ export const useConflictSuggestionStore = defineStore("conflictSuggestion", () =
       preview.value = undefined;
       pending.value = undefined;
       conflicts.edit(intent.candidate);
-      appliedMessage.value = "建议已填入解决草稿，尚未写入或暂存。请检查后使用“保存并标记已解决”。";
+      appliedMessage.value = t('uiSuggestionInsertedIntoTheResolutionDraftNotSavedOrStagedChec3ffa08');
     } catch (cause) {
       if (id === requestVersion) { preview.value = undefined; error.value = normalizeBackendError(cause); }
     } finally { if (pending.value === id) pending.value = undefined; }

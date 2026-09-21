@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { MessageCircle, Send, Square, Trash2 } from "@lucide/vue";
 import { computed, nextTick, ref, watch } from "vue";
 import { useAiChatStore } from "@/stores/aiChat";
@@ -21,18 +22,18 @@ watch(() => [chat.messages.length, chat.running], async () => {
 </script>
 
 <template>
-  <section class="chat-panel" aria-label="AI 对话">
-    <header><strong><MessageCircle :size="16" />AI 对话</strong><button class="clear-chat" title="清空对话" aria-label="清空 AI 对话" :disabled="chat.running" @click="chat.clear"><Trash2 :size="14" /></button></header>
-    <p class="chat-hint">询问 Git 问题，或发送自动填入的报错。仅发送对话内容，不会自动执行命令。</p>
-    <div v-if="chat.messages.length || chat.running" ref="transcript" class="transcript" role="log" aria-label="AI 对话记录" aria-live="polite">
-      <article v-for="(message, index) in chat.messages" :key="index" :class="message.role"><small>{{ message.role === 'user' ? '你' : 'AI 助手' }}</small><div>{{ message.content }}</div></article>
-      <article v-if="chat.running" class="user"><small>你</small><div>{{ chat.pendingQuestion }}</div></article>
-      <p v-if="chat.running" class="chat-hint" role="status">AI 正在回复…</p>
+  <section class="chat-panel" :aria-label="t('uiAIChat37f435')">
+    <header><strong><MessageCircle :size="16" />{{ t('uiAIChat37f435') }}</strong><button class="clear-chat" :title="t('uiClearChat35c974')" :aria-label="t('uiClearAIChatd8ebf2')" :disabled="chat.running" @click="chat.clear"><Trash2 :size="14" /></button></header>
+    <p class="chat-hint">{{ t('uiAskAboutGitOrSendAnAutomaticallyFilledErrorReportOnlyChatCon8e56d1') }}</p>
+    <div v-if="chat.messages.length || chat.running" ref="transcript" class="transcript" role="log" :aria-label="t('uiAIChatHistoryac7215')" aria-live="polite">
+      <article v-for="(message, index) in chat.messages" :key="index" :class="message.role"><small>{{ message.role === 'user' ? t('uiYou5630b8') : t('uiAIAssistant5341ec') }}</small><div>{{ message.content }}</div></article>
+      <article v-if="chat.running" class="user"><small>{{ t('uiYou5630b8') }}</small><div>{{ chat.pendingQuestion }}</div></article>
+      <p v-if="chat.running" class="chat-hint" role="status">{{ t('uiAIIsReplying5cede0') }}</p>
     </div>
     <p v-if="chat.notice" class="chat-hint" role="status">{{ chat.notice }}</p>
     <p v-if="chat.error" class="chat-error" role="alert">{{ chat.error.message }}</p>
-    <textarea ref="input" v-model="chat.draft" aria-label="AI 对话输入" placeholder="输入问题，Git 命令报错会自动填入这里…" rows="5" @keydown.ctrl.enter.prevent="!disabled && chat.send()" @keydown.meta.enter.prevent="!disabled && chat.send()" />
-    <footer><small>{{ ai.running ? '请等待当前 AI 任务结束' : 'Ctrl + Enter 发送' }}</small><button v-if="chat.running" class="send-chat" @click="chat.cancel"><Square :size="13" />停止</button><button v-else class="send-chat" :disabled="disabled" @click="chat.send"><Send :size="14" />发送</button></footer>
+    <textarea ref="input" v-model="chat.draft" :aria-label="t('uiAIChatInputa84121')" :placeholder="t('uiEnterAQuestionGitCommandErrorsWillAppearHereAutomatically0108d9')" rows="5" @keydown.ctrl.enter.prevent="!disabled && chat.send()" @keydown.meta.enter.prevent="!disabled && chat.send()" />
+    <footer><small>{{ ai.running ? t('uiWaitForTheCurrentAITaskToFinish433d97') : t('uiCtrlEnterToSend0a99f9') }}</small><button v-if="chat.running" class="send-chat" @click="chat.cancel"><Square :size="13" />{{ t('uiStopa17f70') }}</button><button v-else class="send-chat" :disabled="disabled" @click="chat.send"><Send :size="14" />{{ t('uiSend1214d6') }}</button></footer>
   </section>
 </template>
 

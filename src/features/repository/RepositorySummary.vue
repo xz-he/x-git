@@ -1,15 +1,16 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import type { RepositorySnapshot } from "@/lib/backend/types";
 defineProps<{ repository: RepositorySnapshot }>();
 </script>
 <template>
   <div class="summary">
-    <dl><dt>当前分支</dt><dd>{{ repository.currentBranch ?? "分离 HEAD" }}</dd></dl>
-    <dl><dt>HEAD</dt><dd>{{ repository.headShortHash ?? "尚无提交" }}</dd></dl>
-    <dl><dt>工作区</dt><dd>{{ repository.isClean ? "干净" : repository.changedFileCount + " 个文件有变更" }}</dd></dl>
-    <dl><dt>冲突</dt><dd>{{ repository.conflictCount }}</dd></dl>
-    <dl><dt>上游</dt><dd>{{ repository.upstream?.name ?? "未设置" }}</dd></dl>
-    <dl><dt>远程</dt><dd>{{ repository.remotes.map((remote) => remote.name).join(", ") || "未配置" }}</dd></dl>
+    <dl><dt>{{ t('uiCurrentBranch0eb05c') }}</dt><dd>{{ repository.currentBranch ?? t('uiDetachedHEADddb9e0') }}</dd></dl>
+    <dl><dt>HEAD</dt><dd>{{ repository.headShortHash ?? t('uiNoCommitsYeta9b427') }}</dd></dl>
+    <dl><dt>{{ t('uiWorkingTreea1ff8d') }}</dt><dd>{{ repository.isClean ? t('uiCleanf598d3') : repository.changedFileCount + (' ' + t('uichangedFiles1ac00e')) }}</dd></dl>
+    <dl><dt>{{ t('uiConflictsdc6013') }}</dt><dd>{{ repository.conflictCount }}</dd></dl>
+    <dl><dt>{{ t('uiUpstreamed38f4') }}</dt><dd>{{ repository.upstream?.name ?? t('uiNotSet55a04b') }}</dd></dl>
+    <dl><dt>{{ t('remotes') }}</dt><dd>{{ repository.remotes.map((remote) => remote.name).join(", ") || t('uiNotConfigured63595e') }}</dd></dl>
   </div>
 </template>
 <style scoped>

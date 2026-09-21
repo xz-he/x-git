@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { onBeforeUnmount } from "vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import ConflictEditor from "@/features/conflicts/ConflictEditor.vue";
@@ -7,14 +8,14 @@ const suggestion = useConflictSuggestionStore();
 onBeforeUnmount(() => suggestion.dismissPreview());
 </script>
 <template>
-  <ConfirmDialog v-if="suggestion.preview" class="suggestion-preview" title="预览 AI 建议：仅替换草稿"
-    description="确认后替换当前解决草稿，尚未写入或暂存。请检查完整内容，再使用“保存并标记已解决”。"
-    confirm-label="确认填入解决草稿" :busy="suggestion.busy" :confirm-disabled="!suggestion.canPreview"
+  <ConfirmDialog v-if="suggestion.preview" class="suggestion-preview" :title="t('uiPreviewAISuggestionReplaceDraftOnly557a5a')"
+    :description="t('uiReplacesTheCurrentResolutionDraftWithoutSavingOrStagingItChee926d2')"
+    :confirm-label="t('uiInsertIntoResolutionDraft406c6d')" :busy="suggestion.busy" :confirm-disabled="!suggestion.canPreview"
     @cancel="suggestion.dismissPreview" @confirm="suggestion.confirmApply" @keydown.esc="suggestion.dismissPreview">
     <p class="path">{{ suggestion.preview.path }}</p>
     <div class="comparison">
-      <section><h3>现有解决草稿</h3><p v-if="suggestion.preview.beforeDeleted">当前草稿选择删除文件</p><ConflictEditor v-else :model-value="suggestion.preview.before" readonly label="应用前草稿" /></section>
-      <section><h3>AI 建议替换内容</h3><p v-if="suggestion.preview.candidate === ''">候选为空文本，将保留空文件，不会删除文件。</p><ConflictEditor :model-value="suggestion.preview.candidate" :compare-text="suggestion.preview.before" comparison-label="对比现有草稿" readonly label="建议替换内容" /></section>
+      <section><h3>{{ t('uiCurrentResolutionDraftc0b800') }}</h3><p v-if="suggestion.preview.beforeDeleted">{{ t('uiCurrentDraftDeletesTheFilec10491') }}</p><ConflictEditor v-else :model-value="suggestion.preview.before" readonly :label="t('uiDraftBeforeApplying3ea944')" /></section>
+      <section><h3>{{ t('uiAIReplacementContentfbf74c') }}</h3><p v-if="suggestion.preview.candidate === ''">{{ t('uiAnEmptyCandidateKeepsAnEmptyFileItDoesNotDeleteTheFileb47588') }}</p><ConflictEditor :model-value="suggestion.preview.candidate" :compare-text="suggestion.preview.before" :comparison-label="t('uiCompareWithCurrentDraft8433ee')" readonly :label="t('uiSuggestedReplacementdf1fac')" /></section>
     </div>
   </ConfirmDialog>
 </template>

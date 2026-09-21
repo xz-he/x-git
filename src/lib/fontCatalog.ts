@@ -20,3 +20,15 @@ export function fontOptions(families: readonly string[]): { value: string; label
   return [...new Set(families)].map(value => ({ value, label: CHINESE_FONT_NAMES[value] ? `${CHINESE_FONT_NAMES[value]} · ${value}` : value }))
     .sort((left, right) => left.label.localeCompare(right.label, "zh-CN", { numeric: true }));
 }
+
+const CLEAR_UI_FAMILIES = ["Microsoft YaHei UI", "Microsoft YaHei", "微软雅黑 UI", "微软雅黑", "Noto Sans CJK SC", "Source Han Sans SC", "思源黑体", "Segoe UI"];
+const CLEAR_CODE_FAMILIES = ["Cascadia Mono", "Consolas", "Cascadia Code", "JetBrains Mono"];
+const SMALL_TEXT_FONTS = /^(?:楷体(?:_GB2312)?|仿宋(?:_GB2312)?|宋体|新宋体|华文(?:楷体|仿宋|行楷|细黑)|KaiTi(?:_GB2312)?|FangSong(?:_GB2312)?|[N]?SimSun|STKaiti|STFangsong|STXingkai|STXihei)$|(?:\s|^)(?:Light|Thin|ExtraLight|UltraLight)$/i;
+
+export function hasFineStrokes(family: string): boolean { return SMALL_TEXT_FONTS.test(family.trim()); }
+
+export function clearFontPreferences(families: readonly string[]): { fontFamily: string; codeFontFamily: string } {
+  const pick = (preferred: string[]) => preferred.map(name => families.find(family => family.toLowerCase() === name.toLowerCase())).find(Boolean) ?? "";
+  // Empty values keep the app's screen-font fallbacks when enumeration fails.
+  return { fontFamily: pick(CLEAR_UI_FAMILIES), codeFontFamily: pick(CLEAR_CODE_FAMILIES) };
+}

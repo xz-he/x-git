@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { onMounted, onBeforeUnmount, ref, watch } from "vue";
 import { Maximize2, Minimize2 } from "@lucide/vue";
 import { useRepositoryStore } from "@/stores/repository";
@@ -40,11 +41,11 @@ onBeforeUnmount(() => {
   <main class="detail" :class="{ 'diff-fullscreen': ui.diffFullscreen && ui.activeView === 'changes' }" data-testid="detail-panel" :inert="terminal.busy && ui.activeView === 'conflicts' || undefined">
     <header v-if="ui.activeView === 'changes'">
       <div>
-        <span>{{ changesStore.selectedScope === "staged" ? "已暂存差异" : "未暂存差异" }}</span>
-        <strong>{{ changesStore.selectedPath ?? repository?.name ?? "未打开仓库" }}</strong>
+        <span>{{ changesStore.selectedScope === "staged" ? t('uiStagedDiff495abb') : t('uiUnstagedDiff79bbad') }}</span>
+        <strong>{{ changesStore.selectedPath ?? repository?.name ?? t('noRepository') }}</strong>
       </div>
-      <button ref="fullscreenButton" class="fullscreen-button" :aria-label="ui.diffFullscreen ? '退出全屏查看' : '全屏查看文件差异'" :title="ui.diffFullscreen ? '退出全屏（Esc）' : '全屏查看文件差异'" :aria-pressed="ui.diffFullscreen" :disabled="!ui.diffFullscreen && !changesStore.selectedDiff" @click="ui.diffFullscreen = !ui.diffFullscreen">
-        <Minimize2 v-if="ui.diffFullscreen" :size="16" /><Maximize2 v-else :size="16" />{{ ui.diffFullscreen ? '退出全屏（Esc）' : '全屏查看' }}
+      <button ref="fullscreenButton" class="fullscreen-button" :aria-label="ui.diffFullscreen ? t('uiExitFullScreenb2440b') : t('uiViewFileDiffInFullScreen7391c4')" :title="ui.diffFullscreen ? t('uiExitFullScreenEsce0b9ee') : t('uiViewFileDiffInFullScreen7391c4')" :aria-pressed="ui.diffFullscreen" :disabled="!ui.diffFullscreen && !changesStore.selectedDiff" @click="ui.diffFullscreen = !ui.diffFullscreen">
+        <Minimize2 v-if="ui.diffFullscreen" :size="16" /><Maximize2 v-else :size="16" />{{ ui.diffFullscreen ? t('uiExitFullScreenEsce0b9ee') : t('uiFullScreen7b2376') }}
       </button>
     </header>
     <template v-if="ui.activeView === 'changes'">
@@ -58,7 +59,7 @@ onBeforeUnmount(() => {
     <ConflictDetail v-else-if="ui.activeView === 'conflicts'" />
     <FileDetail v-else-if="ui.activeView === 'files'" />
     <ConsoleDetail v-else-if="ui.activeView === 'terminal'" />
-    <div v-else class="module-state">该模块将在后续增量中提供</div>
+    <div v-else class="module-state">{{ t('uiThisModuleWillBeAvailableInAFutureUpdatec1c06b') }}</div>
   </main>
 </template>
 <style scoped>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import { Check, RefreshCw, Trash2, ArrowUp, ArrowDown, ChevronsUp, ChevronsDown, Undo2, Redo2, ArrowRightToLine, ArrowLeftToLine, Sparkles } from "@lucide/vue";
 import type { ConflictContentKind } from "@/lib/backend/types";
@@ -15,7 +16,7 @@ const tab = ref<"base" | "ours">("ours");
 const detail = computed(() => conflicts.current?.detail);
 const source = computed(() => detail.value?.[tab.value]);
 const isRebase = computed(() => detail.value?.operationKind === "rebase");
-const tabs = computed(() => [{ key: "base" as const, label: "共同祖先" }, { key: "ours" as const, label: isRebase.value ? "变基目标 + 已重放提交" : "当前版本" }, { key: "theirs" as const, label: isRebase.value ? "正在重放的提交" : "传入版本" }]);
+const tabs = computed(() => [{ key: "base" as const, get label() { return t('uiCommonAncestora4dcb8'); } }, { key: "ours" as const, label: isRebase.value ? t('uiRebaseTargetReplayedCommits7b96b5') : t('uiCurrentVersion46e66f') }, { key: "theirs" as const, label: isRebase.value ? t('uiCommitBeingReplayedb4080d') : t('uiIncomingVersion931ad5') }]);
 const resolution = computed(() => conflicts.current?.resolution);
 const resultText = computed(() => resolution.value?.kind === "text" ? resolution.value.text : resolution.value?.kind === "ours" || resolution.value?.kind === "theirs" ? detail.value?.[resolution.value.kind].text ?? "" : "");
 const syncEnabled = ref(true);
@@ -97,14 +98,14 @@ function applyBlock(side: BlockSide, choice: BlockChoice) {
   const next = applyConflictBlock({ base: baseText.value, ours: textOf(detail.value.ours)!, theirs: rightText.value!, result: resultText.value, region: activeBlock.value, side, choice });
   if (next === undefined) return;
   conflicts.edit(next);
-  feedback.value = "已更新下方解决结果，可继续编辑或 Undo；点击 Mark as Resolved 后确认保存。";
+  feedback.value = t('uiResolutionUpdatedBelowContinueEditingOrUndoThenClickMarkAsRe9928ca');
   const index = activeRegion.value;
   void nextTick(() => revealRegion(index));
 }
 function useWholeFile(side: BlockSide) {
   if (conflicts.busy || (contextMenu.value && contextMenu.value.revision !== conflicts.draftRevision)) return;
   closeMenu(); conflicts.choose(side);
-  feedback.value = "已将完整版本放入解决结果，确认内容后再标记已解决。";
+  feedback.value = t('uiTheCompleteVersionWasPlacedInTheResultCheckItBeforeMarkingAs9bd463');
 }
 watch(() => [conflicts.selectedPath, detail.value?.token, conflicts.loadedRootPath, conflicts.generation], () => {
   closeMenu(); activeRegion.value = -1; feedback.value = ""; historyState.value = { undo: false, redo: false };
@@ -159,73 +160,73 @@ watch(tab, async (next, previous) => {
   synchronize("left", mapped);
 });
 onBeforeUnmount(() => clearTimeout(comparisonTimer));
-const notices: Record<ConflictContentKind, string> = { missing: "此版本不存在（删除）", text: "", binary: "二进制文件，只能采用完整版本", unsupportedEncoding: "非 UTF-8 内容，只能采用完整版本", tooLarge: "超过 2 MiB，只能采用完整版本", mixedLineEndings: "混合换行符，只能采用完整版本", unsupported: "不支持在此处修改此文件类型" };
+const notices: Record<ConflictContentKind, string> = { get missing() { return t('uiThisVersionDoesNotExistDeleted77dfa6'); }, text: "", get binary() { return t('uiBinaryFileUseACompleteVersione90e1c'); }, get unsupportedEncoding() { return t('uiNonUTF8ContentUseACompleteVersion4ac3c4'); }, get tooLarge() { return t('uiOver2MiBUseACompleteVersion2ad4a2'); }, get mixedLineEndings() { return t('uiMixedLineEndingsUseACompleteVersion5becb1'); }, get unsupported() { return t('uiThisFileTypeCannotBeEditedHere8e3df3'); } };
 watch(() => conflicts.selectedPath, () => { tab.value = "ours"; });
 </script>
 <template>
   <section class="conflict-detail">
-    <div v-if="conflicts.detailLoading" class="module-state" role="status">正在读取文件版本...</div>
-    <div v-else-if="conflicts.detailError" class="module-state error" role="alert">{{ conflicts.detailError.message }}<details v-if="conflicts.detailError.diagnostics"><summary>诊断信息</summary><pre>{{ conflicts.detailError.diagnostics }}</pre></details><button @click="conflicts.requestReload">重试</button></div>
+    <div v-if="conflicts.detailLoading" class="module-state" role="status">{{ t('uiReadingFileVersions4d75ce') }}</div>
+    <div v-else-if="conflicts.detailError" class="module-state error" role="alert">{{ conflicts.detailError.message }}<details v-if="conflicts.detailError.diagnostics"><summary>{{ t('uiDiagnostics0b673e') }}</summary><pre>{{ conflicts.detailError.diagnostics }}</pre></details><button @click="conflicts.requestReload">{{ t('uiRetrye2d53a') }}</button></div>
     <template v-else-if="detail">
-      <header><strong>{{ detail.path }}</strong><span v-if="conflicts.current?.dirty" class="draft">未保存草稿</span><button title="重新读取文件" aria-label="重新读取文件" :disabled="conflicts.busy" @click="conflicts.requestReload"><RefreshCw :size="15" /></button><button class="save" aria-label="保存并标记已解决" :disabled="!conflicts.canSave" @click="conflicts.requestSave"><Check :size="16" />Mark as Resolved</button></header>
+      <header><strong>{{ detail.path }}</strong><span v-if="conflicts.current?.dirty" class="draft">{{ t('uiUnsavedDraft10c8bf') }}</span><button :title="t('uiReloadFile7db995')" :aria-label="t('uiReloadFile7db995')" :disabled="conflicts.busy" @click="conflicts.requestReload"><RefreshCw :size="15" /></button><button class="save" :aria-label="t('uiSaveAndMarkResolvedf0e27c')" :disabled="!conflicts.canSave" @click="conflicts.requestSave"><Check :size="16" />Mark as Resolved</button></header>
       <p v-if="detail.unsupportedReason" class="warning" role="alert">{{ detail.unsupportedReason }}</p>
-      <div class="workbench-ribbon" role="toolbar" aria-label="冲突解决工具栏">
+      <div class="workbench-ribbon" role="toolbar" :aria-label="t('uiConflictResolutionToolbar0875e4')">
         <div class="ribbon-group">
-          <button aria-label="上一处差异" title="上一处差异" :disabled="!regions?.length" @click="navigate(-1)"><ArrowUp :size="17" />Prev Diff</button>
-          <button aria-label="下一处差异" title="下一处差异" :disabled="!regions?.length" @click="navigate(1)"><ArrowDown :size="17" />Next Diff</button>
-          <button aria-label="上一处冲突" title="上一处冲突" :disabled="!conflictCount" @click="navigate(-1, true)"><ChevronsUp :size="17" />Prev Conflict</button>
-          <button aria-label="下一处冲突" title="下一处冲突" :disabled="!conflictCount" @click="navigate(1, true)"><ChevronsDown :size="17" />Next Conflict</button>
+          <button :aria-label="t('uiPreviousDifferencef30de6')" :title="t('uiPreviousDifferencef30de6')" :disabled="!regions?.length" @click="navigate(-1)"><ArrowUp :size="17" />Prev Diff</button>
+          <button :aria-label="t('uiNextDifference392010')" :title="t('uiNextDifference392010')" :disabled="!regions?.length" @click="navigate(1)"><ArrowDown :size="17" />Next Diff</button>
+          <button :aria-label="t('uiPreviousConflict2de3b2')" :title="t('uiPreviousConflict2de3b2')" :disabled="!conflictCount" @click="navigate(-1, true)"><ChevronsUp :size="17" />Prev Conflict</button>
+          <button :aria-label="t('uiNextConflicte3051a')" :title="t('uiNextConflicte3051a')" :disabled="!conflictCount" @click="navigate(1, true)"><ChevronsDown :size="17" />Next Conflict</button>
         </div>
         <div class="ribbon-group">
-          <button aria-label="采用当前版本代码块" :disabled="!canApplyBlock" title="将选中差异块的当前版本写入结果" @click="applyBlock('ours', 'this')"><ArrowRightToLine :size="17" />Use Ours</button>
-          <button aria-label="采用传入版本代码块" :disabled="!canApplyBlock" title="将选中差异块的传入版本写入结果" @click="applyBlock('theirs', 'this')"><ArrowLeftToLine :size="17" />Use Theirs</button>
+          <button :aria-label="t('uiUseCurrentVersionHunk0f6f4d')" :disabled="!canApplyBlock" :title="t('uiCopyTheCurrentVersionOfTheSelectedHunkIntoTheResult79fc21')" @click="applyBlock('ours', 'this')"><ArrowRightToLine :size="17" />Use Ours</button>
+          <button :aria-label="t('uiUseIncomingVersionHunk038155')" :disabled="!canApplyBlock" :title="t('uiCopyTheIncomingVersionOfTheSelectedHunkIntoTheResult98ef49')" @click="applyBlock('theirs', 'this')"><ArrowLeftToLine :size="17" />Use Theirs</button>
         </div>
         <div class="ribbon-group">
-          <button aria-label="撤销解决结果编辑" :disabled="conflicts.busy || !historyState.undo" @click="resultEditor?.undo()"><Undo2 :size="17" />Undo</button>
-          <button aria-label="重做解决结果编辑" :disabled="conflicts.busy || !historyState.redo" @click="resultEditor?.redo()"><Redo2 :size="17" />Redo</button>
-          <button aria-label="AI 解决建议" :disabled="!!suggestion.startReason" :title="suggestion.startReason || '根据三方版本和磁盘工作文件生成建议，未保存草稿不发送'" @click="startSuggestion"><Sparkles :size="17" />AI Suggest</button>
+          <button :aria-label="t('uiUndoResolutionEditac2594')" :disabled="conflicts.busy || !historyState.undo" @click="resultEditor?.undo()"><Undo2 :size="17" />Undo</button>
+          <button :aria-label="t('uiRedoResolutionEdit8165c3')" :disabled="conflicts.busy || !historyState.redo" @click="resultEditor?.redo()"><Redo2 :size="17" />Redo</button>
+          <button :aria-label="t('uiAIResolutionSuggestion38d6eb')" :disabled="!!suggestion.startReason" :title="suggestion.startReason || t('uiGenerateSuggestionsFromTheThreeVersionsAndOnDiskFileUnsavedDa830d6')" @click="startSuggestion"><Sparkles :size="17" />AI Suggest</button>
         </div>
       </div>
-      <div class="ai-scope">AI 使用三方版本与磁盘工作文件；未保存草稿不发送。<span v-if="suggestion.startReason">{{ suggestion.startReason }}</span></div>
+      <div class="ai-scope">{{ t('uiAIUsesTheThreeVersionsAndOnDiskFileUnsavedDraftsAreExcluded6d290a') }}<span v-if="suggestion.startReason">{{ suggestion.startReason }}</span></div>
       <div class="merge-toolbar">
-        <div class="merge-legend" aria-label="三方差异图例"><span class="legend-conflict">冲突，需确认</span><span class="legend-mergeable">可自动合并</span></div>
-        <label class="sync-toggle"><input v-model="syncEnabled" type="checkbox" />同步滚动</label>
+        <div class="merge-legend" :aria-label="t('uiThreeWayDiffLegendeaa939')"><span class="legend-conflict">{{ t('uiConflictConfirmationNeedede208ee') }}</span><span class="legend-mergeable">{{ t('uiCanMergeAutomatically99030a') }}</span></div>
+        <label class="sync-toggle"><input v-model="syncEnabled" type="checkbox" />{{ t('uiSynchronizedScrolling0137ff') }}</label>
         <label class="sync-toggle"><input v-model="wrapLines" type="checkbox" />Wrap Lines</label>
         <label class="sync-toggle"><input v-model="showWhitespace" type="checkbox" />Show Whitespaces</label>
-        <div class="adopt"><button aria-label="采用索引版本 2" :title="'采用整个文件：' + tabs[1]?.label" :disabled="!detail.canChooseOurs || conflicts.busy" @click="useWholeFile('ours')">Use Ours File</button><button aria-label="采用索引版本 3" :title="'采用整个文件：' + tabs[2]?.label" :disabled="!detail.canChooseTheirs || conflicts.busy" @click="useWholeFile('theirs')">Use Theirs File</button><button title="删除文件" aria-label="删除文件作为解决结果" :disabled="!detail.canDelete || conflicts.busy" @click="conflicts.choose('delete')"><Trash2 :size="15" /></button></div>
+        <div class="adopt"><button :aria-label="t('uiUseIndexStage2e60996')" :title="t('uiUseEntireFilebb0069') + tabs[1]?.label" :disabled="!detail.canChooseOurs || conflicts.busy" @click="useWholeFile('ours')">Use Ours File</button><button :aria-label="t('uiUseIndexStage34fdc42')" :title="t('uiUseEntireFilebb0069') + tabs[2]?.label" :disabled="!detail.canChooseTheirs || conflicts.busy" @click="useWholeFile('theirs')">Use Theirs File</button><button :title="t('uiDeleteFile935cd5')" :aria-label="t('uiDeleteFileAsResolution7aa0b6')" :disabled="!detail.canDelete || conflicts.busy" @click="conflicts.choose('delete')"><Trash2 :size="15" /></button></div>
       </div>
-      <p v-if="!regions" class="warning">无法读取完整三方文本，暂不判断可自动合并区域。</p>
-      <div class="block-status" role="status"><span>{{ activeRegion < 0 ? '—' : activeRegion + 1 }} / {{ regions?.length ?? 0 }} 处差异 · {{ conflictCount }} 处原始冲突</span><span>{{ feedback || (activeBlock && !canApplyBlock && detail.editable && !conflicts.busy ? '草稿跨越了此块边界或已选择删除，请手动编辑结果或重新读取。' : '点击差异块选择，右键可采用单侧或按顺序保留两侧内容。') }}</span></div>
+      <p v-if="!regions" class="warning">{{ t('uiCompleteThreeWayTextIsUnavailableAutomaticallyMergeableAreas0dbbd9') }}</p>
+      <div class="block-status" role="status"><span>{{ activeRegion < 0 ? '—' : activeRegion + 1 }} / {{ regions?.length ?? 0 }} {{ t('uidifferences3d20b8') }} {{ conflictCount }} {{ t('uioriginalConflicts21f5aa') }}</span><span>{{ feedback || (activeBlock && !canApplyBlock && detail.editable && !conflicts.busy ? t('uiTheDraftCrossedThisHunkBoundaryOrIsMarkedForDeletionEditTheR26257c') : t('uiClickAHunkToSelectItRightClickToUseOneSideOrKeepBothSidesInOdbd38c')) }}</span></div>
       <div class="versions">
         <section class="version">
-          <div class="tabs" role="tablist" aria-label="冲突源版本"><button v-for="item in tabs.filter(item => item.key !== 'theirs')" :key="item.key" role="tab" :aria-selected="tab === item.key" @click="tab = item.key as 'base' | 'ours'">{{ item.label }}</button></div>
-          <div class="metadata">{{ tab === 'base' ? '索引版本 1' : tab === 'ours' ? '索引版本 2' : '索引版本 3' }} · {{ source?.byteLength ?? 0 }} bytes · {{ source?.lineEnding }} {{ source?.bom ? 'UTF-8 BOM' : '' }}<code>{{ source?.oid }}</code></div>
-          <ConflictEditor v-if="leftText !== undefined" ref="leftEditor" :key="tab + detail.path + detail.token" :model-value="leftText" :merge-highlights="leftHighlights" :wrap-lines="wrapLines" :show-whitespace="showWhitespace" hide-navigation :block-actions="tab === 'ours'" comparison-label="三方差异" readonly :label="'只读' + tabs.find(item => item.key === tab)?.label" @block-context="openBlockMenu('ours', $event)" @block-select="selectBlock(tab, $event)" @viewport-scroll="synchronize('left', $event)" />
+          <div class="tabs" role="tablist" :aria-label="t('uiConflictSourceVersionsa8bcd6')"><button v-for="item in tabs.filter(item => item.key !== 'theirs')" :key="item.key" role="tab" :aria-selected="tab === item.key" @click="tab = item.key as 'base' | 'ours'">{{ item.label }}</button></div>
+          <div class="metadata">{{ tab === 'base' ? t('uiIndexStage1d15fd4') : tab === 'ours' ? t('uiIndexStage2fe4c48') : t('uiIndexStage336233c') }} · {{ source?.byteLength ?? 0 }} bytes · {{ source?.lineEnding }} {{ source?.bom ? 'UTF-8 BOM' : '' }}<code>{{ source?.oid }}</code></div>
+          <ConflictEditor v-if="leftText !== undefined" ref="leftEditor" :key="tab + detail.path + detail.token" :model-value="leftText" :merge-highlights="leftHighlights" :wrap-lines="wrapLines" :show-whitespace="showWhitespace" hide-navigation :block-actions="tab === 'ours'" :comparison-label="t('uiThreeWayDiffeb3f14')" readonly :label="t('uiReadOnlyffc1d0') + tabs.find(item => item.key === tab)?.label" @block-context="openBlockMenu('ours', $event)" @block-select="selectBlock(tab, $event)" @viewport-scroll="synchronize('left', $event)" />
           <div v-else class="content-state">{{ source ? notices[source.kind] : '' }}</div>
         </section>
         <section class="version">
           <h2>{{ tabs[2]?.label }}</h2>
-          <div class="metadata">索引版本 3 · {{ detail.theirs.byteLength }} bytes · {{ detail.theirs.lineEnding }} {{ detail.theirs.bom ? 'UTF-8 BOM' : '' }}<code>{{ detail.theirs.oid }}</code></div>
-          <ConflictEditor v-if="rightText !== undefined" ref="rightEditor" :key="detail.path + detail.token" :model-value="rightText" :merge-highlights="rightHighlights" :wrap-lines="wrapLines" :show-whitespace="showWhitespace" hide-navigation block-actions comparison-label="三方差异" readonly :label="'只读' + tabs[2]?.label" @block-context="openBlockMenu('theirs', $event)" @block-select="selectBlock('theirs', $event)" @viewport-scroll="synchronize('right', $event)" />
+          <div class="metadata">{{ t('uiIndexStage36d235f') }} {{ detail.theirs.byteLength }} bytes · {{ detail.theirs.lineEnding }} {{ detail.theirs.bom ? 'UTF-8 BOM' : '' }}<code>{{ detail.theirs.oid }}</code></div>
+          <ConflictEditor v-if="rightText !== undefined" ref="rightEditor" :key="detail.path + detail.token" :model-value="rightText" :merge-highlights="rightHighlights" :wrap-lines="wrapLines" :show-whitespace="showWhitespace" hide-navigation block-actions :comparison-label="t('uiThreeWayDiffeb3f14')" readonly :label="t('uiReadOnlyffc1d0') + tabs[2]?.label" @block-context="openBlockMenu('theirs', $event)" @block-select="selectBlock('theirs', $event)" @viewport-scroll="synchronize('right', $event)" />
           <div v-else class="content-state">{{ notices[detail.theirs.kind] }}</div>
         </section>
-        <section class="version result"><h2>解决结果 <small>{{ resolution?.kind === 'ours' ? '采用索引版本 2' : resolution?.kind === 'theirs' ? '采用索引版本 3' : resolution?.kind === 'delete' ? '删除文件' : '手动编辑' }}</small></h2>
-          <ConflictEditor v-if="detail.editable && resolution?.kind !== 'delete'" ref="resultEditor" :key="detail.path + detail.token" :model-value="resultText" :merge-highlights="draftComparison.highlights" :wrap-lines="wrapLines" :show-whitespace="showWhitespace" hide-navigation comparison-label="三方差异" :readonly="conflicts.busy" label="解决结果编辑器" @history-change="historyState = $event" @update:model-value="conflicts.edit" @viewport-scroll="synchronize('result', $event)" />
-          <div v-else class="content-state">{{ resolution?.kind === 'delete' ? '文件将在确认后删除' : notices[detail.working.kind] || '将采用所选完整版本' }}</div>
+        <section class="version result"><h2>{{ t('uiResolutionResult638c90') }} <small>{{ resolution?.kind === 'ours' ? t('uiUseIndexStage2e60996') : resolution?.kind === 'theirs' ? t('uiUseIndexStage34fdc42') : resolution?.kind === 'delete' ? t('uiDeleteFile935cd5') : t('uiManualEditing697762') }}</small></h2>
+          <ConflictEditor v-if="detail.editable && resolution?.kind !== 'delete'" ref="resultEditor" :key="detail.path + detail.token" :model-value="resultText" :merge-highlights="draftComparison.highlights" :wrap-lines="wrapLines" :show-whitespace="showWhitespace" hide-navigation :comparison-label="t('uiThreeWayDiffeb3f14')" :readonly="conflicts.busy" :label="t('uiResolutionEditor943c2d')" @history-change="historyState = $event" @update:model-value="conflicts.edit" @viewport-scroll="synchronize('result', $event)" />
+          <div v-else class="content-state">{{ resolution?.kind === 'delete' ? t('uiFileWillBeDeletedAfterConfirmation9aa2d2') : notices[detail.working.kind] || t('uiTheSelectedCompleteVersionWillBeUsedca38f7') }}</div>
         </section>
       </div>
-      <footer><span>{{ detail.working.lineEnding.toUpperCase() }} {{ detail.working.bom ? 'UTF-8 BOM' : '' }}</span><span>上方为只读源版本，下方为待保存结果 · Mark as Resolved 将保存并暂存此文件</span></footer>
+      <footer><span>{{ detail.working.lineEnding.toUpperCase() }} {{ detail.working.bom ? 'UTF-8 BOM' : '' }}</span><span>{{ t('uiReadOnlySourceVersionsAboveResultToSaveBelowMarkAsResolvedSa2cd42c') }}</span></footer>
       <Teleport to="body"><div v-if="contextMenu" class="conflict-menu-shield" @pointerdown.self="closeMenu" @contextmenu.prevent.self="closeMenu">
-        <div ref="menuElement" role="menu" aria-label="冲突代码块操作" class="conflict-block-menu" :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }" @keydown="menuKey" @contextmenu.prevent>
-          <div class="menu-heading">{{ contextMenu.side === 'ours' ? tabs[1]?.label : tabs[2]?.label }} · {{ contextMenu.index < 0 ? '非差异区域' : `差异 ${contextMenu.index + 1}` }}</div>
-          <button role="menuitem" :disabled="!canApplyBlock" @click="applyBlock(contextMenu.side, 'this')">Use this text block<small>仅采用此侧代码块</small></button>
-          <button role="menuitem" :disabled="!canApplyBlock" @click="applyBlock(contextMenu.side, 'first')">Use both text blocks (this one first)<small>保留两侧，此侧在前</small></button>
-          <button role="menuitem" :disabled="!canApplyBlock" @click="applyBlock(contextMenu.side, 'last')">Use both text blocks (this one last)<small>保留两侧，此侧在后</small></button>
-          <button role="menuitem" :disabled="conflicts.busy || !(contextMenu.side === 'ours' ? detail.canChooseOurs : detail.canChooseTheirs)" @click="useWholeFile(contextMenu.side)">Use this whole file<small>采用此侧完整文件</small></button>
+        <div ref="menuElement" role="menu" :aria-label="t('uiConflictHunkActions5a5315')" class="conflict-block-menu" :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }" @keydown="menuKey" @contextmenu.prevent>
+          <div class="menu-heading">{{ contextMenu.side === 'ours' ? tabs[1]?.label : tabs[2]?.label }} · {{ contextMenu.index < 0 ? t('uiUnchangedArea08c77b') : t('msgDifference4b172c', { p0: contextMenu.index + 1 }) }}</div>
+          <button role="menuitem" :disabled="!canApplyBlock" @click="applyBlock(contextMenu.side, 'this')">Use this text block<small>{{ t('uiUseThisSideOnly558b01') }}</small></button>
+          <button role="menuitem" :disabled="!canApplyBlock" @click="applyBlock(contextMenu.side, 'first')">Use both text blocks (this one first)<small>{{ t('uiKeepBothThisSideFirst8f1e88') }}</small></button>
+          <button role="menuitem" :disabled="!canApplyBlock" @click="applyBlock(contextMenu.side, 'last')">Use both text blocks (this one last)<small>{{ t('uiKeepBothThisSideLastf0129f') }}</small></button>
+          <button role="menuitem" :disabled="conflicts.busy || !(contextMenu.side === 'ours' ? detail.canChooseOurs : detail.canChooseTheirs)" @click="useWholeFile(contextMenu.side)">Use this whole file<small>{{ t('uiUseThisSideSEntireFile2ec039') }}</small></button>
         </div>
       </div></Teleport>
     </template>
-    <div v-else class="module-state">{{ conflicts.snapshot?.files.length ? '选择冲突文件' : '没有选中的冲突文件' }}</div>
+    <div v-else class="module-state">{{ conflicts.snapshot?.files.length ? t('uiSelectAConflictedFile9d4c85') : t('uiNoConflictedFileSelected2a1071') }}</div>
   </section>
 </template>
 <style scoped>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { History, Trash2 } from "@lucide/vue";
 import { useTerminalStore } from "@/stores/terminal";
 import { consoleStatusLabel } from "./presentation";
@@ -6,17 +7,17 @@ const consoleStore = useTerminalStore();
 function time(value: number): string { return new Date(value).toLocaleTimeString("zh-CN", { hour12: false }); }
 </script>
 <template>
-  <section class="console-history" aria-label="命令历史">
-    <header><span><History :size="15" />本次会话</span><button aria-label="清空命令历史" title="清空命令历史" :disabled="consoleStore.busy || !consoleStore.history.length" @click="consoleStore.clearHistory()"><Trash2 :size="14" /></button></header>
-    <p class="hint">最近 20 条命令 · 点击填入，不自动执行</p>
+  <section class="console-history" :aria-label="t('uiCommandHistory9f458e')">
+    <header><span><History :size="15" />{{ t('uiThisSession7df96f') }}</span><button :aria-label="t('uiClearCommandHistoryf052fb')" :title="t('uiClearCommandHistoryf052fb')" :disabled="consoleStore.busy || !consoleStore.history.length" @click="consoleStore.clearHistory()"><Trash2 :size="14" /></button></header>
+    <p class="hint">{{ t('uiLatest20CommandsClickToInsertNotRunb54263') }}</p>
     <div class="history-list">
-      <p v-if="!consoleStore.history.length" class="empty">还没有执行记录</p>
+      <p v-if="!consoleStore.history.length" class="empty">{{ t('uiNoCommandsRunYet0a2bd7') }}</p>
       <button v-for="entry in consoleStore.history" :key="entry.runId" class="entry" data-testid="console-history-entry" :disabled="consoleStore.busy" @click="consoleStore.recall(entry)">
         <code>{{ entry.command }}</code>
         <span>{{ time(entry.startedAt) }} · {{ consoleStatusLabel(entry.status) }}<template v-if="entry.durationMs !== null"> · {{ entry.durationMs }} ms</template></span>
       </button>
     </div>
-    <footer>历史仅保留在当前会话，切换仓库后清空。终端保留最近 10,000 行输出。</footer>
+    <footer>{{ t('uiHistoryIsKeptOnlyForThisSessionAndClearedWhenSwitchingReposib4ee24') }}</footer>
   </section>
 </template>
 <style scoped>

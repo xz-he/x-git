@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import {
   Check,
   FileQuestion,
@@ -35,7 +36,7 @@ const isStaged = computed(() => diff.value?.scope === "staged");
 const canMutate = computed(() => diff.value?.scope !== "commit" && !useTerminalStore().busy);
 const busy = computed(() => changesStore.operation.kind !== "idle");
 const actionLabel = computed(() =>
-  isStaged.value ? "取消暂存所选行" : "暂存所选行",
+  isStaged.value ? t('uiUnstageSelectedLines196037') : t('uiStageSelectedLinesb1e846'),
 );
 const highlightedLine = computed(() => {
   const lineNumber = changesStore.highlightedLine;
@@ -159,30 +160,30 @@ async function applySelectedLines(): Promise<void> {
 </script>
 
 <template>
-  <section class="diff-viewer" aria-label="文件差异">
+  <section class="diff-viewer" :aria-label="t('uiFileDiff3a0c2c')">
     <div v-if="changesStore.operation.kind === 'diff'" class="diff-state">
       <LoaderCircle :size="20" class="spin" />
-      <span>正在加载差异</span>
+      <span>{{ t('uiLoadingDiff59e762') }}</span>
     </div>
     <div v-else-if="!diff" class="diff-state">
       <FileQuestion :size="24" />
-      <strong>选择一个变更文件</strong>
-      <span>文件差异会显示在这里</span>
+      <strong>{{ t('uiSelectAChangedFile629837') }}</strong>
+      <span>{{ t('uiTheFileDiffWillAppearHere449d1d') }}</span>
     </div>
     <div v-else-if="diff.binary" class="diff-state">
       <FileQuestion :size="24" />
-      <strong>二进制文件</strong>
-      <span>此文件无法显示文本差异</span>
+      <strong>{{ t('uiBinaryFilea1a0e6') }}</strong>
+      <span>{{ t('uiTextDiffIsUnavailableForThisFile4a4268') }}</span>
     </div>
     <div v-else-if="diff.hunks.length === 0" class="diff-state">
       <Check :size="24" />
-      <strong>没有可显示的差异</strong>
-      <span>文件内容可能已刷新</span>
+      <strong>{{ t('uiNoDiffToDisplayad923f') }}</strong>
+      <span>{{ t('uiFileContentMayHaveBeenRefreshed52c706') }}</span>
     </div>
     <div v-else class="diff-content" :class="{ 'single-hunk': diffHunks.length === 1 }" @pointerup="stopDrag" @pointercancel="stopDrag" @pointerleave="stopDrag">
       <div v-if="canMutate && selectedLines.length" class="line-action">
         <span>
-          已选择 {{ selectedLines[0] }}
+          {{ t('uiSelected743aaf') }} {{ selectedLines[0] }}
           <template v-if="selectedLines.length > 1">
             - {{ selectedLines.at(-1) }}
           </template>
@@ -208,10 +209,10 @@ async function applySelectedLines(): Promise<void> {
             v-if="canMutate"
             class="icon-button"
             :aria-label="
-              (isStaged ? '取消暂存块 ' : '暂存块 ') + (hunk.index + 1)
+              (isStaged ? (t('uiUnstageHunka73167') + ' ') : (t('uiStageHunk8c453b') + ' ')) + (hunk.index + 1)
             "
             :title="
-              (isStaged ? '取消暂存块 ' : '暂存块 ') + (hunk.index + 1)
+              (isStaged ? (t('uiUnstageHunka73167') + ' ') : (t('uiStageHunk8c453b') + ' ')) + (hunk.index + 1)
             "
             :disabled="busy"
             @click="applyHunk(hunk.index)"
@@ -249,7 +250,7 @@ async function applySelectedLines(): Promise<void> {
               <input
                 type="checkbox"
                 :aria-label="
-                  '选择变更行 ' + lineAnchor(line) + '：' + line.content
+                  (t('uiSelectChangedLine198ea2') + ' ') + lineAnchor(line) + '：' + line.content
                 "
                 :checked="
                   !!lineAnchor(line) &&

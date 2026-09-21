@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/lib/i18n';
 import { onBeforeUnmount, ref } from "vue";
 const props = defineProps<{ width: number; maxWidth: number }>();
 const emit = defineEmits<{ resize: [width: number] }>();
@@ -37,7 +38,7 @@ function key(event: KeyboardEvent): void {
 onBeforeUnmount(stop);
 </script>
 <template>
-  <div class="context-resizer" :class="{ dragging }" role="separator" aria-label="调整文件列表宽度" aria-orientation="vertical" :aria-valuemin="MIN_WIDTH" :aria-valuemax="maxWidth" :aria-valuenow="width" tabindex="0" title="左右拖动调整宽度；双击恢复默认宽度" @pointerdown="start" @pointermove="move" @pointerup="stop" @pointercancel="stop" @lostpointercapture="stop" @keydown="key" @dblclick="setWidth(320)" />
+  <div class="context-resizer" :class="{ dragging }" role="separator" :aria-label="t('uiResizeFileList022cd0')" aria-orientation="vertical" :aria-valuemin="MIN_WIDTH" :aria-valuemax="maxWidth" :aria-valuenow="width" tabindex="0" :title="t('uiDragHorizontallyToResizeDoubleClickToReset054bc6')" @pointerdown="start" @pointermove="move" @pointerup="stop" @pointercancel="stop" @lostpointercapture="stop" @keydown="key" @dblclick="setWidth(320)" />
 </template>
 <style scoped>
 .context-resizer { position: absolute; top: 0; bottom: 0; right: 0; width: 6px; z-index: 8; cursor: col-resize; touch-action: none; user-select: none; }
