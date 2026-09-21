@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { t } from '@/lib/i18n';
 import { formatDisplayPath } from "@/lib/formatPath";
-import { watch } from "vue";
+import { ref, watch } from "vue";
+import { GitBranchPlus } from "@lucide/vue";
+import TaskBranchDialog from "@/features/refs/TaskBranchDialog.vue";
+import { useTaskBranchesStore } from "@/stores/taskBranches";
 import FileTree from "@/features/files/FileTree.vue";
 import ConsoleHistory from "@/features/terminal/ConsoleHistory.vue";
 import { useFilesStore } from "@/stores/files";
@@ -34,6 +37,17 @@ const ui = useUiStore();
 const conflicts = useConflictsStore();
 const files = useFilesStore();
 const terminal = useTerminalStore();
+const tasks = useTaskBranchesStore();
+const taskDialogOpen = ref(false);
+const createdTask = ref("");
+function taskCreated(name: string, title: string) {
+  taskDialogOpen.value = false;
+  createdTask.value = t('msgCreatedMRTitled0ed96', { p0: name, p1: title });
+}
+watch([() => ui.activeView, () => props.repository?.rootPath, () => repositories.generation], () => {
+  taskDialogOpen.value = false;
+  createdTask.value = "";
+});
 
 watch(
   [() => ui.activeView, () => props.repository?.rootPath, () => repositories.generation, () => terminal.busy],
@@ -63,7 +77,12 @@ watch(
       <span>{{ t('changes') }}</span>
       <span class="count">{{ changesStore.snapshot?.files.length ?? 0 }}</span>
     </div>
-    <div v-if="ui.activeView === 'changes' && repository" class="repo"><strong>{{ repository.name }}</strong><span :title="formatDisplayPath(repository.rootPath)">{{ formatDisplayPath(repository.rootPath) }}</span></div>
+    <div v-if="ui.activeView === 'changes' && repository" class="repo">
+      <div class="repo-info"><strong>{{ repository.name }}</strong><span :title="formatDisplayPath(repository.rootPath)">{{ formatDisplayPath(repository.rootPath) }}</span></div>
+      <button class="quick-branch" :aria-label="t('uiQuickBranch2c5f2e')" :disabled="tasks.blocked || !repository.currentBranch || !repository.headShortHash" @click="taskDialogOpen = true"><GitBranchPlus :size="14" />{{ t('uiQuickBranch2c5f2e') }}</button>
+      <p v-if="createdTask" class="task-created" role="status">{{ createdTask }}</p>
+    </div>
+    <TaskBranchDialog v-if="taskDialogOpen && ui.activeView === 'changes'" @close="taskDialogOpen = false" @created="taskCreated" />
     <ChangesList v-if="ui.activeView === 'changes'" />
     <RefsList v-else-if="ui.activeView === 'branches' || ui.activeView === 'tags'" :mode="ui.activeView" />
     <HistoryList v-else-if="ui.activeView === 'history'" />
@@ -81,6 +100,11 @@ watch(
 .context > :last-child { flex: 1; min-height: 0; }
 .heading { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; height: 44px; padding: 0 14px; border-bottom: 1px solid var(--border); font-weight: 600; }
 .count { min-width: 22px; padding: 2px 6px; border-radius: 10px; background: var(--surface-muted); color: var(--text-muted); text-align: center; font-size: 11px; }
-.repo { display: grid; flex-shrink: 0; gap: 4px; padding: 14px; border-bottom: 1px solid var(--border); }
-.repo span { overflow: hidden; color: var(--text-muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.repo { display: flex; flex-wrap: wrap; align-items: center; flex-shrink: 0; gap: 10px; padding: 14px; border-bottom: 1px solid var(--border); }
+.repo-info { display: grid; flex: 1; min-width: 0; gap: 4px; }
+.repo-info strong, .repo-info span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.repo-info span { color: var(--text-muted); font-size: 11px; }
+.quick-branch { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; gap: 6px; max-width: 100%; min-height: 32px; padding: 6px 10px; border: 1px solid var(--primary-border); border-radius: var(--radius-md); background: var(--primary-soft); color: var(--primary); font-size: 12px; }
+.quick-branch:disabled { opacity: .5; cursor: not-allowed; }
+.task-created { width: 100%; margin: 0; overflow-wrap: anywhere; color: var(--text-muted); font-size: 11px; }
 </style>

@@ -3,6 +3,8 @@ import { selectOption } from "@/test/select";
 import { createPinia, setActivePinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import RefsList from "./RefsList.vue";
+import ContextPanel from "@/components/layout/ContextPanel.vue";
+import { useUiStore } from "@/stores/ui";
 import CommitPanel from "@/features/changes/CommitPanel.vue";
 import { setBackendClientForTests, type BackendClient } from "@/lib/backend/client";
 import type { RepositorySnapshot, TaskBranchBinding, TaskBranchResult } from "@/lib/backend/types";
@@ -118,8 +120,9 @@ describe("task branches", () => {
     expect(tasks.loadedRootPath).toBe("C:/another");
   });
 
-  it("previews the exact branch and MR title before creating from remote master", async () => {
-    wrapper = mount(RefsList, { props: { mode: "branches" } });
+  it.each(["branches", "changes"] as const)("previews and creates a task branch from the %s page", async view => {
+    useUiStore().activeView = view;
+    wrapper = view === "branches" ? mount(RefsList, { props: { mode: "branches" } }) : mount(ContextPanel, { props: { repository: repo } });
     await flushPromises();
     await wrapper.get('[aria-label="快速建分支"]').trigger("click");
     await flushPromises();
@@ -136,6 +139,9 @@ describe("task branches", () => {
       kind: "feature", ticket: "R2026082681825", slug: "purchase-orders", description: "采购订单",
       mode: "remoteMaster", remote: "origin", sourceBranch: "dev", expectedHead: "aaaaaaa",
     });
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+    expect(useUiStore().activeView).toBe(view);
+    expect(wrapper.text()).toContain("feature/R2026082681825-purchase-orders");
   });
 
   it("fills the English slug from the Chinese description and lets manual edits take over", async () => {
