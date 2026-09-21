@@ -545,6 +545,7 @@ export interface AiReviewIssue {
 }
 
 export interface AiReviewResult {
+  markdown?: string;
   context?: ReviewContext | null;
   uncovered?: string[];
   summary: string;

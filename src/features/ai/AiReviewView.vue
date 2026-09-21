@@ -9,6 +9,7 @@ import { useRepositoryStore } from "@/stores/repository";
 import { useHistoryStore } from "@/stores/history";
 import { useUiStore } from "@/stores/ui";
 import ReviewFinding from "./ReviewFinding.vue";
+import ReviewMarkdown from "./ReviewMarkdown.vue";
 import { reviewReport, severityRank } from "./reviewPresentation";
 
 const ai = useAiStore();
@@ -69,7 +70,7 @@ async function copyReport(): Promise<void> {
   copying.value = true;
   copyStatus.value = "";
   try {
-    await navigator.clipboard.writeText(reviewReport(issues.value, source.value, frozen.value, reportSummary.value, warnings.value, uncovered.value, result.value?.reviewedFiles, skippedBinaries.value));
+    await navigator.clipboard.writeText(reviewReport(issues.value, source.value, frozen.value, reportSummary.value, warnings.value, uncovered.value, result.value?.reviewedFiles, skippedBinaries.value, result.value?.markdown));
     copyStatus.value = t('uiReviewResultsCopied0c0353');
   } catch { copyStatus.value = t('uiCopyFailedPleaseTryAgain7bdd9c'); }
   finally { copying.value = false; }
@@ -92,8 +93,9 @@ async function copyReport(): Promise<void> {
     <p v-if="wrongRoot" class="error">{{ t('uiThisResultBelongsToAnotherRepositoryAndCannotBeLocatedHere1c423c') }}</p>
     <p v-if="navigationError || changes.navigationError" class="error" role="alert">{{ navigationError || changes.navigationError }}</p>
 
-    <section v-if="issues.length" class="findings" :aria-label="t('uiReviewFindings19460b')"><ReviewFinding v-for="(issue, index) in issues" :key="`${issue.path}:${issue.startLine}:${index}`" :issue="issue" :navigation-disabled="navigating || wrongRoot || repositories.navigationBusy" @reveal="reveal" /></section>
-    <section v-else-if="ai.status === 'completed'" class="empty-state" :aria-label="t('uiReviewComplete544b13')"><FileSearch :size="24" /><strong>{{ t('uiNoIssuesRequiringActionFound0534f0') }}</strong><span>{{ result?.summary }}</span><small>{{ t('uiThisConclusionAppliesOnlyToReviewedContentSeeUncoveredAreasBb75ba0') }}</small></section>
+    <ReviewMarkdown v-if="result?.markdown" :content="result.markdown" />
+    <section v-else-if="issues.length" class="findings" :aria-label="t('uiReviewFindings19460b')"><ReviewFinding v-for="(issue, index) in issues" :key="`${issue.path}:${issue.startLine}:${index}`" :issue="issue" :navigation-disabled="navigating || wrongRoot || repositories.navigationBusy" @reveal="reveal" /></section>
+    <section v-else-if="ai.status === 'completed'" class="empty-state" :aria-label="t('uiReviewComplete544b13')"><FileSearch :size="24" /><strong>{{ t('uiReviewComplete544b13') }}</strong><span>{{ result?.summary }}</span><small>{{ t('uiThisConclusionAppliesOnlyToReviewedContentSeeUncoveredAreasBb75ba0') }}</small></section>
     <section v-else-if="ai.running" class="empty-state" :aria-label="t('uiReviewingb0742f')"><FileSearch :size="24" /><strong>{{ t('uiReviewingb0742f') }}{{ source?.kind === 'commit' ? t('uiHistoricalCommite60d56') : t('uiStagedChanges2fe2df') }}</strong><span>{{ ai.progressMessage || t('uiResultsAppearInBatches343095') }}</span></section>
 
     <p v-if="result && ai.status !== 'completed'" class="state-banner">{{ t('uiReviewIncomplete4ee5ac') }}{{ ai.completedBatchCount }}/{{ ai.totalBatchCount }} {{ t('uibatchesOnlyCompletedResultsAreShownBelowf58c0e') }}</p>

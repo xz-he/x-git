@@ -10,7 +10,7 @@ export function locationLabel(issue: AiReviewIssue): string {
 export function reviewScopeLabel(source?: ReviewSource): string {
   return source?.kind === "commit" ? t('msgHistoricalCommit060926', { p0: source.revision }) : source?.kind === "stagedFiles" ? t('msgSelectedStagedFiles0e02c7', { p0: source.paths.length }) : t('uiStagedChanges2fe2df');
 }
-export function reviewReport(issues: AiReviewIssue[], source: ReviewSource | undefined, context: ReviewContext | undefined, summary: string, warnings: string[], uncovered: string[], reviewedFiles: string[] = [], skippedBinaryFiles: string[] = []): string {
+export function reviewReport(issues: AiReviewIssue[], source: ReviewSource | undefined, context: ReviewContext | undefined, summary: string, warnings: string[], uncovered: string[], reviewedFiles: string[] = [], skippedBinaryFiles: string[] = [], markdown?: string): string {
   const originalSource = context?.source ?? source;
   const frozenSource = originalSource?.kind === "commit" && context?.resolvedCommit ? { kind: "commit" as const, revision: context.resolvedCommit } : originalSource;
   const lines = [t('uiCodeReviewda6d88'), reviewScopeLabel(frozenSource), summary, t('msgReviewedFiles1da2e2', { p0: reviewedFiles.length, p1: reviewedFiles.length ? reviewedFiles.join(", ") : t('uiNone720777') })];
@@ -18,6 +18,7 @@ export function reviewReport(issues: AiReviewIssue[], source: ReviewSource | und
   if (context) lines.push(t('msgRulesSKILLMd7d2073', { p0: context.skill.directory, p1: context.skill.version ?? "" }), t('msgRulesFingerprint664029', { p0: context.skill.fingerprint }), t('msgRuleFiles3e96dd', { p0: context.skill.files.join(", ") }), t('msgComparedWith90ec7f', { p0: context.baseCommit ?? t('uiEmptyTree65442d') }));
   for (const evidence of context?.evidenceSources ?? []) lines.push(t('msgEvidenceSourcea4afb1', { p0: evidence.path, p1: evidence.startLine, p2: evidence.endLine, p3: evidence.revision }));
   if (skippedBinaryFiles.length) lines.push(t('msgSkippedBinaryFilese535ac', { p0: skippedBinaryFiles.join(", ") }));
+  if (markdown) lines.push("", markdown);
   for (const issue of issues) {
     lines.push("", `${severityLabel[issue.severity]} · ${locationLabel(issue)} · ${issue.title ?? issue.reason}`, t('msgImpact639a81', { p0: issue.impact ?? issue.reason }), t('msgSuggestion42a0d9', { p0: issue.suggestedFix }));
     if (issue.evidence) lines.push(t('msgEvidencef0ebac', { p0: issue.evidence }));

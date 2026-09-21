@@ -121,7 +121,7 @@ describe("skill review workbench", () => {
     ai.totalBatchCount = 2;
     ai.handleEvent({ runId: "partial", sequence: 1, event: {
       kind: "reviewBatchCompleted", batchIndex: 1, issues: [],
-      result: { context: { ...context, skill: { ...context.skill, fingerprint: "expanded-rules" } }, summary: "完成首批", issues: [], reviewedFiles: ["first.py"], skippedBinaryFiles: [], warnings: ["首批提示"], uncovered: ["未读依赖"] },
+      result: { markdown: "## 首批报告\n\n**P1**：保留此问题", context: { ...context, skill: { ...context.skill, fingerprint: "expanded-rules" } }, summary: "完成首批", issues: [], reviewedFiles: ["first.py"], skippedBinaryFiles: [], warnings: ["首批提示"], uncovered: ["未读依赖"] },
     } });
     ai.handleEvent({ runId: "partial", sequence: 2, event: status === "cancelled"
       ? { kind: "cancelled", completedBatchCount: 1, totalBatchCount: 2 }
@@ -131,14 +131,33 @@ describe("skill review workbench", () => {
     const wrapper = mount(AiReviewView);
     expect(wrapper.text()).toContain("first.py");
     expect(wrapper.text()).toContain("未读依赖");
+    expect(wrapper.get(".review-markdown h2").text()).toBe("首批报告");
     expect(wrapper.text()).not.toContain("未发现需要处理的问题");
     await wrapper.get('[aria-label="复制审查结果"]').trigger("click");
     await flushPromises();
     expect(copy.mock.calls[0]?.[0]).toContain("审查未完成（1/2 批）");
     expect(copy.mock.calls[0]?.[0]).toContain("expanded-rules");
+    expect(copy.mock.calls[0]?.[0]).toContain("**P1**：保留此问题");
     expect(copy.mock.calls[0]?.[0]).toContain("first.py");
     vi.mocked(backend.aiStartReview).mockImplementation(async (_path, runId) => ({ runId, task: "reviewChanges", context: { stagedFileCount: 1, textFileCount: 1, skippedBinaryFiles: [], fingerprint: "retry" }, totalBatchCount: 1 }));
     await ai.startReview();
     expect(wrapper.text()).not.toContain("first.py");
+  });
+
+  it("displays and copies Markdown findings without inventing a clean conclusion", async () => {
+    const ai = useAiStore();
+    ai.status = "completed";
+    const markdown = "## 审查摘要\n\n**P1**：请求可能失败\n\n### 未覆盖范围\n\n未读取依赖。";
+    ai.reviewResult = { markdown, context, summary: "审查已完成", issues: [], reviewedFiles: ["main.py"], skippedBinaryFiles: [], warnings: [] };
+    const copy = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: copy } });
+    const wrapper = mount(AiReviewView);
+    expect(wrapper.get(".review-markdown h2").text()).toBe("审查摘要");
+    expect(wrapper.get(".review-markdown strong").text()).toBe("P1");
+    expect(wrapper.text()).not.toContain("未发现需要处理的问题");
+    await wrapper.get('[aria-label="复制审查结果"]').trigger("click");
+    await flushPromises();
+    expect(copy).toHaveBeenCalledWith(expect.stringContaining(markdown));
+    expect(copy).toHaveBeenCalledWith(expect.stringContaining(hash));
   });
 });

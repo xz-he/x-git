@@ -163,6 +163,8 @@ pub struct AiReviewIssue {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct AiReviewResult {
+    #[serde(default)]
+    pub markdown: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<ReviewContext>,
     #[serde(default)]

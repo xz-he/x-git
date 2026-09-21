@@ -6,12 +6,10 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use uuid::{Uuid, Version};
 
-#[cfg(test)]
-use crate::application::ai_context::AiContextBatch;
 use crate::application::ai_context::{AiContextBuilder, AiFrozenContext, MAX_DIFF_BATCH_BYTES};
 use crate::domain::ai::{
-    AiCommitMessageResult, AiConnectionConfig, AiConnectionTestResult, AiIssueSeverity,
-    AiReviewIssue, AiRunAccepted, AiRunEvent, AiRunEventData, AiTaskKind,
+    AiCommitMessageResult, AiConnectionConfig, AiConnectionTestResult, AiRunAccepted, AiRunEvent,
+    AiRunEventData, AiTaskKind,
 };
 use crate::domain::error::{BackendError, ErrorCode};
 use crate::domain::settings::AppSettings;
@@ -255,72 +253,6 @@ impl AiService {
     }
 }
 
-#[cfg(test)]
-fn parse_review_response(
-    response: &str,
-    batch: &AiContextBatch,
-) -> Result<super::review_protocol::ValidatedReview, BackendError> {
-    match super::review_protocol::parse(response, batch, &[])? {
-        super::review_protocol::ReviewEnvelope::Result(result) => Ok(result),
-        _ => Err(invalid_response()),
-    }
-}
-
-pub(super) fn merge_issues(target: &mut Vec<AiReviewIssue>, incoming: Vec<AiReviewIssue>) {
-    let mut existing = target
-        .iter()
-        .enumerate()
-        .map(|(index, issue)| (issue_key(issue), index))
-        .collect::<HashMap<_, _>>();
-    for issue in incoming {
-        let key = issue_key(&issue);
-        if let Some(index) = existing.get(&key).copied() {
-            if severity_rank(issue.severity) < severity_rank(target[index].severity) {
-                target[index] = issue;
-            }
-        } else {
-            existing.insert(key, target.len());
-            target.push(issue);
-        }
-    }
-}
-
-fn issue_key(issue: &AiReviewIssue) -> String {
-    format!(
-        "{}\0{:?}\0{:?}\0{}",
-        issue.path,
-        issue.start_line,
-        issue.end_line,
-        issue.title.as_deref().unwrap_or(&issue.reason).trim()
-    )
-}
-
-#[cfg(test)]
-fn review_summary(reviewed_files: usize, issues: &[AiReviewIssue]) -> String {
-    let critical = issues
-        .iter()
-        .filter(|issue| issue.severity == AiIssueSeverity::Critical)
-        .count();
-    let warning = issues
-        .iter()
-        .filter(|issue| issue.severity == AiIssueSeverity::Warning)
-        .count();
-    let suggestion = issues
-        .iter()
-        .filter(|issue| issue.severity == AiIssueSeverity::Suggestion)
-        .count();
-    format!("已审查 {reviewed_files} 个文件：严重 {critical}，警告 {warning}，建议 {suggestion}。")
-}
-
-fn severity_rank(severity: AiIssueSeverity) -> u8 {
-    match severity {
-        AiIssueSeverity::Critical | AiIssueSeverity::P0 => 0,
-        AiIssueSeverity::P1 => 1,
-        AiIssueSeverity::Warning | AiIssueSeverity::P2 => 2,
-        AiIssueSeverity::Suggestion | AiIssueSeverity::P3 => 3,
-    }
-}
-
 pub fn parse_commit_message(response: &str) -> Result<String, BackendError> {
     let message = strip_markdown_fence(response)?.trim();
     let subject = message.lines().next().unwrap_or_default();
@@ -422,7 +354,6 @@ fn cancelled() -> BackendError {
 
 #[cfg(test)]
 pub(super) mod tests {
-    use std::collections::BTreeMap;
     use std::path::Path;
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
@@ -433,8 +364,8 @@ pub(super) mod tests {
     use tokio::sync::Notify;
 
     use super::*;
-    use crate::application::ai_context::{AiContextBatch, AiContextBuilder};
-    use crate::domain::ai::{AiIssueSeverity, AiProvider, AiRunEventData};
+    use crate::application::ai_context::AiContextBuilder;
+    use crate::domain::ai::{AiProvider, AiRunEventData};
     use crate::domain::error::ErrorCode;
     use crate::domain::settings::AppSettings;
     use crate::infrastructure::ai_client::AiHttpClient;
@@ -649,10 +580,6 @@ pub(super) mod tests {
         let fixture = staged_multi_batch_repository().await;
         let (provider, _) = recording_server(vec![
             (Duration::ZERO, rich_response("a.txt", "P2")),
-            (
-                Duration::ZERO,
-                "Markdown instead of a review envelope".to_owned(),
-            ),
             (Duration::from_secs(5), rich_response("b.txt", "P2")),
         ])
         .await;
@@ -715,23 +642,6 @@ pub(super) mod tests {
         assert_eq!(error.code, ErrorCode::Cancelled);
         assert!(service.active_runs.lock().await.is_empty());
     }
-    #[test]
-    fn merged_findings_keep_strongest_severity_for_the_same_location_and_title() {
-        let finding = |severity| AiReviewIssue {
-            severity,
-            path: "x.py".to_owned(),
-            start_line: Some(2),
-            end_line: Some(2),
-            title: Some("Same root cause".to_owned()),
-            reason: "impact".to_owned(),
-            ..AiReviewIssue::default()
-        };
-        let mut issues = vec![finding(AiIssueSeverity::P3)];
-        merge_issues(&mut issues, vec![finding(AiIssueSeverity::P1)]);
-        assert_eq!(issues.len(), 1);
-        assert_eq!(issues[0].severity, AiIssueSeverity::P1);
-    }
-
     #[tokio::test]
     async fn skill_review_provider_rounds_read_frozen_definitions_and_full_policy() {
         let fixture = staged_repository(b"staged_marker\n").await;
@@ -971,43 +881,6 @@ pub(super) mod tests {
         service.register_run(&second).await.unwrap();
     }
 
-    fn batch() -> AiContextBatch {
-        AiContextBatch {
-            index: 1,
-            file_paths: vec!["src/main.rs".to_owned()],
-            allowed_line_anchors: BTreeMap::from([("src/main.rs".to_owned(), vec![10, 20])]),
-            text: "diff".to_owned(),
-        }
-    }
-
-    #[test]
-    fn review_parser_extracts_fenced_rich_json_without_clamping_lines() {
-        let response = format!("```json\n{}\n```", rich_response("src/main.rs", "P2"));
-        let parsed = parse_review_response(&response, &batch()).unwrap();
-        assert_eq!(parsed.summary, "checked");
-        assert_eq!(parsed.issues.len(), 1);
-        assert_eq!(parsed.issues[0].severity, AiIssueSeverity::P2);
-        assert_eq!(parsed.issues[0].start_line, None);
-        assert!(!parsed.warnings.is_empty());
-    }
-
-    #[test]
-    fn review_parser_rejects_unknown_paths_and_malformed_json() {
-        let unknown_error =
-            parse_review_response(&rich_response("other.rs", "P2"), &batch()).unwrap_err();
-        let malformed_error = parse_review_response("{nope}", &batch()).unwrap_err();
-        assert_eq!(unknown_error.code, ErrorCode::AiInvalidResponse);
-        assert_eq!(malformed_error.code, ErrorCode::AiInvalidResponse);
-        assert!(unknown_error.diagnostics.is_none());
-        assert!(
-            malformed_error
-                .diagnostics
-                .as_deref()
-                .unwrap()
-                .contains("line 1")
-        );
-    }
-
     #[test]
     fn commit_parser_accepts_conventional_commit_and_rejects_commentary() {
         assert_eq!(
@@ -1030,30 +903,6 @@ pub(super) mod tests {
                 .unwrap_err()
                 .code,
             ErrorCode::AiInvalidResponse
-        );
-    }
-
-    #[test]
-    fn review_summary_reports_each_severity_count() {
-        let issue = |severity| AiReviewIssue {
-            severity,
-            path: "src/main.rs".to_owned(),
-            start_line: None,
-            end_line: None,
-            reason: "reason".to_owned(),
-            suggested_fix: "fix".to_owned(),
-            ..AiReviewIssue::default()
-        };
-        let issues = vec![
-            issue(AiIssueSeverity::Critical),
-            issue(AiIssueSeverity::Warning),
-            issue(AiIssueSeverity::Warning),
-            issue(AiIssueSeverity::Suggestion),
-        ];
-
-        assert_eq!(
-            review_summary(2, &issues),
-            "已审查 2 个文件：严重 1，警告 2，建议 1。"
         );
     }
 
@@ -1146,6 +995,7 @@ pub(super) mod tests {
             })
             .unwrap();
         assert_eq!(batch_event.reviewed_files, ["a.txt"]);
+        assert!(batch_event.markdown.contains("a.txt"));
         assert!(!batch_event.context.unwrap().evidence_sources.is_empty());
         service.cancel(run_id).await.unwrap();
         sink.wait_for_terminal().await;
@@ -1207,16 +1057,17 @@ pub(super) mod tests {
                 _ => None,
             })
             .collect::<Vec<_>>();
-        assert_eq!(batch_issue_counts, [1, 1]);
+        assert_eq!(batch_issue_counts, [0, 0]);
         let AiRunEventData::ReviewCompleted { result } = &events.last().unwrap().event else {
             panic!("expected merged completion");
         };
-        assert_eq!(result.issues.len(), 2);
-        assert!(
-            result
-                .summary
-                .starts_with("已审查 2 个文件，发现 2 个问题。")
-        );
+        assert!(result.issues.is_empty());
+        assert!(result.markdown.contains("a.txt"));
+        assert!(result.markdown.contains("b.txt"));
+        assert!(result.markdown.contains("P1"));
+        assert!(result.markdown.contains("审查批次 1/2"));
+        assert!(result.markdown.contains("审查批次 2/2"));
+        assert!(result.summary.starts_with("已完成 2/2 批"));
         assert!(result.context.is_some());
     }
 
@@ -1237,62 +1088,101 @@ pub(super) mod tests {
     }
 
     #[tokio::test]
-    async fn skill_review_repairs_missing_fields_for_staged_and_commit_sources() {
-        for commit in [false, true] {
+    async fn skill_review_accepts_free_form_reports_for_all_sources_without_repair() {
+        use crate::domain::ai::ReviewSource;
+        for mode in 0..3 {
             let fixture = staged_repository(b"new text\n").await;
-            let source = if commit {
-                run_git(fixture.path(), &["commit", "-m", "test change"]).await;
-                crate::domain::ai::ReviewSource::Commit {
-                    revision: "HEAD".to_owned(),
+            let source = match mode {
+                0 => ReviewSource::Staged,
+                1 => ReviewSource::StagedFiles {
+                    paths: vec!["change.txt".to_owned()],
+                },
+                _ => {
+                    run_git(fixture.path(), &["commit", "-m", "test change"]).await;
+                    ReviewSource::Commit {
+                        revision: "HEAD".to_owned(),
+                    }
                 }
-            } else {
-                crate::domain::ai::ReviewSource::Staged
             };
-            let malformed = r#"{"reviewResult":{"summary":"checked","issues":[]}}"#;
-            let (provider, requests) = recording_server(vec![
-                (Duration::ZERO, malformed.to_owned()),
-                (Duration::ZERO, rich_response("change.txt", "P1")),
-            ])
-            .await;
-            let sink = RecordingSink::default();
-            let service = service();
-            service
-                .start_review_source(
-                    &Uuid::new_v4().to_string(),
-                    fixture.path(),
-                    &settings(provider),
-                    source,
-                    Arc::new(sink.clone()),
-                )
-                .await
-                .unwrap();
-            sink.wait_for_terminal().await;
-            let events = sink.events();
-            let AiRunEventData::ReviewCompleted { result } = &events.last().unwrap().event else {
-                panic!("expected repaired result: {events:?}");
-            };
-            // Repair must still pass the ordinary evidence gates.
-            assert_eq!(result.issues[0].severity, AiIssueSeverity::P3);
-            assert!(events.iter().any(|event| matches!(&event.event,
-                AiRunEventData::ReviewProgress { phase, .. } if phase == "repair")));
-            assert!(service.active_runs.lock().await.is_empty());
-            let requests = requests.lock().unwrap();
-            assert_eq!(requests.len(), 2);
-            assert!(requests[1].contains("uncovered"));
-            assert!(requests[1].contains("previousResponse"));
+            for output in [
+                "## 审查摘要\n\n### P1\n需要校验输入。",
+                r#"{"reviewResult":{"summary":"checked","issues":[]}}"#,
+                "{\"reviewResult\":{}}\n补充说明",
+                "{malformed}",
+            ] {
+                let (provider, requests) =
+                    recording_server(vec![(Duration::ZERO, output.to_owned())]).await;
+                let sink = RecordingSink::default();
+                let service = service();
+                service
+                    .start_review_source(
+                        &Uuid::new_v4().to_string(),
+                        fixture.path(),
+                        &settings(provider),
+                        source.clone(),
+                        Arc::new(sink.clone()),
+                    )
+                    .await
+                    .unwrap();
+                sink.wait_for_terminal().await;
+                let events = sink.events();
+                let AiRunEventData::ReviewCompleted { result } = &events.last().unwrap().event
+                else {
+                    panic!("expected report: {events:?}");
+                };
+                assert!(!result.markdown.is_empty());
+                if !output.starts_with(r#"{"reviewResult":{"summary""#) {
+                    assert_eq!(result.markdown, output);
+                } else {
+                    assert!(result.markdown.contains("checked"));
+                }
+                assert_eq!(result.reviewed_files, ["change.txt"]);
+                assert_eq!(result.context.as_ref().unwrap().source, source);
+                assert!(!events.iter().any(|event| matches!(&event.event,
+                    AiRunEventData::ReviewProgress { phase, .. } if phase == "repair")));
+                assert!(service.active_runs.lock().await.is_empty());
+                let requests = requests.lock().unwrap();
+                assert_eq!(requests.len(), 1);
+                assert!(requests[0].contains("interactive Agent review, not CI"));
+                assert!(requests[0].contains("SKILL.md"));
+            }
         }
     }
 
     #[tokio::test]
-    async fn skill_review_repair_supports_evidence_rounds_but_is_bounded_per_batch() {
+    async fn skill_review_keeps_context_requests_and_then_accepts_markdown() {
         let fixture = staged_repository(b"new text\n").await;
         let context = r#"{"contextRequests":[{"kind":"file","path":"change.txt","startLine":1,"endLine":2}]}"#;
+        let report = "## 审查摘要\n\n**P1**：保留 AI 的结论和证据。";
         let (provider, requests) = recording_server(vec![
-            (Duration::ZERO, "## 审查摘要\n未发现问题".to_owned()),
             (Duration::ZERO, context.to_owned()),
-            (Duration::ZERO, rich_response("outside-batch.txt", "P1")),
+            (Duration::ZERO, report.to_owned()),
         ])
         .await;
+        let sink = RecordingSink::default();
+        service()
+            .start_review(
+                &Uuid::new_v4().to_string(),
+                fixture.path(),
+                &settings(provider),
+                Arc::new(sink.clone()),
+            )
+            .await
+            .unwrap();
+        sink.wait_for_terminal().await;
+        let events = sink.events();
+        let AiRunEventData::ReviewCompleted { result } = &events.last().unwrap().event else {
+            panic!("expected report: {events:?}");
+        };
+        assert_eq!(result.markdown, report);
+        assert!(!result.context.as_ref().unwrap().evidence_sources.is_empty());
+        assert_eq!(requests.lock().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn empty_review_output_emits_failure_and_cleans_up() {
+        let fixture = staged_repository(b"new text\n").await;
+        let (provider, requests) = recording_server(vec![(Duration::ZERO, " ".to_owned())]).await;
         let sink = RecordingSink::default();
         let service = service();
         service
@@ -1307,62 +1197,11 @@ pub(super) mod tests {
         sink.wait_for_terminal().await;
         let events = sink.events();
         let AiRunEventData::Failed { error } = &events.last().unwrap().event else {
-            panic!("unauthorized path must fail: {events:?}");
-        };
-        assert!(error.message.contains("当前批次"));
-        assert_eq!(requests.lock().unwrap().len(), 3);
-        assert_eq!(
-            events
-                .iter()
-                .filter(|event| matches!(&event.event,
-            AiRunEventData::ReviewProgress { phase, .. } if phase == "repair"))
-                .count(),
-            1
-        );
-        assert!(service.active_runs.lock().await.is_empty());
-    }
-
-    #[tokio::test]
-    async fn malformed_provider_output_emits_failure_and_cleans_up() {
-        let fixture = staged_repository(b"new text\n").await;
-        let (provider, requests) = recording_server(vec![
-            (Duration::ZERO, "{malformed}".to_owned()),
-            (Duration::ZERO, "{malformed}".to_owned()),
-        ])
-        .await;
-        let provider_settings = settings(provider);
-        let sink = RecordingSink::default();
-        let service = service();
-        let run_id = "a0a6d37a-ab63-4fbf-aa4d-7faec023d54a";
-
-        service
-            .start_review(
-                run_id,
-                fixture.path(),
-                &provider_settings,
-                Arc::new(sink.clone()),
-            )
-            .await
-            .unwrap();
-        sink.wait_for_terminal().await;
-
-        let events = sink.events();
-        let AiRunEventData::Failed { error } = &events.last().unwrap().event else {
-            panic!("expected failure");
+            panic!("expected empty response failure");
         };
         assert_eq!(error.code, ErrorCode::AiInvalidResponse);
-        assert!(error.message.contains("已尝试一次自动纠正"));
-        assert!(error.diagnostics.as_deref().unwrap().contains("line 1"));
-        assert_eq!(requests.lock().unwrap().len(), 2);
-        service
-            .start_review(
-                run_id,
-                fixture.path(),
-                &provider_settings,
-                Arc::new(RecordingSink::default()),
-            )
-            .await
-            .unwrap();
+        assert_eq!(requests.lock().unwrap().len(), 1);
+        assert!(service.active_runs.lock().await.is_empty());
     }
 
     #[tokio::test]
