@@ -33,17 +33,20 @@ export const useRepositoryStore = defineStore("repository", () => {
   const operation = ref<RepositoryOperation>({ kind: "idle" });
   const error = ref<BackendError>();
   const refreshingModules = ref(false);
+  let refreshVersion = 0;
   const otherOperationBusy = computed<boolean>((): boolean =>
     useUpdatesStore().phase === "installing" ||
     useActivityStore().submitting ||
-    refreshingModules.value || operation.value.kind !== "idle" ||
+    operation.value.kind !== "idle" ||
     useChangesStore().operation.kind !== "idle" ||
     useRefsStore().submitting || useHistoryStore().submitting ||
     useStashesStore().submitting || useRemotesStore().running || useConflictsStore().submitting || useFilesStore().submitting || useTaskBranchesStore().submitting,
   );
   const navigationBusy = computed<boolean>(() => otherOperationBusy.value || useTerminalStore().busy);
-  // Reads may wait behind the terminal write lock; they must not block returning to it.
-  const viewNavigationBusy = computed(() => otherOperationBusy.value && !useTerminalStore().running);
+  // Browsing cached views never submits a Git write. Keep it available during
+  // commits, synchronization and refreshes; write controls use navigationBusy.
+  const viewNavigationBusy = computed(() => useUpdatesStore().phase === "installing" ||
+    useTerminalStore().resetting || (operation.value.kind !== "idle" && operation.value.kind !== "refresh"));
 
   async function execute(
     kind: Exclude<RepositoryOperation["kind"], "idle">,
@@ -57,6 +60,8 @@ export const useRepositoryStore = defineStore("repository", () => {
     error.value = undefined;
     try {
       if (kind !== "refresh") {
+        refreshVersion += 1;
+        refreshingModules.value = false;
         await useRemotesStore().cancelAndAbandon();
       }
       const nextSnapshot = await action();
@@ -90,9 +95,9 @@ export const useRepositoryStore = defineStore("repository", () => {
         changes.selectedPath = undefined;
         useUiStore().homeVisible = false;
       }
+      snapshot.value = nextSnapshot;
       await useChangesStore().load(nextSnapshot.rootPath, kind === "refresh");
       if (!acceptsRefresh()) return;
-      snapshot.value = nextSnapshot;
       const conflicts = useConflictsStore();
       if (kind === "refresh" && conflicts.loadedRootPath === nextSnapshot.rootPath) await conflicts.refresh();
       else await conflicts.ensureLoaded(nextSnapshot.rootPath, generation.value);
@@ -136,12 +141,13 @@ export const useRepositoryStore = defineStore("repository", () => {
   }
 
   async function refresh(options: { metadata?: boolean; background?: boolean } = {}): Promise<void> {
-    if (!snapshot.value || navigationBusy.value) {
+    if (!snapshot.value || navigationBusy.value || refreshingModules.value) {
       return Promise.resolve();
     }
     const previous = snapshot.value;
     const root = previous.rootPath, ownerGeneration = generation.value;
     refreshingModules.value = true;
+    const version = ++refreshVersion;
     try {
       await execute(
         "refresh",
@@ -149,39 +155,56 @@ export const useRepositoryStore = defineStore("repository", () => {
         false,
       );
       if (snapshot.value?.rootPath !== root || generation.value !== ownerGeneration) return;
+      const workspace = snapshot.value;
+      const valid = () => version === refreshVersion && snapshot.value === workspace && generation.value === ownerGeneration;
       const branchChanged = previous.currentBranch !== snapshot.value.currentBranch;
       const metadata = options.metadata !== false || branchChanged || previous.headShortHash !== snapshot.value.headShortHash;
       if (metadata) {
         const refs = useRefsStore(), remotes = useRemotesStore(), stashes = useStashesStore();
-        const valid = () => snapshot.value?.rootPath === root && generation.value === ownerGeneration;
         const results = await Promise.allSettled([
-          useHistoryStore().refresh(branchChanged),
+          useHistoryStore().refresh(branchChanged, valid),
           refs.snapshot && refs.loadedRootPath === root ? backendClient.refsSnapshot(root).then(next => { if (valid()) refs.applySnapshot(next, root); }) : Promise.resolve(),
           remotes.snapshot && remotes.loadedRootPath === root ? backendClient.remotesSnapshot(root).then(next => { if (valid()) remotes.applySnapshot(next); }) : Promise.resolve(),
           stashes.snapshot && stashes.loadedRootPath === root ? stashes.refresh() : Promise.resolve(),
         ]);
         const failure = results.find(result => result.status === "rejected");
-        if (failure?.status === "rejected") throw failure.reason;
+        if (valid() && failure?.status === "rejected") throw failure.reason;
       }
-      if (snapshot.value?.rootPath !== root || generation.value !== ownerGeneration) return;
+      if (!valid()) return;
       const files = useFilesStore();
       if (useUiStore().activeView === "files" && !useUiStore().homeVisible && files.loadedRootPath === snapshot.value?.rootPath) await files.refresh();
+      else await loadVisibleModule(root, ownerGeneration, valid);
     } catch (cause) {
       if (snapshot.value?.rootPath === root && generation.value === ownerGeneration) error.value = normalizeBackendError(cause);
       throw cause;
-    } finally { refreshingModules.value = false; }
+    } finally { if (version === refreshVersion) refreshingModules.value = false; }
   }
 
   function allowReplacement(): boolean {
     if (useActivityStore().submitting) return false;
-    if (refreshingModules.value || useTerminalStore().busy) return false;
+    if (useTerminalStore().busy) return false;
+    if (useChangesStore().operation.kind !== "idle" || useRefsStore().submitting || useHistoryStore().submitting || useStashesStore().submitting) return false;
     const conflicts = useConflictsStore();
     if (conflicts.submitting || useFilesStore().submitting || useTaskBranchesStore().submitting || operation.value.kind !== "idle") return false;
     return !conflicts.hasDirtyDrafts || window.confirm(t('uiSwitchingRepositoriesWillDiscardAllUnsavedResolutionDraftsCoc6023f'));
   }
 
+  function loadVisibleModule(root: string, ownerGeneration: number, valid: () => boolean): Promise<void> {
+    if (!valid() || useUiStore().homeVisible) return Promise.resolve();
+    switch (useUiStore().activeView) {
+      case "branches": case "tags": return useRefsStore().ensureLoaded(root, ownerGeneration, valid);
+      case "history": return useHistoryStore().ensureLoaded(root, ownerGeneration, valid);
+      case "stashes": return useStashesStore().ensureLoaded(root, ownerGeneration, valid);
+      case "remotes": return useRemotesStore().ensureLoaded(root, ownerGeneration, valid);
+      case "files": return useFilesStore().ensureLoaded(root, ownerGeneration, valid);
+      default: return Promise.resolve();
+    }
+  }
+
   async function refreshAfterTerminal(root: string, ownerGeneration: number): Promise<void> {
     if (snapshot.value?.rootPath !== root || generation.value !== ownerGeneration) return;
+    const version = ++refreshVersion;
+    refreshingModules.value = false;
     // Invalidate every module even when hidden; never keep pre-command HEAD/file data.
     useRefsStore().resetForRepository(root, ownerGeneration);
     useHistoryStore().resetForRepository(root, ownerGeneration);
@@ -190,16 +213,18 @@ export const useRepositoryStore = defineStore("repository", () => {
     useRemotesStore().resetForRepository(root, ownerGeneration);
     await execute("refresh", () => backendClient.repositoryRefresh(root, true), false);
     if (snapshot.value?.rootPath !== root || generation.value !== ownerGeneration) return;
-    const refreshed = await Promise.allSettled([
-      useRefsStore().ensureLoaded(root, ownerGeneration),
-      useHistoryStore().ensureLoaded(root, ownerGeneration),
-      useStashesStore().ensureLoaded(root, ownerGeneration),
-      useRemotesStore().ensureLoaded(root, ownerGeneration),
-      useTaskBranchesStore().refresh(),
-    ]);
-    const failure = refreshed.find(item => item.status === "rejected");
-    if (failure?.status === "rejected") throw failure.reason;
-    if (useTaskBranchesStore().error) throw useTaskBranchesStore().error;
+    // Hidden modules stay invalidated and load when opened. Only core workspace
+    // reconciliation belongs to the command's lock; visible reads run separately.
+    const workspace = snapshot.value;
+    const valid = () => version === refreshVersion && generation.value === ownerGeneration && snapshot.value === workspace;
+    const reads = [useTaskBranchesStore().refresh(), loadVisibleModule(root, ownerGeneration, valid)];
+    refreshingModules.value = true;
+    void Promise.allSettled(reads).then(results => {
+      if (!valid()) return;
+      const failure = results.find(item => item.status === "rejected");
+      if (failure?.status === "rejected") error.value = normalizeBackendError(failure.reason);
+      else if (useTaskBranchesStore().error) error.value = useTaskBranchesStore().error;
+    }).finally(() => { if (version === refreshVersion) refreshingModules.value = false; });
   }
 
   return {
@@ -208,6 +233,7 @@ export const useRepositoryStore = defineStore("repository", () => {
     operation,
     error,
     navigationBusy,
+    refreshingModules,
     otherOperationBusy,
     viewNavigationBusy,
     refreshAfterTerminal,

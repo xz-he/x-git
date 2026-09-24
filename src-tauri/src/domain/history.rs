@@ -108,6 +108,31 @@ pub struct RevertRequest {
     pub mainline: Option<u32>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SquashCommit {
+    pub hash: String,
+    pub subject: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SquashPreview {
+    pub branch: String,
+    pub head: String,
+    pub commits: Vec<SquashCommit>,
+    pub rewritten_count: usize,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SquashRequest {
+    pub commits: Vec<String>,
+    pub message: String,
+    pub expected_head: String,
+    pub expected_branch: String,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryMutationResult {

@@ -78,6 +78,8 @@ pub fn run() {
             commands::history::history_reset,
             commands::history::history_cherry_pick,
             commands::history::history_revert,
+            commands::history::history_squash_preview,
+            commands::history::history_squash,
             commands::stash::stash_snapshot,
             commands::stash::stash_detail,
             commands::stash::stash_file_diff,

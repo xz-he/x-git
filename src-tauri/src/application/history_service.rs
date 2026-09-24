@@ -25,6 +25,8 @@ use crate::domain::operation::{
 };
 use crate::infrastructure::git_runner::GitCommandRunner;
 
+mod squash;
+
 pub const HISTORY_PAGE_SIZE: usize = 200;
 const MAX_CURSOR_BYTES: usize = 16 * 1024;
 const MAX_TOPOLOGY_LANES: usize = 32;

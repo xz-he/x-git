@@ -95,6 +95,18 @@ describe("automatic repository refresh", () => {
     await tick();
     expect(backend.repositoryRefresh).toHaveBeenCalledWith("C:/other", true);
   });
+  it("does not consume filesystem changes while a metadata refresh is pending", async () => {
+    await tick();
+    useRepositoryStore().refreshingModules = true;
+    version.metadataVersion++;
+    await tick();
+    expect(backend.repositoryRefresh).not.toHaveBeenCalled();
+    useRepositoryStore().refreshingModules = false;
+    await tick();
+    expect(backend.repositoryRefresh).toHaveBeenCalledTimes(1);
+    await tick();
+    expect(backend.repositoryRefresh).toHaveBeenCalledTimes(1);
+  });
   it("checks on focus and retries detection errors without losing pending changes", async () => {
     await tick();
     window.dispatchEvent(new Event("focus")); await vi.advanceTimersByTimeAsync(150);

@@ -60,12 +60,12 @@ export const useFilesStore = defineStore("files", () => {
     invalidate(); loadedRootPath.value = root; generation.value = nextGeneration;
     expanded.value = new Set([""]); selectedEntry.value = undefined; result.value = undefined; error.value = undefined;
   }
-  async function ensureLoaded(root: string, nextGeneration: number): Promise<void> {
+  async function ensureLoaded(root: string, nextGeneration: number, acceptsRefresh: () => boolean = () => true): Promise<void> {
     if (loadedRootPath.value !== root) resetForRepository(root, nextGeneration);
     else if (generation.value !== nextGeneration) { invalidate(); generation.value = nextGeneration; await refresh(); return; }
-    if (!directories.value[""]?.page && !directories.value[""]?.loading) await loadDirectory("");
+    if (!directories.value[""]?.page && !directories.value[""]?.loading) await loadDirectory("", false, acceptsRefresh);
   }
-  async function loadDirectory(dir: string, append = false): Promise<void> {
+  async function loadDirectory(dir: string, append = false, acceptsRefresh: () => boolean = () => true): Promise<void> {
     const id = identity(); if (!id || submitting.value) return;
     const previous = directories.value[dir]?.page; const cursor = append ? previous?.nextCursor ?? undefined : undefined;
     if (append && (!cursor || directories.value[dir]?.loading)) return;
@@ -74,11 +74,11 @@ export const useFilesStore = defineStore("files", () => {
     const valid = () => accepts(id) && epoch === startedEpoch && directoryVersions.get(dir) === version;
     try {
       const next = await backendClient.filesList(id.rootPath, dir, cursor);
-      if (!valid()) return;
+      if (!valid() || !acceptsRefresh()) return;
       if (append && previous && next.token !== previous.token) { await loadDirectory(dir); return; }
       directories.value[dir] = { loading: false, page: { ...next, entries: append && previous ? [...previous.entries, ...next.entries] : next.entries } };
     } catch (cause) {
-      if (!valid()) return;
+      if (!valid() || !acceptsRefresh()) return;
       const failure = normalizeBackendError(cause);
       if (append && failure.code === "staleFileOperation") { await loadDirectory(dir); return; }
       directories.value[dir] = { page: previous, loading: false, error: failure };

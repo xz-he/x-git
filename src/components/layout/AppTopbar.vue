@@ -55,7 +55,7 @@ const modules: Array<{ label: string; view: WorkspaceView }> = [
       <button class="icon-button" :aria-label="t('uiOperationHistory56833a')" :title="activityWarning || t('uiOperationHistory56833a')" @click="activityOpen = true"><History :size="17" /><span v-if="activityWarning" class="activity-warning">!</span></button>
       <button class="icon-button" :aria-label="t('uiHome8befab')" :title="t('uiHome8befab')" :disabled="files.submitting" @click="ui.homeVisible = true"><House :size="17" /></button>
       <button class="icon-button" :aria-label="t('uiSwitchRepository46c7e1')" :title="t('uiSwitchRepository46c7e1')" :disabled="selectingRepository || repositories.navigationBusy" @click="switchRepository"><FolderOpen :size="17" /></button>
-      <button class="icon-button" :aria-label="t('uiRefreshRepository70ad8c')" :title="t('uiRefreshRepository70ad8c')" :disabled="repositories.navigationBusy" @click="$emit('refresh')"><RefreshCw :size="17" /></button>
+      <button class="icon-button" :aria-label="t('uiRefreshRepository70ad8c')" :title="t('uiRefreshRepository70ad8c')" :disabled="repositories.navigationBusy || repositories.refreshingModules" :aria-busy="repositories.refreshingModules" @click="$emit('refresh')"><RefreshCw :size="17" :class="{ spin: repositories.refreshingModules }" /></button>
       <button class="icon-button ai-button" :aria-label="t('uiOpenAIAssistantf4bad3')" :title="t('uiOpenAIAssistantf4bad3')" @click="$emit('openAi')"><Bot :size="17" /></button>
       <button class="icon-button" :aria-label="t('uiOpenSettings857329')" :title="t('uiOpenSettings857329')" @click="$emit('openSettings')"><Settings :size="17" /></button>
     </div>

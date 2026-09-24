@@ -39,6 +39,7 @@ pub struct GitInvocation {
     args: Vec<OsString>,
     disable_optional_locks: bool,
     index_file: Option<PathBuf>,
+    sequence_from_stdin: bool,
 }
 
 impl GitInvocation {
@@ -62,6 +63,7 @@ impl GitInvocation {
             args,
             disable_optional_locks,
             index_file: None,
+            sequence_from_stdin: false,
         }
     }
 
@@ -236,6 +238,23 @@ impl GitCommandRunner {
             .into_result()
     }
 
+    /// Git invokes this fixed editor with the todo path as its first argument.
+    /// Only validated todo instructions enter stdin; no user text enters shell code.
+    pub(crate) async fn run_with_sequence<I, S>(
+        &self,
+        root: &Path,
+        args: I,
+        todo: String,
+    ) -> Result<GitOutput, BackendError>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        let mut invocation = GitInvocation::new(args);
+        invocation.sequence_from_stdin = true;
+        self.execute(Some(root), invocation, Some(todo.into_bytes()), true).await
+    }
+
     /// Use a private index without changing process-wide environment or the
     /// repository index. Preserve the normal timeout and hidden-window behavior.
     pub(crate) async fn run_with_index<I, S>(
@@ -365,6 +384,9 @@ impl GitCommandRunner {
             command
                 .env("GIT_EDITOR", "true")
                 .env("GIT_SEQUENCE_EDITOR", "true");
+        }
+        if invocation.sequence_from_stdin {
+            command.env("GIT_SEQUENCE_EDITOR", "sh -c 'cat > \"$1\"' -");
         }
         if let Some(directory) = working_directory {
             command.current_dir(directory);

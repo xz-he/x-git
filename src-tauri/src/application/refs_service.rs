@@ -18,7 +18,7 @@ use crate::infrastructure::git_runner::{GitCommandRunner, GitOutput};
 
 const FIELD_SEPARATOR: char = '\u{1f}';
 const RECORD_SEPARATOR: char = '\u{1e}';
-const BRANCH_FORMAT: &str = "%(refname)%1f%(refname:short)%1f%(HEAD)%1f%(upstream)%1f%(objectname)%1f%(objectname:short)%1f%(subject)%1f%(authorname)%1f%(authordate:iso-strict)%1f%(symref)%1e";
+const BRANCH_FORMAT: &str = "%(refname)%1f%(refname:short)%1f%(HEAD)%1f%(upstream)%1f%(objectname)%1f%(objectname:short)%1f%(subject)%1f%(authorname)%1f%(authordate:iso-strict)%1f%(symref)%1f%(upstream:track,nobracket)%1e";
 const TAG_FORMAT: &str = "%(refname)%1f%(objectname)%1f%(objecttype)%1f%(*objectname)%1f%(taggername)%1f%(taggerdate:iso-strict)%1f%(contents)%1f%(*subject)%1f%(subject)%1e";
 
 #[derive(Debug, Clone)]
@@ -105,8 +105,28 @@ impl RefsService {
             .await?;
 
         let name = self.validate_branch_name(&root, name).await?;
-        let refs = self.snapshot_at_root(&root).await?;
-        ensure_local_branch_exists(&refs, &name)?;
+        // Switching needs only the target ref, not every branch's tracking data.
+        let exists = self
+            .runner
+            .run_allowing_failure(
+                Some(&root),
+                [
+                    "show-ref",
+                    "--verify",
+                    "--quiet",
+                    &format!("refs/heads/{name}"),
+                ],
+            )
+            .await?;
+        if !exists.is_success() {
+            if exists.status_code != Some(1) {
+                exists.into_result()?;
+            }
+            return Err(BackendError::new(
+                ErrorCode::BranchUnavailable,
+                "所选本地分支已不存在，请刷新后重试。",
+            ));
+        }
         self.runner
             .run(Some(&root), ["switch", "--", &name])
             .await
@@ -286,16 +306,8 @@ impl RefsService {
         let mut local_branches = Vec::new();
         let mut remote_branches = Vec::new();
 
-        for parsed in parsed_branches {
-            let mut branch = parsed.summary;
+        for branch in parsed_branches {
             if branch.kind == BranchKind::Local {
-                if let Some(upstream_full_name) = parsed.upstream_full_name {
-                    let (ahead, behind) = self
-                        .divergence(root, &branch.full_name, &upstream_full_name)
-                        .await?;
-                    branch.ahead = Some(ahead);
-                    branch.behind = Some(behind);
-                }
                 local_branches.push(branch);
             } else {
                 remote_branches.push(branch);
@@ -399,34 +411,6 @@ impl RefsService {
             operation_state,
         })
     }
-
-    async fn divergence(
-        &self,
-        root: &Path,
-        local: &str,
-        upstream: &str,
-    ) -> Result<(u32, u32), BackendError> {
-        let range = format!("{local}...{upstream}");
-        let output = self
-            .runner
-            .run(
-                Some(root),
-                [
-                    OsString::from("rev-list"),
-                    OsString::from("--left-right"),
-                    OsString::from("--count"),
-                    OsString::from(range),
-                ],
-            )
-            .await?;
-        let mut counts = output.stdout.split_whitespace();
-        let ahead = parse_count(counts.next())?;
-        let behind = parse_count(counts.next())?;
-        if counts.next().is_some() {
-            return Err(parse_error("Git 返回了多余的分支差异字段。"));
-        }
-        Ok((ahead, behind))
-    }
 }
 
 fn recover_integration_result(
@@ -504,17 +488,11 @@ fn map_delete_error(error: BackendError, force: bool) -> BackendError {
     error
 }
 
-#[derive(Debug)]
-struct ParsedBranch {
-    summary: BranchSummary,
-    upstream_full_name: Option<String>,
-}
-
-fn parse_branches(output: &str) -> Result<Vec<ParsedBranch>, BackendError> {
+fn parse_branches(output: &str) -> Result<Vec<BranchSummary>, BackendError> {
     records(output)
         .map(|record| {
-            let fields = record.splitn(10, FIELD_SEPARATOR).collect::<Vec<_>>();
-            if fields.len() != 10 {
+            let fields = record.splitn(11, FIELD_SEPARATOR).collect::<Vec<_>>();
+            if fields.len() != 11 {
                 return Err(parse_error("Git 分支记录字段数量不正确。"));
             }
 
@@ -535,24 +513,26 @@ fn parse_branches(output: &str) -> Result<Vec<ParsedBranch>, BackendError> {
                 .as_deref()
                 .map(short_remote_name)
                 .map(str::to_owned);
-            Ok(Some(ParsedBranch {
-                summary: BranchSummary {
-                    name: fields[1].to_owned(),
-                    full_name,
-                    kind,
-                    current: fields[2].trim() == "*",
-                    upstream,
-                    ahead: None,
-                    behind: None,
-                    tip: BranchTip {
-                        full_hash: fields[4].to_owned(),
-                        short_hash: fields[5].to_owned(),
-                        subject: fields[6].to_owned(),
-                        author: fields[7].to_owned(),
-                        authored_at: fields[8].to_owned(),
-                    },
+            let (ahead, behind) = if kind == BranchKind::Local && upstream.is_some() {
+                parse_tracking(fields[10])?
+            } else {
+                (None, None)
+            };
+            Ok(Some(BranchSummary {
+                name: fields[1].to_owned(),
+                full_name,
+                kind,
+                current: fields[2].trim() == "*",
+                upstream,
+                ahead,
+                behind,
+                tip: BranchTip {
+                    full_hash: fields[4].to_owned(),
+                    short_hash: fields[5].to_owned(),
+                    subject: fields[6].to_owned(),
+                    author: fields[7].to_owned(),
+                    authored_at: fields[8].to_owned(),
                 },
-                upstream_full_name,
             }))
         })
         .filter_map(Result::transpose)
@@ -617,10 +597,24 @@ fn non_empty(value: &str) -> Option<String> {
     (!value.is_empty()).then(|| value.to_owned())
 }
 
-fn parse_count(value: Option<&str>) -> Result<u32, BackendError> {
-    value
-        .and_then(|value| value.parse().ok())
-        .ok_or_else(|| parse_error("Git 分支差异计数无效。"))
+fn parse_tracking(value: &str) -> Result<(Option<u32>, Option<u32>), BackendError> {
+    if value == "gone" {
+        return Ok((None, None));
+    }
+    let (mut ahead, mut behind) = (0, 0);
+    for part in value.split(", ").filter(|part| !part.is_empty()) {
+        let (slot, count) = if let Some(count) = part.strip_prefix("ahead ") {
+            (&mut ahead, count)
+        } else if let Some(count) = part.strip_prefix("behind ") {
+            (&mut behind, count)
+        } else {
+            return Err(parse_error("Git 分支跟踪状态无效。"));
+        };
+        *slot = count
+            .parse()
+            .map_err(|_| parse_error("Git 分支差异计数无效。"))?;
+    }
+    Ok((Some(ahead), Some(behind)))
 }
 
 fn parse_error(message: &str) -> BackendError {

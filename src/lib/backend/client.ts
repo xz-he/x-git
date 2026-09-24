@@ -24,6 +24,8 @@ import type {
   ChangesSnapshot,
   CherryPickRequest,
   RevertRequest,
+  SquashPreview,
+  SquashRequest,
   CommitDetail,
   CommitResult,
   CreateBranchRequest,
@@ -185,6 +187,8 @@ export interface BackendClient {
   ): Promise<FileDiff>;
   historyCheckout(path: string, commit: string): Promise<HistoryMutationResult>;
   historyRevert(path: string, request: RevertRequest): Promise<HistoryMutationResult>;
+  historySquashPreview(path: string, commits: string[]): Promise<SquashPreview>;
+  historySquash(path: string, request: SquashRequest): Promise<HistoryMutationResult>;
   historyCherryPick(
     path: string,
     request: CherryPickRequest,
@@ -314,6 +318,8 @@ const tauriBackendClient: BackendClient = {
   historyCheckout: (path, commit) =>
     invoke("history_checkout", { path, commit }),
   historyRevert: (path, request) => invoke("history_revert", { path, request }),
+  historySquashPreview: (path, commits) => invoke("history_squash_preview", { path, commits }),
+  historySquash: (path, request) => invoke("history_squash", { path, request }),
   historyCherryPick: (path, request) =>
     invoke("history_cherry_pick", { path, request }),
   historyReset: (path, request) =>
@@ -446,6 +452,8 @@ export const backendClient: BackendClient = {
   historyCheckout: (path, commit) =>
     activeBackendClient.historyCheckout(path, commit),
   historyRevert: (path, request) => activeBackendClient.historyRevert(path, request),
+  historySquashPreview: (path, commits) => activeBackendClient.historySquashPreview(path, commits),
+  historySquash: (path, request) => activeBackendClient.historySquash(path, request),
   historyCherryPick: (path, request) =>
     activeBackendClient.historyCherryPick(path, request),
   historyReset: (path, request) =>

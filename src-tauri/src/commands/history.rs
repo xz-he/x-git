@@ -6,8 +6,19 @@ use crate::commands::AppState;
 use crate::domain::changes::FileDiff;
 use crate::domain::error::BackendError;
 use crate::domain::history::{
+    SquashPreview, SquashRequest,
     CherryPickRequest, CommitDetail, HistoryMutationResult, HistoryPage, HistoryQuery, ResetRequest, RevertRequest,
 };
+
+#[tauri::command]
+pub async fn history_squash_preview(state: State<'_, AppState>, path: String, commits: Vec<String>) -> Result<SquashPreview, BackendError> {
+    state.history.squash_preview(Path::new(&path), commits).await
+}
+
+#[tauri::command]
+pub async fn history_squash(state: State<'_, AppState>, path: String, request: SquashRequest) -> Result<HistoryMutationResult, BackendError> {
+    state.history.squash(Path::new(&path), request).await
+}
 
 #[tauri::command]
 pub async fn history_page(

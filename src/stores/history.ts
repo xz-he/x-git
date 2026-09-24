@@ -15,6 +15,7 @@ import type {
   HistoryQuery,
   ResetRequest,
   RevertRequest,
+  SquashRequest,
 } from "@/lib/backend/types";
 import { createModuleLifecycle } from "@/stores/moduleLifecycle";
 import { useOperationStore } from "@/stores/operation";
@@ -31,6 +32,7 @@ export const useHistoryStore = defineStore("history", () => {
   const nextCursor = ref<string | null>(null);
   const queryFingerprint = ref("");
   const selectedHash = ref<string>();
+  const checkedHashes = ref<string[]>([]);
   const detail = ref<CommitDetail>();
   const selectedFilePath = ref<string>();
   const fileDiff = ref<FileDiff>();
@@ -48,6 +50,7 @@ export const useHistoryStore = defineStore("history", () => {
   const notice = ref<string>();
   const lifecycle = createModuleLifecycle();
   let loaded = false;
+  let refreshEnabled = false;
   let requestVersion = 0;
   let commitSelectionVersion = 0;
   let fileSelectionVersion = 0;
@@ -75,6 +78,7 @@ export const useHistoryStore = defineStore("history", () => {
     generation.value = nextGeneration;
     query.value = emptyQuery();
     commits.value = [];
+    checkedHashes.value = [];
     nextCursor.value = null;
     queryFingerprint.value = "";
     selectedHash.value = undefined;
@@ -86,6 +90,7 @@ export const useHistoryStore = defineStore("history", () => {
     detailPending = undefined;
     error.value = undefined;
     loaded = false;
+    refreshEnabled = false;
     notice.value = undefined;
     initialPending = undefined;
   }
@@ -95,12 +100,14 @@ export const useHistoryStore = defineStore("history", () => {
     append: boolean,
     allowCursorRestart: boolean,
     preserveTail = false,
+    acceptsRefresh: () => boolean = () => true,
   ): Promise<void> {
     const rootPath = loadedRootPath.value;
     if (!rootPath) {
       return;
     }
     const token = lifecycle.begin(rootPath, generation.value);
+    refreshEnabled = true;
     const version = ++requestVersion;
     loading.value = true;
     error.value = undefined;
@@ -110,17 +117,18 @@ export const useHistoryStore = defineStore("history", () => {
         search: query.value.search,
         cursor,
       });
-      if (!lifecycle.accept(token) || version !== requestVersion) {
+      if (!lifecycle.accept(token) || version !== requestVersion || !acceptsRefresh()) {
         return;
       }
       const keepTail = preserveTail && commits.value.length > page.commits.length && page.commits.length > 0 &&
         page.queryFingerprint === queryFingerprint.value && page.commits.every((commit, index) => commit.hash === commits.value[index]?.hash);
       commits.value = append ? [...commits.value, ...page.commits] : keepTail ? [...page.commits, ...commits.value.slice(page.commits.length)] : page.commits;
+      checkedHashes.value = checkedHashes.value.filter(hash => commits.value.some(commit => commit.hash === hash));
       if (!keepTail) nextCursor.value = page.nextCursor;
       queryFingerprint.value = page.queryFingerprint;
       loaded = true;
     } catch (cause) {
-      if (!lifecycle.accept(token) || version !== requestVersion) {
+      if (!lifecycle.accept(token) || version !== requestVersion || !acceptsRefresh()) {
         return;
       }
       const normalized = normalizeBackendError(cause);
@@ -140,7 +148,7 @@ export const useHistoryStore = defineStore("history", () => {
     }
   }
 
-  async function ensureLoaded(rootPath: string, nextGeneration: number): Promise<void> {
+  async function ensureLoaded(rootPath: string, nextGeneration: number, acceptsRefresh: () => boolean = () => true): Promise<void> {
     if (
       loadedRootPath.value !== rootPath ||
       generation.value !== nextGeneration
@@ -154,7 +162,7 @@ export const useHistoryStore = defineStore("history", () => {
       if (initialPending) {
         return initialPending;
       }
-      const request = fetchPage(null, false, false);
+      const request = fetchPage(null, false, false, false, acceptsRefresh);
       initialPending = request;
       try {
         await request;
@@ -173,20 +181,21 @@ export const useHistoryStore = defineStore("history", () => {
     return fetchPage(nextCursor.value, true, true);
   }
 
-  async function refresh(branchChanged = false): Promise<void> {
-    if ((!loaded && !loading.value) || searchTimer) return;
+  async function refresh(branchChanged = false, acceptsRefresh: () => boolean = () => true): Promise<void> {
+    if (!refreshEnabled || searchTimer) return;
     if (branchChanged && !query.value.reference) {
-      await restartQuery();
+      await restartQuery(true, acceptsRefresh);
       return;
     }
     // Commit contents are immutable. Keep the selection and file diff while
     // updating the list, cursor and branch decorations in the background.
-    await fetchPage(null, false, false, true);
+    await fetchPage(null, false, false, true, acceptsRefresh);
     const selected = commits.value.find(commit => commit.hash === selectedHash.value);
     if (selected && detail.value?.hash === selected.hash) detail.value.references = selected.references;
   }
 
-  async function restartQuery(clearSelection = true): Promise<void> {
+  async function restartQuery(clearSelection = true, acceptsRefresh: () => boolean = () => true): Promise<void> {
+    checkedHashes.value = [];
     requestVersion += 1;
     commitSelectionVersion += 1;
     clearFileDiffs();
@@ -203,7 +212,7 @@ export const useHistoryStore = defineStore("history", () => {
       selectedHash.value = undefined;
     }
     loaded = false;
-    await fetchPage(null, false, false);
+    await fetchPage(null, false, false, false, acceptsRefresh);
   }
 
   function setReference(reference: string | null): Promise<void> {
@@ -212,6 +221,7 @@ export const useHistoryStore = defineStore("history", () => {
   }
 
   function setSearch(search: string): void {
+    checkedHashes.value = [];
     query.value.search = search;
     if (searchTimer) {
       clearTimeout(searchTimer);
@@ -323,6 +333,7 @@ export const useHistoryStore = defineStore("history", () => {
   }
 
   function applyPage(page: HistoryPage, rootPath: string): void {
+    checkedHashes.value = [];
     if (searchTimer) {
       clearTimeout(searchTimer);
       searchTimer = undefined;
@@ -344,6 +355,7 @@ export const useHistoryStore = defineStore("history", () => {
     selectedFilePath.value = undefined;
     fileDiff.value = undefined;
     loaded = true;
+    refreshEnabled = true;
   }
 
   function requireRootPath(): string {
@@ -405,12 +417,17 @@ export const useHistoryStore = defineStore("history", () => {
     return mutate((rootPath) => backendClient.historyRevert(rootPath, request));
   }
 
+  function squash(request: SquashRequest): Promise<void> {
+    return mutate(rootPath => backendClient.historySquash(rootPath, request));
+  }
+
   return {
     query,
     commits,
     nextCursor,
     queryFingerprint,
     selectedHash,
+    checkedHashes,
     detail,
     selectedFilePath,
     fileDiff,
@@ -438,5 +455,6 @@ export const useHistoryStore = defineStore("history", () => {
     cherryPick,
     reset,
     revert,
+    squash,
   };
 });

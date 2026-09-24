@@ -31,7 +31,7 @@ export const useRepositoryMonitorStore = defineStore("repository-monitor", () =>
     running = true;
     try {
       const next = await backendClient.repositoryWatchSnapshot(root);
-      if (!accepts() || repositories.navigationBusy) return;
+      if (!accepts() || repositories.navigationBusy || repositories.refreshingModules) return;
       // Backend versions advance only for a different Git/content fingerprint.
       // A new watcher starts at zero; establishing its baseline is not a change.
       const previous = applied?.watchId === next.watchId ? applied : undefined;

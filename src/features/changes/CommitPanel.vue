@@ -6,11 +6,10 @@ import { computed, ref } from "vue";
 import { useChangesStore } from "@/stores/changes";
 import { useTaskBranchesStore } from "@/stores/taskBranches";
 import TaskBranchCommit from "./TaskBranchCommit.vue";
-import { useTerminalStore } from "@/stores/terminal";
+import { useRepositoryStore } from "@/stores/repository";
 
 const changesStore = useChangesStore();
 const taskBranches = useTaskBranchesStore();
-const terminal = useTerminalStore();
 const successHash = ref<string>();
 const isCommitting = computed(
   () => changesStore.operation.kind === "commit",
@@ -19,7 +18,7 @@ const canCommit = computed(
   () =>
     changesStore.commitMessage.trim().length > 0 &&
     (changesStore.snapshot?.stagedCount ?? 0) > 0 &&
-    !isCommitting.value && !taskBranches.submitting && !terminal.busy,
+    !useRepositoryStore().navigationBusy,
 );
 
 async function createCommit(): Promise<void> {

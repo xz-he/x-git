@@ -29,6 +29,17 @@ describe("backend AI transport", () => {
     tauri.listen.mockReset();
   });
 
+  it("previews squash without recording a mutation and records confirmed squash", async () => {
+    tauri.invoke.mockResolvedValue({ value: undefined, error: null, warning: null });
+    const path = "D:/repo";
+    const commits = ["a".repeat(40), "b".repeat(40)];
+    const request = { commits, message: "combined", expectedHead: commits[1]!, expectedBranch: "main" };
+    await backendClient.historySquashPreview(path, commits);
+    await backendClient.historySquash(path, request);
+    expect(tauri.invoke).toHaveBeenNthCalledWith(1, "history_squash_preview", { path, commits });
+    expect(tauri.invoke).toHaveBeenNthCalledWith(2, "activity_execute", { action: "history_squash", args: { path, request } });
+  });
+
   it("routes file context queries directly and records file mutations", async () => {
     tauri.invoke.mockResolvedValue({ value: undefined, error: null, warning: null });
     const path = "D:\\repo", relativePath = "tests/new file.ts";

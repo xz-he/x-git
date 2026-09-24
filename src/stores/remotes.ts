@@ -102,7 +102,7 @@ export const useRemotesStore = defineStore("remotes", () => {
     abandonRun();
   }
 
-  function ensureLoaded(rootPath: string, nextGeneration: number): Promise<void> {
+  function ensureLoaded(rootPath: string, nextGeneration: number, acceptsRefresh: () => boolean = () => true): Promise<void> {
     if (
       loadedRootPath.value !== rootPath ||
       generation.value !== nextGeneration
@@ -123,12 +123,12 @@ export const useRemotesStore = defineStore("remotes", () => {
     pending = (async () => {
       try {
         const result = await backendClient.remotesSnapshot(rootPath);
-        if (!lifecycle.accept(token) || version !== requestVersion) {
+        if (!lifecycle.accept(token) || version !== requestVersion || !acceptsRefresh()) {
           return;
         }
         applySnapshot(result);
       } catch (cause) {
-        if (!lifecycle.accept(token) || version !== requestVersion) {
+        if (!lifecycle.accept(token) || version !== requestVersion || !acceptsRefresh()) {
           return;
         }
         error.value = normalizeBackendError(cause);

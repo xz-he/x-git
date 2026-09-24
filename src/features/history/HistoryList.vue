@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { t } from '@/lib/i18n';
-import { GitCommitHorizontal, LoaderCircle, Search } from "@lucide/vue";
-import { onBeforeUnmount, ref, watch } from "vue";
+import { GitCommitHorizontal, GitMerge, LoaderCircle, Search } from "@lucide/vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
+import HistorySquashDialog from "./HistorySquashDialog.vue";
+import { useOperationStore } from "@/stores/operation";
+import { useTerminalStore } from "@/stores/terminal";
 
 import type { CommitSummary } from "@/lib/backend/types";
 import { useHistoryStore } from "@/stores/history";
@@ -9,12 +12,40 @@ import { useRepositoryStore } from "@/stores/repository";
 
 const history = useHistoryStore();
 const repositories = useRepositoryStore();
+const operations = useOperationStore();
+const terminal = useTerminalStore();
+const squashSelection = ref<string[]>();
+const anchor = ref<string>();
+const busy = computed(() => history.submitting || repositories.navigationBusy || terminal.busy);
 const sentinel = ref<HTMLElement>();
 let observer: IntersectionObserver | undefined;
 
-function selectCommit(commit: CommitSummary): void {
+function selectCommit(commit: CommitSummary, event: MouseEvent): void {
+  if (busy.value) return;
+  if (event.ctrlKey || event.metaKey || event.shiftKey) {
+    checkCommit(commit.hash, event.shiftKey);
+    return;
+  }
+  anchor.value = commit.hash;
   void history.selectCommit(commit.hash).catch(() => undefined);
 }
+
+function checkCommit(hash: string, range = false): void {
+  if (busy.value) return;
+  const checked = new Set(history.checkedHashes);
+  const start = history.commits.findIndex(commit => commit.hash === anchor.value);
+  const end = history.commits.findIndex(commit => commit.hash === hash);
+  if (range && start >= 0 && end >= 0) {
+    history.commits.slice(Math.min(start, end), Math.max(start, end) + 1).forEach(commit => checked.add(commit.hash));
+  } else if (checked.has(hash)) checked.delete(hash);
+  else checked.add(hash);
+  history.checkedHashes = [...checked];
+  anchor.value = hash;
+}
+watch(() => [history.loadedRootPath, history.generation, history.query.reference, history.query.search], () => {
+  anchor.value = undefined;
+  if (!history.submitting) squashSelection.value = undefined;
+});
 
 function observeSentinel(element?: HTMLElement): void {
   observer?.disconnect();
@@ -40,6 +71,11 @@ onBeforeUnmount(() => observer?.disconnect());
         <Search :size="14" />
         <input :aria-label="t('uiSearchCommitHistory1c1dc1')" :value="history.query.search" :placeholder="t('uiSearchCommitsAuthorsOrHashes818a73')" @input="history.setSearch(($event.target as HTMLInputElement).value)" />
       </label>
+      <div class="squash-toolbar">
+        <span :title="t('squashSelectHint')">{{ t('squashSelected', { count: history.checkedHashes.length }) }}</span>
+        <button :disabled="history.checkedHashes.length < 2 || busy || operations.isBlocked" :title="t('squashSelectHint')" :aria-label="t('squashTitle')" @click="squashSelection = [...history.checkedHashes]"><GitMerge :size="14" />Squash</button>
+        <button v-if="history.checkedHashes.length" :disabled="busy" @click="history.checkedHashes = []">{{ t('squashClear') }}</button>
+      </div>
     </div>
     <div v-if="history.error && history.commits.length" class="inline-error" role="alert">{{ history.error.message }}</div>
     <div v-if="history.notice" class="backup-notice" role="status">{{ history.notice }}</div>
@@ -47,13 +83,18 @@ onBeforeUnmount(() => observer?.disconnect());
     <div v-else-if="history.error && history.commits.length === 0" class="module-state error" role="alert">{{ history.error.message }}</div>
     <div v-else-if="history.commits.length === 0" class="module-state"><GitCommitHorizontal :size="20" />{{ history.query.search ? t('uiNoMatchingCommits3dcac9') : t('uiThisRepositoryHasNoCommitsYetfcc894') }}</div>
     <div v-else class="history-rows">
-      <button
+      <div
         v-for="commit in history.commits"
         :key="commit.hash"
+        class="history-entry"
+        :class="{ checked: history.checkedHashes.includes(commit.hash) }"
+      >
+        <input type="checkbox" :checked="history.checkedHashes.includes(commit.hash)" :disabled="busy" :aria-label="t('squashSelectCommit', { hash: commit.shortHash })" @click="checkCommit(commit.hash, $event.shiftKey)" />
+      <button
         class="history-row"
         :class="{ selected: history.selectedHash === commit.hash }"
         :data-commit-hash="commit.hash"
-        @click="selectCommit(commit)"
+        @click="selectCommit(commit, $event)"
       >
         <span class="commit-copy">
           <strong :title="commit.subject">{{ commit.subject }}</strong>
@@ -62,14 +103,22 @@ onBeforeUnmount(() => observer?.disconnect());
         </span>
         <code>{{ commit.shortHash }}</code>
       </button>
+      </div>
       <div v-if="history.nextCursor" ref="sentinel" class="history-sentinel" data-testid="history-sentinel">
         <LoaderCircle v-if="history.loading" :size="16" class="spin" />
       </div>
     </div>
   </div>
+  <HistorySquashDialog v-if="squashSelection" :commits="squashSelection" @close="squashSelection = undefined" />
 </template>
 
 <style scoped>
+.squash-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: var(--text-muted); font-size: 11px; }
+.squash-toolbar button { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 0 8px; border: 1px solid var(--border); background: var(--surface-panel); }
+.history-entry { display: flex; align-items: stretch; }
+.history-entry > input { align-self: center; margin: 0 8px; accent-color: var(--primary); }
+.history-entry.checked { background: var(--primary-soft); }
+.history-entry .history-row { min-width: 0; flex: 1; }
 .backup-notice { margin: 10px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-muted); color: var(--text-muted); overflow-wrap: anywhere; }
 .history-scope { min-width: 0; overflow-wrap: anywhere; color: var(--text-muted); font-size: 11px; }
 .history-scope button { margin-left: 8px; background: transparent; color: var(--primary); }

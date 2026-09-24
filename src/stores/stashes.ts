@@ -103,7 +103,7 @@ export const useStashesStore = defineStore("stashes", () => {
     }
   }
 
-  function ensureLoaded(rootPath: string, nextGeneration: number): Promise<void> {
+  function ensureLoaded(rootPath: string, nextGeneration: number, acceptsRefresh: () => boolean = () => true): Promise<void> {
     if (loadedRootPath.value !== rootPath || generation.value !== nextGeneration) resetForRepository(rootPath, nextGeneration);
     if (snapshot.value) return Promise.resolve();
     if (pending) return pending;
@@ -114,10 +114,10 @@ export const useStashesStore = defineStore("stashes", () => {
     pending = (async () => {
       try {
         const next = await backendClient.stashSnapshot(rootPath);
-        if (!lifecycle.accept(token) || version !== listVersion) return;
+        if (!lifecycle.accept(token) || version !== listVersion || !acceptsRefresh()) return;
         snapshot.value = next;
       } catch (cause) {
-        if (!lifecycle.accept(token) || version !== listVersion) return;
+        if (!lifecycle.accept(token) || version !== listVersion || !acceptsRefresh()) return;
         error.value = normalizeBackendError(cause);
         throw error.value;
       } finally {

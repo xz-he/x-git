@@ -12,6 +12,7 @@ import { useRemotesStore } from "@/stores/remotes";
 import { useStashesStore } from "@/stores/stashes";
 import { useChangesStore } from "@/stores/changes";
 import { createBackendFixture } from "@/test/backend";
+import { flushPromises } from "@vue/test-utils";
 
 function repositoryFixture(
   overrides: Partial<RepositorySnapshot> = {},
@@ -39,6 +40,27 @@ describe("repository store", () => {
     setBackendClientForTests(backend);
   });
 
+  it("unlocks after the new branch workspace is ready while history refresh is still pending", async () => {
+    const repositories = useRepositoryStore();
+    repositories.snapshot = repositoryFixture();
+    const history = useHistoryStore();
+    vi.mocked(backend.historyPage).mockResolvedValueOnce({ commits: [], nextCursor: null, queryFingerprint: "main", continuationLanes: [] });
+    await history.ensureLoaded(repositories.snapshot.rootPath, repositories.generation);
+    let finishHistory!: (value: Awaited<ReturnType<BackendClient["historyPage"]>>) => void;
+    vi.mocked(backend.historyPage).mockReturnValueOnce(new Promise(resolve => { finishHistory = resolve; }));
+    vi.mocked(backend.repositoryRefresh).mockResolvedValue(repositoryFixture({ currentBranch: "topic", headShortHash: "bbbbbbb" }));
+    const refreshing = repositories.refresh({ background: true });
+    await flushPromises();
+    const busyWithNewBranch = repositories.navigationBusy;
+    const viewBusyWithNewBranch = repositories.viewNavigationBusy;
+    expect(repositories.snapshot.currentBranch).toBe("topic");
+    expect(history.loading).toBe(true);
+    finishHistory({ commits: [], nextCursor: null, queryFingerprint: "topic", continuationLanes: [] });
+    await refreshing;
+    expect(busyWithNewBranch).toBe(false);
+    expect(viewBusyWithNewBranch).toBe(false);
+  });
+
   it("refreshes cached history after an external branch switch", async () => {
     const repositories = useRepositoryStore();
     repositories.snapshot = repositoryFixture();
@@ -51,6 +73,82 @@ describe("repository store", () => {
     expect(repositories.snapshot.currentBranch).toBe("feature/dev");
     expect(history.queryFingerprint).toBe("new-branch");
     expect(backend.historyPage).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps actions locked until the critical workspace refresh completes", async () => {
+    const repositories = useRepositoryStore();
+    repositories.snapshot = repositoryFixture();
+    let finish!: (value: RepositorySnapshot) => void;
+    vi.mocked(backend.repositoryRefresh).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    const pending = repositories.refresh();
+    await flushPromises();
+    expect(repositories.navigationBusy).toBe(true);
+    finish(repositoryFixture({ currentBranch: "topic" }));
+    await pending;
+    expect(repositories.navigationBusy).toBe(false);
+  });
+
+  it("discards delayed metadata after another branch switch and allows history to retry", async () => {
+    const repositories = useRepositoryStore();
+    repositories.snapshot = repositoryFixture();
+    const root = repositories.snapshot.rootPath;
+    const refs = useRefsStore(), remotes = useRemotesStore(), history = useHistoryStore();
+    await Promise.all([refs.ensureLoaded(root, 0), remotes.ensureLoaded(root, 0), history.ensureLoaded(root, 0)]);
+    let finishRefs!: (value: Awaited<ReturnType<BackendClient["refsSnapshot"]>>) => void;
+    let finishRemotes!: (value: Awaited<ReturnType<BackendClient["remotesSnapshot"]>>) => void;
+    let finishHistory!: (value: Awaited<ReturnType<BackendClient["historyPage"]>>) => void;
+    const oldRefs = refs.snapshot!, oldRemotes = remotes.snapshot!;
+    vi.mocked(backend.refsSnapshot).mockReturnValueOnce(new Promise(resolve => { finishRefs = resolve; }));
+    vi.mocked(backend.remotesSnapshot).mockReturnValueOnce(new Promise(resolve => { finishRemotes = resolve; }));
+    vi.mocked(backend.historyPage).mockReturnValueOnce(new Promise(resolve => { finishHistory = resolve; }));
+    vi.mocked(backend.repositoryRefresh).mockResolvedValue(repositoryFixture({ currentBranch: "topic" }));
+    const pending = repositories.refresh();
+    await flushPromises();
+    expect(repositories.navigationBusy).toBe(false);
+    await repositories.refresh();
+    expect(backend.repositoryRefresh).toHaveBeenCalledTimes(1);
+    const newerRefs = { localBranches: [], remoteBranches: [], tags: [] };
+    vi.mocked(backend.refsSwitch).mockResolvedValueOnce({
+      workspace: { repository: repositoryFixture({ currentBranch: "newer" }), changes: { files: [], stagedCount: 0, unstagedCount: 0 } },
+      refs: newerRefs, operationState: { kind: "none", conflicts: [], abortAction: null },
+    });
+    const switching = refs.switchBranch("newer");
+    expect(repositories.navigationBusy).toBe(true);
+    await switching;
+    const newerRemotes = { ...oldRemotes };
+    remotes.applySnapshot(newerRemotes);
+    const retainedRemotes = remotes.snapshot;
+    finishRefs(oldRefs); finishRemotes(oldRemotes);
+    finishHistory({ commits: [], nextCursor: null, queryFingerprint: "stale", continuationLanes: [] });
+    await pending;
+    expect(repositories.snapshot.currentBranch).toBe("newer");
+    expect(refs.snapshot).toEqual(newerRefs);
+    expect(remotes.snapshot).toBe(retainedRemotes);
+    expect(history.queryFingerprint).not.toBe("stale");
+    vi.mocked(backend.historyPage).mockResolvedValueOnce({ commits: [], nextCursor: null, queryFingerprint: "newer", continuationLanes: [] });
+    await history.refresh();
+    expect(history.queryFingerprint).toBe("newer");
+    expect(repositories.refreshingModules).toBe(false);
+  });
+
+  it("ignores old metadata failures when another repository is opened", async () => {
+    const repositories = useRepositoryStore();
+    repositories.snapshot = repositoryFixture();
+    await useRefsStore().ensureLoaded(repositories.snapshot.rootPath, 0);
+    let fail!: (reason: unknown) => void;
+    vi.mocked(backend.refsSnapshot).mockReturnValueOnce(new Promise((_, reject) => { fail = reject; }));
+    vi.mocked(backend.repositoryRefresh).mockResolvedValue(repositoryFixture());
+    const oldRefresh = repositories.refresh();
+    await flushPromises();
+    const next = repositoryFixture({ rootPath: "C:/other" });
+    vi.mocked(backend.repositoryOpen).mockResolvedValue(next);
+    await repositories.open(next.rootPath);
+    fail({ code: "gitCommandFailed", message: "old failure" });
+    await oldRefresh;
+    expect(repositories.snapshot.rootPath).toBe(next.rootPath);
+    expect(repositories.error).toBeUndefined();
+    expect(useRefsStore().snapshot).toBeUndefined();
+    expect(repositories.refreshingModules).toBe(false);
   });
 
   it("replaces repository state with one coherent snapshot", async () => {

@@ -8,6 +8,8 @@ import { useChangesStore } from "./changes";
 import { useHistoryStore } from "./history";
 import { useRefsStore } from "./refs";
 import { useOperationStore } from "./operation";
+import { useUiStore } from "./ui";
+import { flushPromises } from "@vue/test-utils";
 
 let backend: ReturnType<typeof createBackendFixture>;
 beforeEach(() => {
@@ -25,7 +27,42 @@ it("refreshes real HEAD, module snapshots and conflict state after a terminal co
   expect(repo.snapshot?.currentBranch).toBe("new"); expect(repo.snapshot?.headShortHash).toBe("def");
   expect(useOperationStore().state.kind).toBe("cherryPick");
   expect(useHistoryStore().selectedHash).toBeUndefined();
-  for (const method of [backend.refsSnapshot, backend.historyPage, backend.stashSnapshot, backend.taskBranchesSnapshot, backend.remotesSnapshot]) expect(method).toHaveBeenCalled();
+  expect(backend.taskBranchesSnapshot).toHaveBeenCalled();
+  for (const method of [backend.refsSnapshot, backend.historyPage, backend.stashSnapshot, backend.remotesSnapshot]) expect(method).not.toHaveBeenCalled();
+  await useHistoryStore().ensureLoaded("C:/repo", 0);
+  expect(backend.historyPage).toHaveBeenCalled();
+});
+
+it("refreshes the visible history in the background after command reconciliation", async () => {
+  const repo = useRepositoryStore();
+  useUiStore().activeView = "history";
+  vi.mocked(backend.repositoryRefresh).mockResolvedValue({ ...repo.snapshot! });
+  let finish!: (value: Awaited<ReturnType<typeof backend.historyPage>>) => void;
+  vi.mocked(backend.historyPage).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+  await repo.refreshAfterTerminal("C:/repo", 0);
+  expect(useHistoryStore().loading).toBe(true);
+  expect(repo.navigationBusy).toBe(false);
+  finish({ commits: [], nextCursor: null, queryFingerprint: "new", continuationLanes: [] });
+  await flushPromises();
+  expect(useHistoryStore().queryFingerprint).toBe("new");
+  expect(repo.refreshingModules).toBe(false);
+});
+
+it("discards stale post-command history and retries the visible view on the next refresh", async () => {
+  const repo = useRepositoryStore(), history = useHistoryStore();
+  useUiStore().activeView = "history";
+  vi.mocked(backend.repositoryRefresh).mockImplementation(async () => ({ ...repo.snapshot! }));
+  let finish!: (value: Awaited<ReturnType<typeof backend.historyPage>>) => void;
+  vi.mocked(backend.historyPage).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+  await repo.refreshAfterTerminal("C:/repo", 0);
+  useChangesStore().applyWorkspace({ repository: { ...repo.snapshot!, currentBranch: "newer", headShortHash: "newer" }, changes: { files: [], stagedCount: 0, unstagedCount: 0 } });
+  finish({ commits: [], nextCursor: null, queryFingerprint: "old", continuationLanes: [] });
+  await flushPromises();
+  expect(history.queryFingerprint).not.toBe("old");
+  vi.mocked(backend.historyPage).mockResolvedValueOnce({ commits: [], nextCursor: null, queryFingerprint: "newer", continuationLanes: [] });
+  await repo.refresh({ metadata: false });
+  expect(history.queryFingerprint).toBe("newer");
+  expect(backend.historyPage).toHaveBeenCalledTimes(2);
 });
 
 it("does not switch repositories or submit UI writes while a terminal owns the repository", async () => {

@@ -106,6 +106,69 @@ fn gate_allows_only_matching_abort_during_an_operation() {
     );
 }
 
+#[tokio::test]
+async fn detects_per_worktree_markers_and_pending_sequences_without_affecting_main() {
+    let fixture = committed_fixture().await;
+    let parent = tempfile::tempdir().unwrap();
+    let worktree = parent.path().join("linked worktree");
+    run_git(
+        fixture.path(),
+        &[
+            "worktree",
+            "add",
+            "-b",
+            "linked",
+            worktree.to_str().unwrap(),
+        ],
+    )
+    .await;
+    let runner = GitCommandRunner::default();
+    let git_dir = runner
+        .run(Some(&worktree), ["rev-parse", "--absolute-git-dir"])
+        .await
+        .unwrap();
+    let git_dir = std::path::PathBuf::from(git_dir.stdout.trim());
+    for (marker, kind) in [
+        ("MERGE_HEAD", RepositoryOperationKind::Merge),
+        ("REVERT_HEAD", RepositoryOperationKind::Revert),
+        ("CHERRY_PICK_HEAD", RepositoryOperationKind::CherryPick),
+    ] {
+        std::fs::write(git_dir.join(marker), "a".repeat(40)).unwrap();
+        assert_eq!(
+            read_operation_state(&worktree, &runner).await.unwrap().kind,
+            kind
+        );
+        assert_eq!(
+            read_operation_state(fixture.path(), &runner)
+                .await
+                .unwrap()
+                .kind,
+            RepositoryOperationKind::None
+        );
+        std::fs::remove_file(git_dir.join(marker)).unwrap();
+    }
+    std::fs::create_dir(git_dir.join("rebase-apply")).unwrap();
+    assert_eq!(
+        read_operation_state(&worktree, &runner).await.unwrap().kind,
+        RepositoryOperationKind::Rebase
+    );
+    std::fs::remove_dir(git_dir.join("rebase-apply")).unwrap();
+    std::fs::create_dir(git_dir.join("sequencer")).unwrap();
+    std::fs::write(git_dir.join("sequencer/todo"), "pick abc123 pending\n").unwrap();
+    assert_eq!(
+        read_operation_state(&worktree, &runner).await.unwrap().kind,
+        RepositoryOperationKind::CherryPick
+    );
+    std::fs::write(git_dir.join("sequencer/todo"), "invalid instruction\n").unwrap();
+    assert_eq!(
+        read_operation_state(&worktree, &runner)
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::GitOperationInProgress
+    );
+}
+
 #[test]
 fn gate_blocks_ordinary_mutations_for_unresolved_only_conflicts() {
     let state = RepositoryOperationState {

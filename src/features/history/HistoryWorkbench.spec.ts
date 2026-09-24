@@ -332,11 +332,11 @@ describe("history workbench", () => {
       .trigger("click");
     const target = wrapper.get('[aria-label="Cherry-pick 目标分支"]');
     expect(target.text()).toContain("当前分支");
-    expect(wrapper.find('input[type="checkbox"]').exists()).toBe(false);
+    expect(wrapper.find('.confirm-dialog input[type="checkbox"]').exists()).toBe(false);
 
     await selectOption(wrapper, "Cherry-pick 目标分支", "release");
     expect(target.text()).toBe("release");
-    const returnChoice = wrapper.get('input[type="checkbox"]');
+    const returnChoice = wrapper.get('.confirm-dialog input[type="checkbox"]');
     expect(returnChoice.element).toHaveProperty("checked", true);
   });
 

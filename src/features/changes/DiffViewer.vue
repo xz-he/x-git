@@ -15,6 +15,7 @@ import SplitDiff from "@/features/history/SplitDiff.vue";
 import type { SplitCell } from "@/features/history/splitDiffRows";
 import { useChangesStore } from "@/stores/changes";
 import { useTerminalStore } from "@/stores/terminal";
+import { useRepositoryStore } from "@/stores/repository";
 
 const changesStore = useChangesStore();
 const selectedLines = ref<number[]>([]);
@@ -34,7 +35,7 @@ const addedLineNumbers = computed(
 );
 const isStaged = computed(() => diff.value?.scope === "staged");
 const canMutate = computed(() => diff.value?.scope !== "commit" && !useTerminalStore().busy);
-const busy = computed(() => changesStore.operation.kind !== "idle");
+const busy = computed(() => useRepositoryStore().navigationBusy || changesStore.diffLoading);
 const actionLabel = computed(() =>
   isStaged.value ? t('uiUnstageSelectedLines196037') : t('uiStageSelectedLinesb1e846'),
 );
@@ -161,7 +162,7 @@ async function applySelectedLines(): Promise<void> {
 
 <template>
   <section class="diff-viewer" :aria-label="t('uiFileDiff3a0c2c')">
-    <div v-if="changesStore.operation.kind === 'diff'" class="diff-state">
+    <div v-if="changesStore.diffLoading" class="diff-state">
       <LoaderCircle :size="20" class="spin" />
       <span>{{ t('uiLoadingDiff59e762') }}</span>
     </div>

@@ -1,6 +1,6 @@
 import { t } from '@/lib/i18n';
 import { defineStore } from "pinia";
-import { ref } from "vue";
+import { ref, watch } from "vue";
 
 import { backendClient } from "@/lib/backend/client";
 import { normalizeBackendError } from "@/lib/backend/errors";
@@ -16,7 +16,6 @@ import type {
 } from "@/lib/backend/types";
 import { useOperationStore } from "@/stores/operation";
 import { useRepositoryStore } from "@/stores/repository";
-import { useTerminalStore } from "@/stores/terminal";
 
 export type ChangesOperation =
   | { kind: "idle" }
@@ -49,8 +48,19 @@ export const useChangesStore = defineStore("changes", () => {
   const commitMessage = ref("");
   const operation = ref<ChangesOperation>({ kind: "idle" });
   const error = ref<BackendError>();
+  const diffLoading = ref(false);
   let selectionVersion = 0;
   let loadVersion = 0;
+  let operationVersion = 0;
+
+  function invalidateReads(): void {
+    selectionVersion++;
+    loadVersion++;
+    diffLoading.value = false;
+    selectedDiff.value = undefined;
+  }
+  watch(() => [useRepositoryStore().generation, useRepositoryStore().snapshot?.rootPath,
+    useRepositoryStore().snapshot?.currentBranch, useRepositoryStore().snapshot?.headShortHash], invalidateReads, { flush: "sync" });
 
   function requireRootPath(): string {
     const rootPath =
@@ -68,22 +78,27 @@ export const useChangesStore = defineStore("changes", () => {
     kind: Exclude<ChangesOperation["kind"], "idle">,
     action: () => Promise<T>,
   ): Promise<T> {
-    if (kind !== "load" && kind !== "diff" && useTerminalStore().busy) {
-      throw { code: "gitOperationInProgress", get message() { return t('uiWaitForTheTerminalCommandToFinishFirst1978aa'); } } satisfies BackendError;
+    if (kind !== "load" && kind !== "diff" && useRepositoryStore().navigationBusy) {
+      throw { code: "gitOperationInProgress", get message() { return t('uiAGitOperationIsAlreadyBeingSubmittedb4d501'); } } satisfies BackendError;
     }
+    if (kind !== "load" && kind !== "diff") invalidateReads();
+    const owner = ++operationVersion;
+    const generation = useRepositoryStore().generation;
     operation.value = { kind };
     error.value = undefined;
     try {
       return await action();
     } catch (cause) {
-      error.value = normalizeBackendError(cause);
-      throw error.value;
+      const failure = normalizeBackendError(cause);
+      if (owner === operationVersion && generation === useRepositoryStore().generation) error.value = failure;
+      throw failure;
     } finally {
-      operation.value = { kind: "idle" };
+      if (owner === operationVersion) operation.value = { kind: "idle" };
     }
   }
 
   function applyWorkspace(workspace: WorkingTreeSnapshot): void {
+    invalidateReads();
     useRepositoryStore().snapshot = workspace.repository;
     snapshot.value = workspace.changes;
     loadedRootPath.value = workspace.repository.rootPath;
@@ -98,6 +113,7 @@ export const useChangesStore = defineStore("changes", () => {
     const selected = selectedPath.value;
     const scope = selectedScope.value;
     const selection = preserveSelection ? selectionVersion : ++selectionVersion;
+    if (!preserveSelection) { diffLoading.value = false; selectedDiff.value = undefined; }
     await run("load", async () => {
       const nextSnapshot = await backendClient.changesSnapshot(rootPath);
       if (request !== loadVersion || useRepositoryStore().generation !== generation ||
@@ -106,13 +122,12 @@ export const useChangesStore = defineStore("changes", () => {
       loadedRootPath.value = rootPath;
       if (selection !== selectionVersion) return;
       if (preserveSelection && selected && nextSnapshot.files.some(file => file.path === selected && (scope === "staged" ? file.staged : file.unstaged))) {
-        const diff = await backendClient.changesFileDiff(rootPath, selected, scope);
-        if (request === loadVersion && generation === useRepositoryStore().generation && selection === selectionVersion) {
-          selectedDiff.value = diff;
-          highlightedLine.value = undefined;
-        }
+        // File status is ready. A large diff must not extend the workspace write lock.
+        void selectFile(selected, scope).catch(() => undefined);
         return;
       }
+      selectionVersion++;
+      diffLoading.value = false;
       selectedPath.value = undefined;
       selectedDiff.value = undefined;
       highlightedLine.value = undefined;
@@ -125,20 +140,33 @@ export const useChangesStore = defineStore("changes", () => {
     scope: ChangeScope,
   ): Promise<void> {
     const selection = ++selectionVersion;
-    const generation = useRepositoryStore().generation;
+    const repositories = useRepositoryStore();
+    const generation = repositories.generation;
+    const root = requireRootPath();
+    const workspace = repositories.snapshot;
+    const valid = () => selection === selectionVersion && generation === repositories.generation && workspace === repositories.snapshot;
+    selectedPath.value = relativePath;
+    selectedScope.value = scope;
+    selectedDiff.value = undefined;
+    diffLoading.value = true;
     highlightedLine.value = undefined;
     navigationError.value = undefined;
-    await run("diff", async () => {
+    error.value = undefined;
+    try {
       const diff = await backendClient.changesFileDiff(
-        requireRootPath(),
+        root,
         relativePath,
         scope,
       );
-      if (selection !== selectionVersion || generation !== useRepositoryStore().generation) return;
-      selectedPath.value = relativePath;
-      selectedScope.value = scope;
+      if (!valid()) return;
       selectedDiff.value = diff;
-    });
+    } catch (cause) {
+      if (!valid()) return;
+      error.value = normalizeBackendError(cause);
+      throw error.value;
+    } finally {
+      if (selection === selectionVersion) diffLoading.value = false;
+    }
   }
 
   async function revealStagedLine(
@@ -154,18 +182,11 @@ export const useChangesStore = defineStore("changes", () => {
       return false;
     }
 
-    navigationError.value = undefined;
-    await run("diff", async () => {
-      const diff = await backendClient.changesFileDiff(
-        requireRootPath(),
-        relativePath,
-        "staged",
-      );
-      selectedPath.value = relativePath;
-      selectedScope.value = "staged";
-      selectedDiff.value = diff;
-      highlightedLine.value = line;
-    });
+    const reading = selectFile(relativePath, "staged");
+    const selection = selectionVersion;
+    await reading;
+    if (selection !== selectionVersion || !selectedDiff.value) return false;
+    highlightedLine.value = line;
     return true;
   }
 
@@ -284,6 +305,7 @@ export const useChangesStore = defineStore("changes", () => {
     commitMessage,
     operation,
     error,
+    diffLoading,
     applyWorkspace,
     load,
     selectFile,

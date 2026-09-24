@@ -36,6 +36,7 @@ const recordedActions = new Set([
   "changes_discard_file", "changes_restore_noise", "changes_commit",
   "refs_create_branch", "refs_switch_branch", "refs_delete_branch", "refs_merge", "refs_rebase", "refs_abort",
   "history_checkout", "history_revert", "history_cherry_pick", "history_reset",
+  "history_squash",
   "stash_create", "stash_apply", "stash_pop", "conflicts_resolve", "conflicts_continue", "files_execute",
   "task_branches_create", "task_branches_run", "task_branches_unlink",
 ]);

@@ -136,6 +136,8 @@ export function createBackendFixture(
     historyFileDiff: vi.fn(notConfigured),
     historyCheckout: vi.fn(notConfigured),
     historyRevert: vi.fn(notConfigured),
+    historySquashPreview: vi.fn(notConfigured),
+    historySquash: vi.fn(notConfigured),
     historyCherryPick: vi.fn(notConfigured),
     historyReset: vi.fn(notConfigured),
     settingsLoad: vi.fn(async () => ({ settings: createTestSettings() })),

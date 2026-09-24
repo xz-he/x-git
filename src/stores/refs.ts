@@ -64,7 +64,7 @@ export const useRefsStore = defineStore("refs", () => {
     pending = undefined;
   }
 
-  function ensureLoaded(rootPath: string, nextGeneration: number): Promise<void> {
+  function ensureLoaded(rootPath: string, nextGeneration: number, acceptsRefresh: () => boolean = () => true): Promise<void> {
     if (
       loadedRootPath.value !== rootPath ||
       generation.value !== nextGeneration
@@ -85,7 +85,7 @@ export const useRefsStore = defineStore("refs", () => {
     pending = (async () => {
       try {
         const result = await backendClient.refsSnapshot(rootPath);
-        if (!lifecycle.accept(token) || version !== requestVersion) {
+        if (!lifecycle.accept(token) || version !== requestVersion || !acceptsRefresh()) {
           return;
         }
         snapshot.value = result;
@@ -94,7 +94,7 @@ export const useRefsStore = defineStore("refs", () => {
           result.localBranches[0]?.fullName ??
           result.remoteBranches[0]?.fullName;
       } catch (cause) {
-        if (!lifecycle.accept(token) || version !== requestVersion) {
+        if (!lifecycle.accept(token) || version !== requestVersion || !acceptsRefresh()) {
           return;
         }
         error.value = normalizeBackendError(cause);

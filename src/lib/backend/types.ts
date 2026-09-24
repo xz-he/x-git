@@ -470,6 +470,20 @@ export interface RevertRequest {
   mainline: number | null;
 }
 
+export interface SquashPreview {
+  branch: string;
+  head: string;
+  commits: { hash: string; subject: string }[];
+  rewrittenCount: number;
+}
+
+export interface SquashRequest {
+  commits: string[];
+  message: string;
+  expectedHead: string;
+  expectedBranch: string;
+}
+
 export interface HistoryMutationResult extends MutationWorkspace {
   history: HistoryPage;
   error?: BackendError | null;

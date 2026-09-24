@@ -38,12 +38,12 @@ onBeforeUnmount(() => { window.removeEventListener(ACTIVITY_UPDATED, updated); w
             </button>
             <div v-if="entry.id === selectedId" class="details">
               <p>{{ entry.message }}</p><p>{{ entry.rollbackReason }}</p>
-              <button class="rollback" :disabled="!entry.rollbackKind || !!entry.rollbackId || repositories.navigationBusy" @click="confirming = true"><Undo2 :size="15" />{{ entry.rollbackId ? t('uiRollbackRequestede84d34') : t('uiRollBackThisOperation8c9e17') }}</button>
+              <button class="rollback" :disabled="activity.loading || !entry.rollbackKind || !!entry.rollbackId || repositories.navigationBusy" @click="confirming = true"><Undo2 :size="15" />{{ entry.rollbackId ? t('uiRollbackRequestede84d34') : t('uiRollBackThisOperation8c9e17') }}</button>
             </div>
           </article>
         </div>
       </section>
-      <ConfirmDialog v-if="confirming && selected" :title="t('uiRollBackThisOperation72dced')" :description="selected.title + '：' + selected.rollbackReason" :confirm-label="t('uiConfirmRollback2a814f')" :busy="activity.submitting" :confirm-disabled="repositories.navigationBusy || !selected.rollbackKind || !!selected.rollbackId" @cancel="!activity.submitting && (confirming = false)" @confirm="rollback">
+      <ConfirmDialog v-if="confirming && selected" :title="t('uiRollBackThisOperation72dced')" :description="selected.title + '：' + selected.rollbackReason" :confirm-label="t('uiConfirmRollback2a814f')" :busy="activity.submitting" :confirm-disabled="activity.loading || repositories.navigationBusy || !selected.rollbackKind || !!selected.rollbackId" @cancel="!activity.submitting && (confirming = false)" @confirm="rollback">
         <p v-if="activity.error" role="alert" class="error">{{ activity.error }}</p>
       </ConfirmDialog>
     </div>

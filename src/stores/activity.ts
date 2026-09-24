@@ -28,7 +28,7 @@ export const useActivityStore = defineStore("activity", () => {
   }
   async function rollback(entry: ActivityEntry): Promise<boolean> {
     const repositories = useRepositoryStore(), root = repositories.snapshot?.rootPath, generation = repositories.generation;
-    if (!root || submitting.value || repositories.navigationBusy || !entry.rollbackKind || entry.rollbackId) return false;
+    if (!root || submitting.value || loading.value || repositories.navigationBusy || !entry.rollbackKind || entry.rollbackId) return false;
     submitting.value = true; error.value = "";
     let failure = "";
     try {
@@ -42,9 +42,9 @@ export const useActivityStore = defineStore("activity", () => {
       return true;
     } catch (cause) { failure = normalizeBackendError(cause).message; return false; }
     finally {
-      await load();
-      if (failure && root === repositories.snapshot?.rootPath && generation === repositories.generation) error.value = failure;
       submitting.value = false;
+      void load();
+      if (failure && root === repositories.snapshot?.rootPath && generation === repositories.generation) error.value = failure;
     }
   }
   return { entries, loading, submitting, error, load, rollback };

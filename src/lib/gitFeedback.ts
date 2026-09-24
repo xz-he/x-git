@@ -27,6 +27,7 @@ const actions: Record<string, string> = {
   get changesScanNoise() { return t('uiDetectNonSubstantiveChangesdeff45'); }, get changesRestoreNoise() { return t('uiRestoreNonSubstantiveChanges179f9e'); }, get refsCreate() { return t('uiCreateBranchcd7ca0'); }, get refsSwitch() { return t('uiSwitchBranchcfeb33'); }, get refsDelete() { return t('uiDeleteBranch6203f5'); },
   get refsMerge() { return t('uiMerge8cbd5c'); }, get refsRebase() { return t('uiRebaseb66763'); }, get refsAbort() { return t('uiAbortGitOperation750351'); }, get historyCheckout() { return t('uiCheckout4401e3'); },
   get historyRevert() { return t('uiRevertCommit7794fc'); }, get historyCherryPick() { return t('uiCherryPickCommit1c6e85'); }, get historyReset() { return t('uiResetCommit4deab4'); },
+  get historySquash() { return t('squashTitle'); },
   get stashCreate() { return t('uiStashd339dc'); }, get stashApply() { return t('uiApplyStashb19844'); }, get stashPop() { return t('uiPopStash0d142f'); }, get conflictsResolve() { return t('conflicts'); }, get conflictsContinue() { return t('uiContinueGitOperation042a2a'); },
   get taskBranchesCreate() { return t('uiCreateTaskBranch6f6fc8'); }, get taskBranchesRun() { return t('uiCommitAndCherryPickbece15'); }, get taskBranchesUnlink() { return t('uiUnlinkBranchf2b89f'); }, get filesExecute() { return t('uiFileActionsfd1cf9'); },
   get remoteStartFetch() { return t('uiFetcha82f56'); }, get remoteStartPull() { return t('uiPull0edfd5'); }, get remoteStartPush() { return t('uiPush7931c5'); },

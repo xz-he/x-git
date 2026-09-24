@@ -40,8 +40,8 @@ pub async fn read_operation_state(
     root: &Path,
     runner: &GitCommandRunner,
 ) -> Result<RepositoryOperationState, BackendError> {
-    let status = runner
-        .run(
+    let (status, paths) = tokio::join!(
+        runner.run(
             Some(root),
             [
                 "--no-optional-locks",
@@ -50,24 +50,22 @@ pub async fn read_operation_state(
                 "-z",
                 "--untracked-files=no",
             ],
-        )
-        .await?;
-    let conflicts = parse_conflicts(&status.stdout);
+        ),
+        operation_paths(root, runner),
+    );
+    let conflicts = parse_conflicts(&status?.stdout);
+    let [rebase_merge, rebase_apply, merge, revert, cherry_pick, todo] = paths?;
 
-    if git_path_exists(root, runner, "rebase-merge").await?
-        || git_path_exists(root, runner, "rebase-apply").await?
-    {
+    if tokio::fs::try_exists(rebase_merge).await? || tokio::fs::try_exists(rebase_apply).await? {
         return Ok(RepositoryOperationState::rebase(conflicts));
     }
-    if git_path_exists(root, runner, "MERGE_HEAD").await? {
+    if tokio::fs::try_exists(merge).await? {
         return Ok(RepositoryOperationState::merge(conflicts));
     }
-    if git_path_exists(root, runner, "REVERT_HEAD").await? {
+    if tokio::fs::try_exists(revert).await? {
         return Ok(RepositoryOperationState::revert(conflicts));
     }
-    if git_path_exists(root, runner, "CHERRY_PICK_HEAD").await?
-        || pending_cherry_pick_sequence(root, runner).await?
-    {
+    if tokio::fs::try_exists(cherry_pick).await? || pending_cherry_pick_sequence(&todo).await? {
         return Ok(RepositoryOperationState::cherry_pick(conflicts));
     }
 
@@ -146,40 +144,49 @@ fn parse_conflicts(output: &str) -> Vec<ConflictFileSummary> {
     conflicts
 }
 
-async fn git_path_exists(
+async fn operation_paths(
     root: &Path,
     runner: &GitCommandRunner,
-    name: &str,
-) -> Result<bool, BackendError> {
-    let path = git_path(root, runner, name).await?;
-    tokio::fs::try_exists(path)
-        .await
-        .map_err(BackendError::from)
-}
-
-async fn git_path(
-    root: &Path,
-    runner: &GitCommandRunner,
-    name: &str,
-) -> Result<PathBuf, BackendError> {
+) -> Result<[PathBuf; 6], BackendError> {
+    // Ask Git for worktree-aware paths in one process, including linked worktrees.
     let output = runner
-        .run(Some(root), ["rev-parse", "--git-path", name])
+        .run(
+            Some(root),
+            [
+                "rev-parse",
+                "--git-path",
+                "rebase-merge",
+                "--git-path",
+                "rebase-apply",
+                "--git-path",
+                "MERGE_HEAD",
+                "--git-path",
+                "REVERT_HEAD",
+                "--git-path",
+                "CHERRY_PICK_HEAD",
+                "--git-path",
+                "sequencer/todo",
+            ],
+        )
         .await?;
-    let path = PathBuf::from(output.stdout.trim());
-    let path = if path.is_absolute() {
-        path
-    } else {
-        root.join(path)
-    };
-    Ok(path)
+    output
+        .stdout
+        .lines()
+        .map(|line| {
+            let path = PathBuf::from(line.trim_end_matches('\r'));
+            if path.is_absolute() {
+                path
+            } else {
+                root.join(path)
+            }
+        })
+        .collect::<Vec<_>>()
+        .try_into()
+        .map_err(|_| BackendError::new(ErrorCode::Unexpected, "Git 操作状态路径数量不正确。"))
 }
 
-async fn pending_cherry_pick_sequence(
-    root: &Path,
-    runner: &GitCommandRunner,
-) -> Result<bool, BackendError> {
+async fn pending_cherry_pick_sequence(path: &Path) -> Result<bool, BackendError> {
     const MAX_SEQUENCER_TODO_BYTES: u64 = 2 * 1024 * 1024;
-    let path = git_path(root, runner, "sequencer/todo").await?;
     let file = match tokio::fs::File::open(path).await {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),

@@ -32,6 +32,108 @@ async fn committed_fixture() -> TempDir {
 }
 
 #[tokio::test]
+async fn batched_tracking_counts_handle_equal_ahead_behind_diverged_and_gone() {
+    let fixture = committed_fixture().await;
+    let root = fixture.path();
+    run_git(root, &["remote", "add", "origin", "."]).await;
+    run_git(root, &["update-ref", "refs/remotes/origin/main", "HEAD"]).await;
+    run_git(
+        root,
+        &[
+            "symbolic-ref",
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/main",
+        ],
+    )
+    .await;
+    for name in ["equal", "ahead", "behind", "diverged", "gone"] {
+        run_git(root, &["branch", name]).await;
+        run_git(
+            root,
+            &["config", &format!("branch.{name}.remote"), "origin"],
+        )
+        .await;
+        run_git(
+            root,
+            &[
+                "config",
+                &format!("branch.{name}.merge"),
+                &format!("refs/heads/{name}"),
+            ],
+        )
+        .await;
+        if name != "gone" {
+            run_git(
+                root,
+                &["update-ref", &format!("refs/remotes/origin/{name}"), "HEAD"],
+            )
+            .await;
+        }
+    }
+    run_git(root, &["switch", "ahead"]).await;
+    run_git(root, &["commit", "--allow-empty", "-m", "local ahead"]).await;
+    run_git(root, &["update-ref", "refs/remotes/origin/behind", "HEAD"]).await;
+    run_git(
+        root,
+        &["update-ref", "refs/remotes/origin/diverged", "HEAD"],
+    )
+    .await;
+    run_git(root, &["switch", "diverged"]).await;
+    run_git(root, &["commit", "--allow-empty", "-m", "local diverged"]).await;
+    let service = RefsService::default();
+    let snapshot = service.snapshot(root).await.unwrap();
+    for (name, counts) in [
+        ("equal", (Some(0), Some(0))),
+        ("ahead", (Some(1), Some(0))),
+        ("behind", (Some(0), Some(1))),
+        ("diverged", (Some(1), Some(1))),
+        ("gone", (None, None)),
+        ("main", (None, None)),
+    ] {
+        let branch = snapshot
+            .local_branches
+            .iter()
+            .find(|branch| branch.name == name)
+            .unwrap();
+        assert_eq!((branch.ahead, branch.behind), counts, "{name}");
+    }
+    assert!(
+        snapshot
+            .remote_branches
+            .iter()
+            .all(|branch| branch.name != "origin/HEAD"
+                && branch.ahead.is_none()
+                && branch.behind.is_none())
+    );
+    let switched = service.switch_branch(root, "gone").await.unwrap();
+    assert_eq!(
+        switched.workspace.repository.current_branch.as_deref(),
+        Some("gone")
+    );
+}
+
+#[tokio::test]
+async fn switch_rejects_missing_and_remote_only_branches_without_changing_head() {
+    let fixture = committed_fixture().await;
+    let root = fixture.path();
+    run_git(root, &["update-ref", "refs/remotes/origin/topic", "HEAD"]).await;
+    let service = RefsService::default();
+    for name in ["missing", "origin/topic"] {
+        assert_eq!(
+            service.switch_branch(root, name).await.unwrap_err().code,
+            ErrorCode::BranchUnavailable
+        );
+    }
+    let snapshot = service.snapshot(root).await.unwrap();
+    assert!(
+        snapshot
+            .local_branches
+            .iter()
+            .any(|branch| branch.current && branch.name == "main")
+    );
+}
+
+#[tokio::test]
 async fn snapshot_reads_branches_tracking_and_both_tag_kinds() {
     let fixture = committed_fixture().await;
     run_git(fixture.path(), &["branch", "feature/功能"]).await;
