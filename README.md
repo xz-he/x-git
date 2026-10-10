@@ -2,6 +2,18 @@
 
 HQ Git 是一款面向 Windows 的 Git 桌面客户端，基于 Tauri 2、Vue 3 和 Rust 构建。它将仓库文件、工作区变更、分支、历史、远端与终端集中在同一个界面，并提供可选的 AI 辅助功能。
 
+## 界面预览
+
+变更与差异：
+
+![HQ Git 工作区的变更列表和并排差异视图](.github/assets/readme-workspace.png)
+
+提交历史：
+
+![HQ Git 的提交历史和提交详情视图](.github/assets/readme-history.png)
+
+截图使用演示数据。
+
 ## 下载与使用
 
 前往 [GitHub Releases](https://github.com/xz-he/x-git/releases/latest) 下载最新的 Windows x64 安装包（`*-setup.exe`）。安装后可打开本地仓库、克隆远端仓库，或在选定目录初始化新仓库。应用调用本机的 Git，请先安装 [Git for Windows](https://git-scm.com/download/win)，并确保 `git` 可在命令行中运行。
