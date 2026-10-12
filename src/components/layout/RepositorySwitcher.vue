@@ -96,7 +96,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", shortcut, true));
 
 <template>
   <Teleport to="body">
-    <div v-if="ui.repositorySwitcherOpen" class="switcher-backdrop" @click.self="close" @keydown="keydown">
+    <div v-if="ui.repositorySwitcherOpen" class="switcher-backdrop" @keydown="keydown">
       <section ref="panel" class="repository-switcher" role="dialog" aria-modal="true" aria-labelledby="repository-switcher-title">
         <header><div><h2 id="repository-switcher-title">{{ t('uiSwitchRepository46c7e1') }}</h2><p>{{ t('uiSwitchYourWorkingRepositoryWithoutReturningHome7c9557') }}</p></div><button class="icon" :aria-label="t('uiCloseRepositorySwitcheraae721')" @click="close"><X :size="18" /></button></header>
         <div class="search"><Search :size="18" /><input ref="search" v-model="query" :aria-label="t('uiSearchRepositoryNameOrPathac9f8f')" role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls="repository-options" :aria-activedescendant="rows.length ? `repository-option-${active}` : undefined" :placeholder="t('uiSearchRepositoryNameOrPathd20157')" autocomplete="off" /></div>

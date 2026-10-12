@@ -26,3 +26,20 @@ it("focuses cancel and blocks confirmation until enabled", async () => {
 
   wrapper.unmount();
 });
+
+it("does not cancel when the backdrop is clicked", async () => {
+  const onCancel = vi.fn();
+  const wrapper = mount(ConfirmDialog, {
+    attachTo: document.body,
+    props: {
+      title: "确认操作",
+      confirmLabel: "确认",
+      onCancel,
+    },
+  });
+
+  await wrapper.get(".dialog-backdrop").trigger("click");
+
+  expect(onCancel).not.toHaveBeenCalled();
+  wrapper.unmount();
+});

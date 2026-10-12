@@ -23,7 +23,7 @@ onBeforeUnmount(() => { window.removeEventListener(ACTIVITY_UPDATED, updated); w
 </script>
 <template>
   <Teleport to="body">
-    <div class="activity-backdrop" @click.self="close">
+    <div class="activity-backdrop">
       <section class="activity-dialog" role="dialog" aria-modal="true" aria-labelledby="activity-title" :inert="confirming || undefined">
         <header><h2 id="activity-title"><History :size="19" /> {{ t('uiOperationHistory56833a') }}</h2><button ref="closeButton" :aria-label="t('uiCloseOperationHistoryc252eb')" :disabled="activity.submitting" @click="close"><X :size="18" /></button></header>
         <div class="toolbar"><span>{{ repositories.snapshot?.name }} {{ t('uiLatest200Entries161804') }}</span><button :disabled="activity.loading || activity.submitting" @click="activity.load"><RefreshCw :size="14" />{{ t('uiRefreshHistory7b0ae4') }}</button></div>

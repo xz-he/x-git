@@ -31,7 +31,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="dialog-backdrop" role="presentation" @click.self="emit('cancel')">
+  <div class="dialog-backdrop" role="presentation">
     <section
       class="confirm-dialog"
       :role="props.danger ? 'alertdialog' : 'dialog'"

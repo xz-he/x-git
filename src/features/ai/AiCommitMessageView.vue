@@ -140,7 +140,6 @@ function retry(): void {
       v-if="confirmingReplacement"
       class="modal-backdrop"
       role="presentation"
-      @click.self="confirmingReplacement = false"
     >
       <section
         class="replace-dialog"

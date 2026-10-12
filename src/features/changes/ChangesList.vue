@@ -343,7 +343,6 @@ async function confirmDiscard(): Promise<void> {
       v-if="pendingDiscard"
       class="modal-backdrop"
       role="presentation"
-      @click.self="pendingDiscard = undefined"
     >
       <section
         class="discard-dialog"

@@ -116,7 +116,7 @@ async function saveAiSettings(): Promise<void> {
 </script>
 
 <template>
-  <div class="backdrop" @click.self="$emit('close')">
+  <div class="backdrop">
     <section
       class="settings-dialog"
       role="dialog"

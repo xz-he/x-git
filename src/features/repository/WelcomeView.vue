@@ -118,7 +118,7 @@ async function removeRecent(path: string) {
       <details v-if="repositories.error.diagnostics"><summary>{{ t('uiDiagnostics0b673e') }}</summary><pre>{{ repositories.error.diagnostics }}</pre></details>
     </div>
 
-    <div v-if="cloneOpen" class="modal-backdrop" @click.self="cloneOpen = false">
+    <div v-if="cloneOpen" class="modal-backdrop">
       <section class="modal" role="dialog" aria-modal="true" aria-labelledby="clone-title">
         <header><h2 id="clone-title">{{ t('uiCloneRepository2d9186') }}</h2><button class="icon-button" :aria-label="t('uiCloseCloneDialoge5dc17')" @click="cloneOpen = false"><X :size="17" /></button></header>
         <label>{{ t('uiRepositoryURL6b470c') }}<input v-model="cloneUrl" type="text" placeholder="https://example.com/team/repository.git" /></label>
