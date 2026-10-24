@@ -99,8 +99,10 @@ export const useRepositoryStore = defineStore("repository", () => {
       await useChangesStore().load(nextSnapshot.rootPath, kind === "refresh");
       if (!acceptsRefresh()) return;
       const conflicts = useConflictsStore();
-      if (kind === "refresh" && conflicts.loadedRootPath === nextSnapshot.rootPath) await conflicts.refresh();
-      else await conflicts.ensureLoaded(nextSnapshot.rootPath, generation.value);
+      if (nextSnapshot.vcs !== "svn") {
+        if (kind === "refresh" && conflicts.loadedRootPath === nextSnapshot.rootPath) await conflicts.refresh();
+        else await conflicts.ensureLoaded(nextSnapshot.rootPath, generation.value);
+      }
       if (kind === "refresh" && useUiStore().activeView === "conflicts") await conflicts.refreshCleanDetails();
       if (recordRecent) {
         await useSettingsStore().recordRecentRepository(nextSnapshot.rootPath);

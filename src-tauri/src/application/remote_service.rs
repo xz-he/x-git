@@ -880,7 +880,7 @@ mod tests {
     use crate::domain::remotes::{
         GitRunEvent, GitRunEventKind, GitRunOperation, GitRunProgressPhase, RemoteOperationResult,
     };
-    use crate::domain::repository::RepositorySnapshot;
+use crate::domain::repository::{RepositorySnapshot, VcsKind};
 
     #[derive(Clone, Default)]
     struct RecordingSink {
@@ -938,6 +938,7 @@ mod tests {
                     conflict_count: 0,
                     remotes: Vec::new(),
                     upstream: None,
+                    vcs: VcsKind::Git,
                 },
                 changes: ChangesSnapshot {
                     files: Vec::new(),

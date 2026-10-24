@@ -13,6 +13,7 @@ use crate::domain::changes::{
 use crate::domain::error::{BackendError, ErrorCode};
 use crate::domain::operation::MutationWorkspace;
 use crate::infrastructure::git_runner::GitCommandRunner;
+use crate::infrastructure::svn_runner::SvnCommandRunner;
 
 const MAX_DIFF_FILE_BYTES: u64 = 2 * 1024 * 1024;
 
@@ -39,6 +40,7 @@ pub struct StagedPatchSnapshot {
 #[derive(Debug, Clone)]
 pub struct ChangesService {
     runner: GitCommandRunner,
+    svn_runner: SvnCommandRunner,
     coordinator: RepositoryMutationCoordinator,
 }
 
@@ -62,8 +64,17 @@ impl ChangesService {
         super::review_snapshot::ReviewSnapshot::capture(root, source, cancel).await
     }
     pub fn new(runner: GitCommandRunner, coordinator: RepositoryMutationCoordinator) -> Self {
+        Self::with_runners(runner, SvnCommandRunner::default(), coordinator)
+    }
+
+    pub fn with_runners(
+        runner: GitCommandRunner,
+        svn_runner: SvnCommandRunner,
+        coordinator: RepositoryMutationCoordinator,
+    ) -> Self {
         Self {
             runner,
+            svn_runner,
             coordinator,
         }
     }
@@ -115,6 +126,10 @@ impl ChangesService {
     }
 
     pub async fn snapshot(&self, requested_root: &Path) -> Result<ChangesSnapshot, BackendError> {
+        if let Some(root) = svn_root(&self.svn_runner, requested_root).await? {
+            let _guard = self.coordinator.read(&root).await;
+            return self.svn_snapshot_at_root(&root).await;
+        }
         let root = repository_root(&self.runner, requested_root).await?;
         let _guard = self.coordinator.read(&root).await;
         self.snapshot_at_root(&root).await
@@ -140,12 +155,39 @@ impl ChangesService {
         Ok(parse_status(&output.stdout))
     }
 
+    async fn svn_snapshot_at_root(&self, root: &Path) -> Result<ChangesSnapshot, BackendError> {
+        let output = self.svn_runner.run(Some(root), ["status", "--xml", "--verbose"]).await?;
+        Ok(parse_svn_changes(&output.stdout))
+    }
+
     pub async fn file_diff(
         &self,
         requested_root: &Path,
         relative_path: &str,
         scope: ChangeScope,
     ) -> Result<FileDiff, BackendError> {
+        if let Some(root) = svn_root(&self.svn_runner, requested_root).await? {
+            let relative_path = validate_relative_path(relative_path)?;
+            let _guard = self.coordinator.read(&root).await;
+            let snapshot = self.svn_snapshot_at_root(&root).await?;
+            let transport_path = path_for_transport(&relative_path);
+            if scope == ChangeScope::Unstaged
+                && snapshot.files.iter().any(|file| file.path == transport_path && file.index_status == "?")
+            {
+                return read_untracked_diff(&root, &relative_path).await;
+            }
+            let output = self.svn_runner.run(
+                Some(&root),
+                [OsString::from("diff"), OsString::from("--"), relative_path.as_os_str().to_os_string()],
+            ).await?;
+            let binary = output.stdout.contains("Cannot display") || output.stdout.contains("Binary files");
+            return Ok(FileDiff {
+                path: transport_path,
+                scope: scope.into(),
+                binary,
+                hunks: if binary { Vec::new() } else { parse_unified_diff(&output.stdout) },
+            });
+        }
         let root = repository_root(&self.runner, requested_root).await?;
         let relative_path = validate_relative_path(relative_path)?;
         let _guard = self.coordinator.read(&root).await;
@@ -346,6 +388,15 @@ impl ChangesService {
         requested_root: &Path,
         relative_path: &str,
     ) -> Result<MutationWorkspace, BackendError> {
+        if let Some(root) = svn_root(&self.svn_runner, requested_root).await? {
+            let relative_path = validate_relative_path(relative_path)?;
+            let _guard = self.coordinator.write(&root).await;
+            self.svn_runner.run(
+                Some(&root),
+                [OsString::from("revert"), OsString::from("--"), relative_path.as_os_str().to_os_string()],
+            ).await?;
+            return self.svn_workspace(&root).await;
+        }
         let root = repository_root(&self.runner, requested_root).await?;
         let relative_path = validate_relative_path(relative_path)?;
         let transport_path = path_for_transport(&relative_path);
@@ -452,6 +503,21 @@ impl ChangesService {
                 ErrorCode::InvalidPath,
                 "请输入提交说明。",
             ));
+        }
+
+        if let Some(root) = svn_root(&self.svn_runner, requested_root).await? {
+            let _guard = self.coordinator.write(&root).await;
+            let status = self.svn_snapshot_at_root(&root).await?;
+            if status.files.is_empty() {
+                return Err(BackendError::new(ErrorCode::DirtyWorktree, "没有可提交的 SVN 变更。"));
+            }
+            let output = self.svn_runner.run(Some(&root), ["commit", "-m", message]).await?;
+            let revision = output.stdout.lines().chain(output.stderr.lines())
+                .find_map(|line| line.split_whitespace().find(|word| word.chars().all(|c| c.is_ascii_digit())))
+                .map(str::to_owned)
+                .unwrap_or_else(|| "?".into());
+            let workspace = self.svn_workspace(&root).await?;
+            return Ok(CommitResult { short_hash: revision, subject: message.lines().next().unwrap_or_default().to_owned(), workspace });
         }
 
         let root = repository_root(&self.runner, requested_root).await?;
@@ -632,6 +698,67 @@ impl ChangesService {
     async fn refreshed_workspace(&self, root: &Path) -> Result<MutationWorkspace, BackendError> {
         refresh_mutation_workspace(root, &self.runner).await
     }
+
+    async fn svn_workspace(&self, root: &Path) -> Result<MutationWorkspace, BackendError> {
+        let repository = crate::application::repository_service::RepositoryService::with_runners(
+            self.runner.clone(), self.svn_runner.clone(), self.coordinator.clone(),
+        ).open_repository(root).await?;
+        let changes = self.svn_snapshot_at_root(root).await?;
+        Ok(MutationWorkspace {
+            workspace: crate::domain::changes::WorkingTreeSnapshot { repository, changes },
+            operation_state: Default::default(),
+        })
+    }
+}
+
+async fn svn_root(runner: &SvnCommandRunner, requested_root: &Path) -> Result<Option<PathBuf>, BackendError> {
+    let output = match runner.run_allowing_failure(Some(requested_root), ["info", "--show-item", "wc-root"]).await {
+        Ok(output) if output.is_success() => output,
+        Ok(_) | Err(_) => return Ok(None),
+    };
+    let root = output.stdout.trim();
+    if root.is_empty() { return Ok(None); }
+    Ok(Some(Path::new(root).canonicalize().map_err(|error| BackendError::new(ErrorCode::InvalidPath, "无法访问 SVN 工作副本。").with_diagnostics(error.to_string()))?))
+}
+
+fn parse_svn_changes(xml: &str) -> ChangesSnapshot {
+    let mut files = Vec::new();
+    let mut entry_path = String::new();
+    let mut cursor = 0;
+    while let Some(start) = xml[cursor..].find('<').map(|index| cursor + index) {
+        let Some(end) = xml[start..].find('>').map(|index| start + index) else { break; };
+        let tag = &xml[start..=end];
+        if tag.starts_with("<entry ") {
+            entry_path = xml_attribute(tag, "path").unwrap_or_default().replace('\\', "/");
+        } else if tag.starts_with("<wc-status ") && !entry_path.is_empty() {
+            let item = xml_attribute(tag, "item").unwrap_or_default();
+            if !matches!(item.as_str(), "normal" | "ignored" | "none") {
+                let (status, conflict) = match item.as_str() {
+                    "unversioned" => ("?", false),
+                    "added" => ("A", false),
+                    "deleted" | "missing" => ("D", false),
+                    "replaced" => ("R", false),
+                    "conflicted" => ("C", true),
+                    _ => ("M", false),
+                };
+                files.push(FileChange {
+                    path: entry_path.clone(), old_path: None,
+                    index_status: " ".into(), worktree_status: status.into(),
+                    staged: false, unstaged: true, conflict,
+                });
+            }
+        }
+        cursor = end + 1;
+    }
+    let unstaged_count = files.len();
+    ChangesSnapshot { files, staged_count: 0, unstaged_count }
+}
+
+fn xml_attribute(tag: &str, name: &str) -> Option<String> {
+    let marker = format!("{name}=\"");
+    let start = tag.find(&marker)? + marker.len();
+    let end = tag[start..].find('"')? + start;
+    Some(tag[start..end].replace("&quot;", "\"").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">"))
 }
 
 fn path_command(command: &[&str], relative_path: &Path) -> Vec<OsString> {
@@ -1560,5 +1687,20 @@ mod tests {
         assert!(recovered.changes.files.iter().any(|file| {
             file.path == "src/中文路径/界面验证.ts" && file.staged && !file.unstaged
         }));
+    }
+
+    #[test]
+    fn svn_changes_parser_maps_working_copy_status_without_staging() {
+        let xml = concat!(
+            "<status><target path=\".\">",
+            "<entry path=\"README.md\"><wc-status item=\"modified\" /></entry>",
+            "<entry path=\"new.txt\"><wc-status item=\"unversioned\" /></entry>",
+            "</target></status>"
+        );
+        let snapshot = parse_svn_changes(xml);
+        assert_eq!(snapshot.staged_count, 0);
+        assert_eq!(snapshot.unstaged_count, 2);
+        assert!(snapshot.files.iter().all(|file| !file.staged && file.unstaged));
+        assert_eq!(snapshot.files[1].worktree_status, "?");
     }
 }

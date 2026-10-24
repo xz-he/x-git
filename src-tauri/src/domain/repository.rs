@@ -2,6 +2,13 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum VcsKind {
+    Git,
+    Svn,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct RepositorySnapshot {
@@ -14,6 +21,7 @@ pub struct RepositorySnapshot {
     pub conflict_count: usize,
     pub remotes: Vec<RemoteSummary>,
     pub upstream: Option<UpstreamSummary>,
+    pub vcs: VcsKind,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

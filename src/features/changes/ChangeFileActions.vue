@@ -34,12 +34,13 @@ const exists = computed(() => file.value?.worktreeStatus !== "D" && !(file.value
 const extension = computed(() => { const name = file.value?.path.split("/").pop() ?? ""; const dot = name.lastIndexOf("."); return dot > 0 && dot < name.length - 1 ? name.slice(dot) : ""; });
 const directories = computed(() => { const parts = file.value?.path.split("/").slice(0, -1) ?? []; return parts.map((_, i) => parts.slice(0, i + 1).join("/")); });
 const canWrite = computed(() => !busy.value && !operation.isBlocked && !conflicts.hasDirtyDrafts);
+const isSvn = computed(() => repo.snapshot?.vcs === "svn");
 const items = computed(() => [
   { id: "open", label: "Open", get hint() { return t('uiOpenFile38820b'); }, icon: ExternalLink, enabled: exists.value },
   { id: "reveal", label: "Show in Explorer", get hint() { return t('uiShowInFileExplorere7d4d0'); }, icon: FolderOpen, enabled: exists.value },
   { id: "copy", label: "Copy Path", get hint() { return t('uiCopyFullPath090e94'); }, icon: Copy, enabled: true },
   { id: "diff", label: "External Diff", get hint() { return t('uiUseTheConfiguredGitDifftool92806c'); }, icon: Columns2, enabled: !untracked.value && !file.value?.conflict, separator: true },
-  { id: "stage", label: context.value?.scope === "staged" ? "Unstage" : "Stage", get hint() { return t('uiAppliesToThisFileOnly28d78c'); }, icon: context.value?.scope === "staged" ? Minus : Plus, enabled: canWrite.value },
+  { id: "stage", label: context.value?.scope === "staged" ? "Unstage" : "Stage", get hint() { return t('uiAppliesToThisFileOnly28d78c'); }, icon: context.value?.scope === "staged" ? Minus : Plus, enabled: canWrite.value && !isSvn.value },
   { id: "lfs", label: "Track Type with Git LFS…", get hint() { return t('uiTrackThisExtensionRequiresGitLFS2bdee3'); }, icon: Package, enabled: canWrite.value && exists.value && !!extension.value },
   { id: "delete", label: "Remove…", get hint() { return t('uiRemoveFileFromDiskRecoverablec1b06d'); }, icon: Trash2, enabled: canWrite.value && exists.value },
   { id: "restore", label: "Restore Changes…", get hint() { return t('uiRestoreFromTheIndexDiscardingUnstagedChangesInThisFilec1f1e6'); }, icon: Undo2, enabled: canWrite.value && !untracked.value && !!file.value?.unstaged && !file.value?.conflict && context.value?.scope === "unstaged" },

@@ -6,6 +6,7 @@ pub mod terminal_job;
 #[cfg(test)]
 mod console_runner_tests;
 pub mod git_runner;
+pub mod svn_runner;
 pub mod repository_paths;
 pub mod settings_repository;
 pub mod system_fonts;

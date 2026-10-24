@@ -54,5 +54,5 @@ pub async fn repository_refresh(
     state: State<'_, AppState>,
     path: String,
 ) -> Result<RepositorySnapshot, BackendError> {
-    state.repositories.open_repository(Path::new(&path)).await
+    state.repositories.refresh_repository(Path::new(&path)).await
 }

@@ -131,6 +131,7 @@ export interface RepositorySnapshot {
   conflictCount: number;
   remotes: RemoteSummary[];
   upstream: UpstreamSummary | null;
+  vcs?: "git" | "svn";
 }
 
 export interface TerminalAccepted { runId: string; rootPath: string }

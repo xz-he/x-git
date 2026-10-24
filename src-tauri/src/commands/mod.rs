@@ -30,6 +30,7 @@ use crate::application::stash_service::StashService;
 use crate::application::task_branch_service::TaskBranchService;
 use crate::infrastructure::ai_client::AiHttpClient;
 use crate::infrastructure::git_runner::GitCommandRunner;
+use crate::infrastructure::svn_runner::SvnCommandRunner;
 use crate::infrastructure::settings_repository::{SettingsPaths, SettingsRepository};
 use crate::infrastructure::task_branch_repository::TaskBranchRepository;
 
@@ -54,7 +55,8 @@ pub struct AppState {
 pub fn build_app_state(settings_paths: SettingsPaths) -> AppState {
     let coordinator = RepositoryMutationCoordinator::default();
     let runner = GitCommandRunner::default();
-    let changes = ChangesService::new(runner.clone(), coordinator.clone());
+    let svn_runner = SvnCommandRunner::default();
+    let changes = ChangesService::with_runners(runner.clone(), svn_runner.clone(), coordinator.clone());
     let conflicts = ConflictService::new(runner.clone(), coordinator.clone());
     let history = HistoryService::new(runner.clone(), coordinator.clone());
     let refs = RefsService::new(runner.clone(), coordinator.clone());
@@ -81,7 +83,7 @@ pub fn build_app_state(settings_paths: SettingsPaths) -> AppState {
         refs,
         remotes,
         stashes,
-        repositories: RepositoryService::with_coordinator(runner, coordinator),
+        repositories: RepositoryService::with_runners(runner, svn_runner, coordinator),
         settings: SettingsService::new(SettingsRepository::new(settings_paths)),
     }
 }

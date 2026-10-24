@@ -3,12 +3,14 @@ use std::path::{Path, PathBuf};
 
 use crate::application::mutation_coordinator::RepositoryMutationCoordinator;
 use crate::domain::error::{BackendError, ErrorCode};
-use crate::domain::repository::{RemoteSummary, RepositorySnapshot, UpstreamSummary};
+use crate::domain::repository::{RemoteSummary, RepositorySnapshot, UpstreamSummary, VcsKind};
 use crate::infrastructure::git_runner::{GitCommandRunner, GitOutput};
+use crate::infrastructure::svn_runner::SvnCommandRunner;
 
 #[derive(Debug, Clone)]
 pub struct RepositoryService {
     runner: GitCommandRunner,
+    svn_runner: SvnCommandRunner,
     coordinator: RepositoryMutationCoordinator,
 }
 
@@ -20,9 +22,18 @@ impl Default for RepositoryService {
 
 impl RepositoryService {
     pub fn new(runner: GitCommandRunner) -> Self {
+        Self::with_runners(runner, SvnCommandRunner::default(), RepositoryMutationCoordinator::default())
+    }
+
+    pub fn with_runners(
+        runner: GitCommandRunner,
+        svn_runner: SvnCommandRunner,
+        coordinator: RepositoryMutationCoordinator,
+    ) -> Self {
         Self {
             runner,
-            coordinator: RepositoryMutationCoordinator::default(),
+            svn_runner,
+            coordinator,
         }
     }
 
@@ -30,19 +41,50 @@ impl RepositoryService {
         runner: GitCommandRunner,
         coordinator: RepositoryMutationCoordinator,
     ) -> Self {
-        Self {
-            runner,
-            coordinator,
-        }
+        Self::with_runners(runner, SvnCommandRunner::default(), coordinator)
     }
 
     pub async fn open_repository(
         &self,
         requested_path: &Path,
     ) -> Result<RepositorySnapshot, BackendError> {
-        let root_path = self.resolve_root(requested_path).await?;
+        let requested_path = canonicalize_path(requested_path)?;
+        if let Some(root_path) = self.resolve_svn_root(&requested_path).await? {
+            let _guard = self.coordinator.read(&root_path).await;
+            return self.snapshot_svn_at_root(&root_path).await;
+        }
+        let root_path = self.resolve_root(&requested_path).await?;
         let _guard = self.coordinator.read(&root_path).await;
         self.snapshot_at_root(&root_path).await
+    }
+
+    pub async fn refresh_repository(
+        &self,
+        requested_path: &Path,
+    ) -> Result<RepositorySnapshot, BackendError> {
+        let requested_path = canonicalize_path(requested_path)?;
+        if let Some(root_path) = self.resolve_svn_root(&requested_path).await? {
+            let _guard = self.coordinator.write(&root_path).await;
+            self.svn_runner.run(Some(&root_path), ["update"]).await?;
+            return self.snapshot_svn_at_root(&root_path).await;
+        }
+        self.open_repository(&requested_path).await
+    }
+
+    async fn resolve_svn_root(&self, requested_path: &Path) -> Result<Option<PathBuf>, BackendError> {
+        let result = self
+            .svn_runner
+            .run_allowing_failure(Some(requested_path), ["info", "--show-item", "wc-root"])
+            .await;
+        let output = match result {
+            Ok(output) if output.is_success() => output,
+            Ok(_) | Err(_) => return Ok(None),
+        };
+        let root = output.stdout.trim();
+        if root.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(canonicalize_path(Path::new(root))?))
     }
 
     pub(crate) async fn resolve_root(
@@ -98,6 +140,32 @@ impl RepositoryService {
             conflict_count: status.conflict_count,
             remotes,
             upstream: status.upstream,
+            vcs: VcsKind::Git,
+        })
+    }
+
+    async fn snapshot_svn_at_root(&self, root_path: &Path) -> Result<RepositorySnapshot, BackendError> {
+        let (status, revision, url) = tokio::try_join!(
+            self.svn_runner.run(Some(root_path), ["status", "--xml", "--verbose"]),
+            self.svn_runner.run(Some(root_path), ["info", "--show-item", "revision"]),
+            self.svn_runner.run(Some(root_path), ["info", "--show-item", "url"]),
+        )?;
+        let parsed = parse_svn_status(&status.stdout);
+        let name = root_path.file_name().map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_else(|| root_path.display().to_string());
+        let revision = revision.stdout.trim().to_owned();
+        let url = url.stdout.trim().to_owned();
+        Ok(RepositorySnapshot {
+            root_path: root_path.to_path_buf(),
+            name,
+            current_branch: None,
+            head_short_hash: (!revision.is_empty()).then_some(revision),
+            is_clean: parsed.changed_file_count == 0,
+            changed_file_count: parsed.changed_file_count,
+            conflict_count: parsed.conflict_count,
+            remotes: if url.is_empty() { Vec::new() } else { vec![RemoteSummary { name: "svn".into(), fetch_url: url }] },
+            upstream: None,
+            vcs: VcsKind::Svn,
         })
     }
 
@@ -152,6 +220,36 @@ struct ParsedStatus {
     changed_file_count: usize,
     conflict_count: usize,
     upstream: Option<UpstreamSummary>,
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+struct ParsedSvnStatus {
+    changed_file_count: usize,
+    conflict_count: usize,
+}
+
+fn parse_svn_status(xml: &str) -> ParsedSvnStatus {
+    let mut result = ParsedSvnStatus::default();
+    let mut cursor = 0;
+    while let Some(start) = xml[cursor..].find("<wc-status").map(|index| cursor + index) {
+        let Some(end) = xml[start..].find('>').map(|index| start + index) else { break; };
+        let item = xml_attribute(&xml[start..=end], "item").unwrap_or_default();
+        if !matches!(item.as_str(), "normal" | "ignored" | "none") {
+            result.changed_file_count += 1;
+            if item == "conflicted" {
+                result.conflict_count += 1;
+            }
+        }
+        cursor = end + 1;
+    }
+    result
+}
+
+fn xml_attribute(tag: &str, name: &str) -> Option<String> {
+    let marker = format!("{name}=\"");
+    let start = tag.find(&marker)? + marker.len();
+    let end = tag[start..].find('"')? + start;
+    Some(tag[start..end].replace("&quot;", "\"").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">"))
 }
 
 fn canonicalize_path(path: &Path) -> Result<PathBuf, BackendError> {
@@ -512,6 +610,21 @@ mod tests {
                     fetch_url: "D:/repos/backup".to_owned(),
                 },
             ]
+        );
+    }
+
+    #[test]
+    fn svn_status_parser_counts_modified_and_conflicted_entries() {
+        let xml = concat!(
+            "<status><target path=\".\">",
+            "<entry path=\"README.md\"><wc-status item=\"modified\" /></entry>",
+            "<entry path=\"conflict.txt\"><wc-status item=\"conflicted\" /></entry>",
+            "<entry path=\"clean.txt\"><wc-status item=\"normal\" /></entry>",
+            "</target></status>"
+        );
+        assert_eq!(
+            parse_svn_status(xml),
+            ParsedSvnStatus { changed_file_count: 2, conflict_count: 1 }
         );
     }
 }

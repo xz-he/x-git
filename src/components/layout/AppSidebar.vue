@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { t } from '@/lib/i18n';
 import { ArrowDownToLine, ArrowUpFromLine, Braces, CloudDownload, Code2, GitBranch, GitCommitHorizontal, GitMerge, GitPullRequest, History, RadioTower, RotateCcw, Tags, Wrench } from "@lucide/vue";
-import type { Component } from "vue";
+import { computed, type Component } from "vue";
 import { PanelLeftClose, PanelLeftOpen, FolderGit2, ChevronDown } from "@lucide/vue";
 import { formatDisplayPath } from "@/lib/formatPath";
 import type { WorkspaceView } from "@/stores/ui";
@@ -28,6 +28,7 @@ const ui = useUiStore();
 const remotes = useRemotesStore();
 const repositories = useRepositoryStore();
 const refs = useRefsStore();
+const isSvn = computed(() => repositories.snapshot?.vcs === "svn");
 const groups: SidebarGroup[] = [
   {
     get label() { return t('code'); },
@@ -99,6 +100,7 @@ async function activate(item: SidebarItem): Promise<void> {
 
 function isDisabled(item: SidebarItem): boolean {
   if (item.view ? repositories.viewNavigationBusy : repositories.navigationBusy) return true;
+  if (isSvn.value && (item.integrationAction || item.remoteAction || ["branches", "tags", "remotes", "stashes", "history", "conflicts"].includes(item.view ?? ""))) return true;
   return item.integrationAction
     ? refs.integrationBlocked || !repositories.snapshot?.currentBranch
     : !item.view && !item.remoteAction;

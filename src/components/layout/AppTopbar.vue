@@ -49,7 +49,7 @@ const modules: Array<{ label: string; view: WorkspaceView }> = [
 </script>
 <template>
   <header class="topbar">
-    <nav :aria-label="t('uiWorkspaceModules682898')"><button v-for="module in modules" :key="module.view" :data-view="module.view" :class="{ active: ui.activeView === module.view }" :aria-label="module.label" :disabled="repositories.viewNavigationBusy" :aria-current="ui.activeView === module.view ? 'page' : undefined" @click="ui.openView(module.view)"><span>{{ language === 'bilingual' ? t(module.view, {}, 'en') : module.label }}</span><small v-if="language === 'bilingual'">{{ t(module.view, {}, 'zh-CN') }}</small></button></nav>
+    <nav :aria-label="t('uiWorkspaceModules682898')"><button v-for="module in modules" :key="module.view" :data-view="module.view" :class="{ active: ui.activeView === module.view }" :aria-label="module.label" :disabled="repositories.viewNavigationBusy || (repositories.snapshot?.vcs === 'svn' && ['history', 'branches', 'tags', 'remotes'].includes(module.view))" :aria-current="ui.activeView === module.view ? 'page' : undefined" @click="ui.openView(module.view)"><span>{{ language === 'bilingual' ? t(module.view, {}, 'en') : module.label }}</span><small v-if="language === 'bilingual'">{{ t(module.view, {}, 'zh-CN') }}</small></button></nav>
     <div class="actions">
       <UpdateButton />
       <button class="icon-button" :aria-label="t('uiOperationHistory56833a')" :title="activityWarning || t('uiOperationHistory56833a')" @click="activityOpen = true"><History :size="17" /><span v-if="activityWarning" class="activity-warning">!</span></button>

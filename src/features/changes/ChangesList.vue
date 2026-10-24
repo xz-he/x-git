@@ -31,6 +31,7 @@ const ai = useAiStore();
 const settings = useSettingsStore();
 const skill = useReviewSkill();
 const terminal = useTerminalStore();
+const isSvn = computed(() => repositoryStore.snapshot?.vcs === "svn");
 const lineStats = ref<ChangeLineStat[]>([]);
 const statsLoading = ref(false);
 const statsError = ref(false);
@@ -133,12 +134,12 @@ function toggleAllUnstaged(event: Event): void {
   unstagedSelection.value = new Set((event.target as HTMLInputElement).checked ? unstagedFiles.value.map(file => file.path) : []);
 }
 async function stageSelected(): Promise<void> {
-  if (busy.value || !selectedUnstagedPaths.value.length) return;
+  if (busy.value || isSvn.value || !selectedUnstagedPaths.value.length) return;
   try { await changesStore.stageFiles(selectedUnstagedPaths.value); unstagedSelection.value.clear(); }
   catch { /* Keep choices for retry; the store exposes the error. */ }
 }
 async function unstageSelected(): Promise<void> {
-  if (busy.value || !selectedReviewPaths.value.length) return;
+  if (busy.value || isSvn.value || !selectedReviewPaths.value.length) return;
   try { await changesStore.unstageFiles(selectedReviewPaths.value); reviewSelection.value.clear(); }
   catch { /* Keep choices for retry; the store exposes the error. */ }
 }
@@ -154,10 +155,12 @@ function selectFile(path: string, scope: ChangeScope): void {
 }
 
 function stage(path: string): void {
+  if (isSvn.value) return;
   void changesStore.stageFile(path).catch(() => undefined);
 }
 
 function unstage(path: string): void {
+  if (isSvn.value) return;
   void changesStore.unstageFile(path).catch(() => undefined);
 }
 
@@ -213,7 +216,7 @@ async function confirmDiscard(): Promise<void> {
       <div v-else class="review-selection-bar">
         <div class="review-selection-actions">
           <label class="review-select-all"><input type="checkbox" :aria-label="t('uiSelectAllStagedFilesbd8064')" :checked="allReviewSelected" :indeterminate="selectedReviewPaths.length > 0 && !allReviewSelected" :disabled="busy" @change="toggleAllReview" />{{ t('uiSelectAll3e44b2') }}<span>{{ t('uiSelectedf24ddc') }} {{ selectedReviewPaths.length }}</span></label>
-          <button class="review-selected-button" :aria-label="t('uiUnstageSelectedFileseaed74')" :disabled="busy || !selectedReviewPaths.length" @click="unstageSelected"><Minus :size="14" />{{ t('uiUnstageSelected2fcc99') }}</button>
+          <button class="review-selected-button" :aria-label="t('uiUnstageSelectedFileseaed74')" :disabled="busy || isSvn || !selectedReviewPaths.length" @click="unstageSelected"><Minus :size="14" />{{ t('uiUnstageSelected2fcc99') }}</button>
           <button class="review-selected-button" :aria-label="t('uiAIReviewSelectedStagedFiles104524')" :title="reviewReason || t('uiReviewSelectedStagedChangesWithTheRepositorySKILLa48a78')" :disabled="!!reviewReason" @click="reviewSelected"><ScanSearch :size="14" />{{ t('uiAIReviewSelectedca9eba') }}</button>
         </div>
         <small>{{ reviewReason || t('uiReviewOnlySelectedStagedChangesWithTheRepositorySKILLecc085') }}</small>
@@ -275,7 +278,7 @@ async function confirmDiscard(): Promise<void> {
       <div v-if="unstagedFiles.length" class="review-selection-bar">
         <div class="review-selection-actions">
           <label class="review-select-all"><input type="checkbox" :aria-label="t('uiSelectAllUnstagedFiles1ae1e1')" :checked="allUnstagedSelected" :indeterminate="selectedUnstagedPaths.length > 0 && !allUnstagedSelected" :disabled="busy" @change="toggleAllUnstaged" />{{ t('uiSelectAll3e44b2') }}<span>{{ t('uiSelectedf24ddc') }} {{ selectedUnstagedPaths.length }}</span></label>
-          <button class="review-selected-button" :aria-label="t('uiStageSelectedFiles6d66ba')" :disabled="busy || !selectedUnstagedPaths.length" @click="stageSelected"><Plus :size="14" />{{ t('uiStageSelectede6191d') }}</button>
+          <button class="review-selected-button" :aria-label="t('uiStageSelectedFiles6d66ba')" :disabled="busy || isSvn || !selectedUnstagedPaths.length" @click="stageSelected"><Plus :size="14" />{{ t('uiStageSelectede6191d') }}</button>
         </div>
       </div>
       <div v-if="unstagedFiles.length" class="table-heading" :aria-label="t('uiUnstagedFilesHeader1db7c8')"><span /><span>Path</span><span>Extension</span><span>Status</span><span>Lines added</span><span>Lines removed</span><span>{{ t('uiOperationf3ea6d') }}</span></div>

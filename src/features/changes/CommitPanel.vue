@@ -17,7 +17,8 @@ const isCommitting = computed(
 const canCommit = computed(
   () =>
     changesStore.commitMessage.trim().length > 0 &&
-    (changesStore.snapshot?.stagedCount ?? 0) > 0 &&
+    ((useRepositoryStore().snapshot?.vcs === "svn" && (changesStore.snapshot?.unstagedCount ?? 0) > 0) ||
+      (changesStore.snapshot?.stagedCount ?? 0) > 0) &&
     !useRepositoryStore().navigationBusy,
 );
 
@@ -40,7 +41,7 @@ async function createCommit(): Promise<void> {
           <GitCommitHorizontal :size="16" />
           <strong id="commit-heading">{{ t('uiCreateCommitec45fe') }}</strong>
         </span>
-        <small>{{ t('staged') }} {{ changesStore.snapshot?.stagedCount ?? 0 }}</small>
+        <small>{{ useRepositoryStore().snapshot?.vcs === "svn" ? "SVN" : t('staged') }} {{ useRepositoryStore().snapshot?.vcs === "svn" ? (changesStore.snapshot?.unstagedCount ?? 0) : (changesStore.snapshot?.stagedCount ?? 0) }}</small>
       </div>
       <textarea
         data-testid="commit-message"

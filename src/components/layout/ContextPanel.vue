@@ -55,15 +55,15 @@ watch(
     if (!rootPath || (terminalBusy && view === "conflicts")) return;
     if (view === "files") {
       void files.ensureLoaded(rootPath, generation);
-    } else if (view === "conflicts") {
+    } else if (view === "conflicts" && repositories.snapshot?.vcs !== "svn") {
       void conflicts.ensureLoaded(rootPath, generation).then(() => conflicts.refresh());
-    } else if (view === "branches" || view === "tags") {
+    } else if ((view === "branches" || view === "tags") && repositories.snapshot?.vcs !== "svn") {
       void refsStore.ensureLoaded(rootPath, generation).catch(() => undefined);
-    } else if (view === "history") {
+    } else if (view === "history" && repositories.snapshot?.vcs !== "svn") {
       void historyStore.ensureLoaded(rootPath, generation).catch(() => undefined);
-    } else if (view === "remotes") {
+    } else if (view === "remotes" && repositories.snapshot?.vcs !== "svn") {
       void remotesStore.ensureLoaded(rootPath, generation).catch(() => undefined);
-    } else if (view === "stashes") {
+    } else if (view === "stashes" && repositories.snapshot?.vcs !== "svn") {
       void stashesStore.ensureLoaded(rootPath, generation).catch(() => undefined);
     }
   },
