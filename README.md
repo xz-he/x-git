@@ -18,7 +18,7 @@ HQ Git 是一款面向 Windows 的 Git 桌面客户端，基于 Tauri 2、Vue 3 
 
 前往 [GitHub Releases](https://github.com/xz-he/x-git/releases/latest) 下载最新的 Windows x64 安装包（`*-setup.exe`）。安装后可打开本地仓库、克隆远端仓库，或在选定目录初始化新仓库。应用调用本机的 Git，请先安装 [Git for Windows](https://git-scm.com/download/win)，并确保 `git` 可在命令行中运行。
 
-应用也支持打开 SVN working copy。使用 SVN 功能前请安装 [Apache Subversion for Windows](https://subversion.apache.org/packages.html#windows)，并确保 `svn` 可在命令行中运行。SVN 模式支持工作副本识别、状态查看、文件 Diff、提交和 Update；SVN 没有 Git 暂存区，因此变更会直接作为未暂存文件提交。分支、标签、stash、Git 历史操作、merge/rebase、push/pull 等 Git 专属模块会在 SVN 仓库中禁用。
+应用也支持打开 SVN working copy。正式安装包会内置 Windows x64 SVN 命令及运行时 DLL，不需要用户单独安装 SVN。SVN 模式支持工作副本识别、状态查看、文件 Diff、提交和 Update；SVN 没有 Git 暂存区，因此变更会直接作为未暂存文件提交。分支、标签、stash、Git 历史操作、merge/rebase、push/pull 等 Git 专属模块会在 SVN 仓库中禁用。开发者本地打包前需要安装可再分发的 SVN 客户端，或执行 `scripts/prepare-svn-runtime.ps1 -SourceDirectory <SVN\bin>` 准备资源。
 
 正式安装版可在应用内的“设置 → 版本更新”检查新版本。更新需要用户确认，不会自动安装。
 

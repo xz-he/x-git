@@ -6,6 +6,8 @@ Push-Location $projectRoot
 try {
     node scripts/release-version.mjs --check
     if ($LASTEXITCODE -ne 0) { throw 'Version validation failed.' }
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $projectRoot 'scripts/prepare-svn-runtime.ps1')
+    if ($LASTEXITCODE -ne 0) { throw 'Bundled SVN runtime preparation failed.' }
     if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
         $keyPath = Join-Path $projectRoot '.release-keys/updater.key'
         if (-not (Test-Path -LiteralPath $keyPath -PathType Leaf)) {

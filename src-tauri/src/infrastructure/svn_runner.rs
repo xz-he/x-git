@@ -1,5 +1,5 @@
-use std::ffi::OsStr;
-use std::path::Path;
+use std::ffi::{OsStr, OsString};
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 
@@ -71,7 +71,8 @@ impl SvnCommandRunner {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
-        let mut command = Command::new("svn");
+        let program = bundled_svn_program();
+        let mut command = Command::new(&program);
         #[cfg(windows)]
         command.creation_flags(CREATE_NO_WINDOW);
         command.args(args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
@@ -96,6 +97,17 @@ impl SvnCommandRunner {
     }
 }
 
+fn bundled_svn_program() -> OsString {
+    let candidates = [
+        std::env::var_os("HQ_SVN_PATH").map(PathBuf::from),
+        std::env::current_exe().ok().and_then(|path| path.parent().map(|parent| parent.join("resources/svn/bin/svn.exe"))),
+        std::env::current_exe().ok().and_then(|path| path.parent().map(|parent| parent.join("resources/svn/svn.exe"))),
+        option_env!("CARGO_MANIFEST_DIR").map(|root| PathBuf::from(root).join("resources/svn/bin/svn.exe")),
+    ];
+    candidates.into_iter().flatten().find(|path| path.is_file())
+        .map(|path| path.into_os_string()).unwrap_or_else(|| OsString::from("svn"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -107,5 +119,12 @@ mod tests {
             .unwrap_err();
         assert_eq!(error.code, ErrorCode::GitCommandFailed);
         assert!(error.diagnostics.unwrap().contains("not a working copy"));
+    }
+
+    #[test]
+    fn missing_bundle_falls_back_to_path_command() {
+        if std::env::var_os("HQ_SVN_PATH").is_none() {
+            assert_eq!(bundled_svn_program(), OsString::from("svn"));
+        }
     }
 }

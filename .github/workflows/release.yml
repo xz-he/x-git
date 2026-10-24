@@ -26,6 +26,25 @@ jobs:
         with:
           workspaces: src-tauri -> target
       - run: npm ci
+      - name: Prepare bundled SVN runtime
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'Slik-Subversion-1.14.5-x64.zip'
+          Invoke-WebRequest -Uri 'https://sliksvn.com/pub/Slik-Subversion-1.14.5-x64.zip' -OutFile $archive
+          $extract = Join-Path $env:RUNNER_TEMP 'sliksvn'
+          Expand-Archive -LiteralPath $archive -DestinationPath $extract -Force
+          $msi = Get-ChildItem -LiteralPath $extract -Filter '*.msi' -File | Select-Object -First 1
+          if (-not $msi) { throw 'SlikSVN MSI was not found.' }
+          $install = Start-Process msiexec.exe -ArgumentList '/i', $msi.FullName, '/qn', '/norestart' -Wait -PassThru -NoNewWindow
+          if ($install.ExitCode -ne 0) { throw "SlikSVN installation failed with exit code $($install.ExitCode)." }
+          $svnPath = @(
+            (Get-Command svn.exe -ErrorAction SilentlyContinue).Source,
+            (Join-Path $env:ProgramFiles 'SlikSvn/bin/svn.exe'),
+            (Join-Path ${env:ProgramFiles(x86)} 'SlikSvn/bin/svn.exe')
+          ) | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } | Select-Object -First 1
+          if (-not $svnPath) { throw 'SlikSVN installation did not provide svn.exe.' }
+          & powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-svn-runtime.ps1 -SourceDirectory (Split-Path -Parent $svnPath)
+          if ($LASTEXITCODE -ne 0) { throw 'Bundled SVN runtime preparation failed.' }
       - name: Verify version and signing configuration
         shell: pwsh
         env:
