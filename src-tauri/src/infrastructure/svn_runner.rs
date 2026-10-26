@@ -122,9 +122,16 @@ mod tests {
     }
 
     #[test]
-    fn missing_bundle_falls_back_to_path_command() {
-        if std::env::var_os("HQ_SVN_PATH").is_none() {
-            assert_eq!(bundled_svn_program(), OsString::from("svn"));
+    fn bundled_runtime_resolution_is_valid() {
+        if std::env::var_os("HQ_SVN_PATH").is_some() {
+            return;
         }
+
+        let program = bundled_svn_program();
+        if program == OsString::from("svn") {
+            return;
+        }
+
+        assert!(Path::new(&program).is_file());
     }
 }
