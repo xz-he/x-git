@@ -12,6 +12,7 @@ const outcomeText = computed(() => {
     case "noChanges": return t('uiNoChangesToStash4ecb3d');
     case "applied": return t('uiStashAppliedEntryKept8873fd');
     case "removed": return t('uiStashAppliedAndRemoved60ef44');
+    case "dropped": return t('uiStashDropped92e1e7');
     case "retained": return t('uiStashEntryKept8d188f');
     default: return "";
   }

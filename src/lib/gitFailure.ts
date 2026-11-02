@@ -33,7 +33,7 @@ const actions: Record<string, string> = {
   get changesRestoreNoise() { return t('uiRestoreNonSubstantiveChanges179f9e'); }, refsCreate: "git branch", refsSwitch: "git switch", refsDelete: "git branch -d",
   refsMerge: "git merge", refsRebase: "git rebase", get refsAbort() { return t('uiAbortGitOperation750351'); },
   historyCheckout: "git checkout", historyRevert: "git revert", historyCherryPick: "git cherry-pick", historyReset: "git reset",
-  stashCreate: "git stash push", stashApply: "git stash apply", stashPop: "git stash pop",
+  stashCreate: "git stash push", stashApply: "git stash apply", stashPop: "git stash pop", stashDrop: "git stash drop",
   get conflictsResolve() { return t('conflicts'); }, get conflictsContinue() { return t('uiContinueGitOperation042a2a'); }, get taskBranchesCreate() { return t('uiCreateTaskBranch6f6fc8'); }, get taskBranchesRun() { return t('uiCommitAndCherryPickbece15'); },
 };
 

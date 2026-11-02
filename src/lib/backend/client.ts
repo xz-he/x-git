@@ -94,6 +94,7 @@ export interface BackendClient {
   stashCreate(path: string, request: StashCreateRequest): Promise<StashMutationResult>;
   stashApply(path: string, selection: StashSelection): Promise<StashMutationResult>;
   stashPop(path: string, selection: StashSelection): Promise<StashMutationResult>;
+  stashDrop(path: string, selection: StashSelection): Promise<StashMutationResult>;
   aiReviewSkillStatus(path: string): Promise<ReviewSkillStatus>;
   aiStartReview(path: string, runId: string, source?: ReviewSource): Promise<AiRunAccepted>;
   aiStartConflictSuggestion(path: string, runId: string, relativePath: string, token: string): Promise<AiRunAccepted>;
@@ -152,6 +153,7 @@ export interface BackendClient {
     path: string,
     relativePath: string,
   ): Promise<MutationWorkspace>;
+  changesDiscardFiles(path: string, relativePaths: string[]): Promise<MutationWorkspace>;
   changesCommit(path: string, message: string): Promise<CommitResult>;
   refsSnapshot(path: string): Promise<RefsSnapshot>;
   refsCreate(path: string, request: CreateBranchRequest): Promise<RefsMutationResult>;
@@ -241,6 +243,7 @@ const tauriBackendClient: BackendClient = {
   stashCreate: (path, request) => invoke("stash_create", { path, request }),
   stashApply: (path, selection) => invoke("stash_apply", { path, selection }),
   stashPop: (path, selection) => invoke("stash_pop", { path, selection }),
+  stashDrop: (path, selection) => invoke("stash_drop", { path, selection }),
   aiReviewSkillStatus: (path) => invoke("ai_review_skill_status", { path }),
   aiStartReview: (path, runId, source) =>
     invoke("ai_start_review", source ? { path, runId, source } : { path, runId }),
@@ -288,6 +291,8 @@ const tauriBackendClient: BackendClient = {
   changesRestoreNoise: (path, selected) => invoke("changes_restore_noise", { path, selected }),
   changesDiscardFile: (path, relativePath) =>
     invoke("changes_discard_file", { path, relativePath }),
+  changesDiscardFiles: (path, relativePaths) =>
+    invoke("changes_discard_files", { path, relativePaths }),
   changesCommit: (path, message) =>
     invoke("changes_commit", { path, message }),
   refsSnapshot: (path) => invoke("refs_snapshot", { path }),
@@ -369,6 +374,7 @@ export const backendClient: BackendClient = {
   stashCreate: (path, request) => activeBackendClient.stashCreate(path, request),
   stashApply: (path, selection) => activeBackendClient.stashApply(path, selection),
   stashPop: (path, selection) => activeBackendClient.stashPop(path, selection),
+  stashDrop: (path, selection) => activeBackendClient.stashDrop(path, selection),
   aiReviewSkillStatus: (path) => activeBackendClient.aiReviewSkillStatus(path),
   aiStartConflictSuggestion: (path, runId, relativePath, token) => activeBackendClient.aiStartConflictSuggestion(path, runId, relativePath, token),
   aiStartReview: (path, runId, source) => source
@@ -419,6 +425,8 @@ export const backendClient: BackendClient = {
   changesRestoreNoise: (path, selected) => activeBackendClient.changesRestoreNoise(path, selected),
   changesDiscardFile: (path, relativePath) =>
     activeBackendClient.changesDiscardFile(path, relativePath),
+  changesDiscardFiles: (path, relativePaths) =>
+    activeBackendClient.changesDiscardFiles(path, relativePaths),
   changesCommit: (path, message) =>
     activeBackendClient.changesCommit(path, message),
   refsSnapshot: (path) => activeBackendClient.refsSnapshot(path),

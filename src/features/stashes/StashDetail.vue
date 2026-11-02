@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { t } from '@/lib/i18n';
-import { Archive, ArchiveRestore, ArrowUpFromLine, FileQuestion, LoaderCircle, RefreshCw } from "@lucide/vue";
+import { Archive, ArchiveRestore, ArrowUpFromLine, FileQuestion, LoaderCircle, RefreshCw, Trash2 } from "@lucide/vue";
 import { computed, ref, watch } from "vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import type { StashEntry } from "@/lib/backend/types";
 import { useStashesStore } from "@/stores/stashes";
 const stashes = useStashesStore();
 const pendingPop = ref<StashEntry>();
+const pendingDrop = ref<StashEntry>();
 const disabled = computed(() => !stashes.canMutate || !!stashes.detailError || !stashes.detail || stashes.detailLoading);
-watch([() => stashes.loadedRootPath, () => stashes.generation, () => stashes.selectedEntry?.objectId, () => stashes.selectedEntry?.selector], () => { pendingPop.value = undefined; });
+const dropDisabled = computed(() => !stashes.canMutate || !stashes.selectedEntry);
+watch([() => stashes.loadedRootPath, () => stashes.generation, () => stashes.selectedEntry?.objectId, () => stashes.selectedEntry?.selector], () => { pendingPop.value = undefined; pendingDrop.value = undefined; });
 function refresh(): void { void stashes.refresh().catch(() => undefined); }
 function selectFile(path: string, untracked = false): void { void stashes.selectFile(path, untracked).catch(() => undefined); }
 function apply(): void { if (stashes.selectedEntry && !disabled.value) void stashes.apply(stashes.selectedEntry).catch(() => undefined); }
@@ -20,6 +22,14 @@ async function pop(): Promise<void> {
   finally { pendingPop.value = undefined; }
 }
 function cancelPop(): void { if (!stashes.submitting) pendingPop.value = undefined; }
+function askDrop(): void { if (stashes.selectedEntry && !dropDisabled.value) pendingDrop.value = { ...stashes.selectedEntry }; }
+async function drop(): Promise<void> {
+  const entry = pendingDrop.value;
+  if (!entry || dropDisabled.value) return;
+  try { await stashes.drop(entry); } catch { /* The list retains the operation error. */ }
+  finally { pendingDrop.value = undefined; }
+}
+function cancelDrop(): void { if (!stashes.submitting) pendingDrop.value = undefined; }
 </script>
 
 <template>
@@ -32,6 +42,7 @@ function cancelPop(): void { if (!stashes.submitting) pendingPop.value = undefin
         <div class="stash-actions">
           <button data-action="apply-stash" :disabled="disabled" @click="apply"><ArchiveRestore :size="14" />{{ t('uiApplyac4f76') }}</button>
           <button data-action="pop-stash" :disabled="disabled" @click="askPop"><ArrowUpFromLine :size="14" />{{ t('uiPop6fa24a') }}</button>
+          <button data-action="drop-stash" :disabled="dropDisabled" @click="askDrop"><Trash2 :size="14" />{{ t('uiDropStash92e1e7') }}</button>
         </div>
       </section>
       <div v-if="stashes.detailLoading" class="module-state"><LoaderCircle :size="18" class="spin" />{{ t('uiLoadingStashDetails8a58cc') }}</div>
@@ -59,6 +70,9 @@ function cancelPop(): void { if (!stashes.submitting) pendingPop.value = undefin
     <ConfirmDialog v-if="pendingPop" :title="t('uiPopStash0d142f')" :description="t('uiRemovesThisStashOnlyAfterASuccessfulApplicationWithoutConfli0dcc1d')" :confirm-label="t('uiConfirmPop7f4037')" :busy="stashes.submitting" :confirm-disabled="disabled" @cancel="cancelPop" @confirm="pop">
       <p class="pop-target">{{ pendingPop.selector }} · {{ pendingPop.description }}</p>
     </ConfirmDialog>
+    <ConfirmDialog v-if="pendingDrop" danger :title="t('uiDropStash92e1e7')" :description="t('uiDropStashWarning92e1e7')" :confirm-label="t('uiConfirmDropStash92e1e7')" :busy="stashes.submitting" :confirm-disabled="dropDisabled" @cancel="cancelDrop" @confirm="drop">
+      <p class="pop-target">{{ pendingDrop.selector }} · {{ pendingDrop.description }}</p>
+    </ConfirmDialog>
   </div>
 </template>
 
@@ -76,6 +90,7 @@ h1 { margin: 4px 0 0; font-size: 16px; letter-spacing: 0; overflow-wrap: anywher
 .stash-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .stash-actions button, .local-error button { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-panel); }
 .stash-actions button:first-child { background: var(--primary); color: white; border-color: var(--primary); }
+.stash-actions [data-action="drop-stash"] { color: var(--danger); }
 .stash-files { min-width: 0; padding: 12px 16px; border-bottom: 1px solid var(--border); }
 h2 { margin: 0 8px 7px; font-size: 12px; }
 h2 span { color: var(--text-muted); }

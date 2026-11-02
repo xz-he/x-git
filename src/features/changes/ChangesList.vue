@@ -70,7 +70,7 @@ function tableStatus(file: FileChange, scope: ChangeScope): string {
 }
 const reviewSelection = ref(new Set<string>());
 const unstagedSelection = ref(new Set<string>());
-const pendingDiscard = ref<string>();
+const pendingDiscard = ref<{ paths: string[]; batch: boolean }>();
 const cancelDiscardButton = ref<HTMLButtonElement>();
 const stagedFiles = computed(
   () => changesStore.snapshot?.files.filter((file) => file.staged) ?? [],
@@ -111,6 +111,7 @@ watch(unstagedFiles, files => {
 watch([() => repositoryStore.snapshot?.rootPath, () => repositoryStore.generation], () => {
   reviewSelection.value = new Set();
   unstagedSelection.value = new Set();
+  pendingDiscard.value = undefined;
 }, { flush: "sync" });
 
 function toggleReviewFile(path: string, event: Event): void {
@@ -165,16 +166,27 @@ function unstage(path: string): void {
 }
 
 async function requestDiscard(path: string): Promise<void> {
-  pendingDiscard.value = path;
+  pendingDiscard.value = { paths: [path], batch: false };
+  await nextTick();
+  cancelDiscardButton.value?.focus();
+}
+async function requestDiscardSelected(): Promise<void> {
+  if (busy.value || !selectedUnstagedPaths.value.length) return;
+  pendingDiscard.value = { paths: [...selectedUnstagedPaths.value], batch: true };
   await nextTick();
   cancelDiscardButton.value?.focus();
 }
 
 async function confirmDiscard(): Promise<void> {
-  const path = pendingDiscard.value;
-  if (!path) return;
+  const pending = pendingDiscard.value;
+  if (!pending || busy.value) return;
   try {
-    await changesStore.discardFile(path);
+    if (pending.batch) {
+      await changesStore.discardFiles(pending.paths);
+      unstagedSelection.value = new Set();
+    } else {
+      await changesStore.discardFile(pending.paths[0]!);
+    }
     pendingDiscard.value = undefined;
   } catch {
     // The store exposes the structured error in the panel.
@@ -278,7 +290,10 @@ async function confirmDiscard(): Promise<void> {
       <div v-if="unstagedFiles.length" class="review-selection-bar">
         <div class="review-selection-actions">
           <label class="review-select-all"><input type="checkbox" :aria-label="t('uiSelectAllUnstagedFiles1ae1e1')" :checked="allUnstagedSelected" :indeterminate="selectedUnstagedPaths.length > 0 && !allUnstagedSelected" :disabled="busy" @change="toggleAllUnstaged" />{{ t('uiSelectAll3e44b2') }}<span>{{ t('uiSelectedf24ddc') }} {{ selectedUnstagedPaths.length }}</span></label>
-          <button class="review-selected-button" :aria-label="t('uiStageSelectedFiles6d66ba')" :disabled="busy || isSvn || !selectedUnstagedPaths.length" @click="stageSelected"><Plus :size="14" />{{ t('uiStageSelectede6191d') }}</button>
+          <div class="review-batch-actions">
+            <button class="review-selected-button" :aria-label="t('uiStageSelectedFiles6d66ba')" :disabled="busy || isSvn || !selectedUnstagedPaths.length" @click="stageSelected"><Plus :size="14" />{{ t('uiStageSelectede6191d') }}</button>
+            <button class="review-selected-button danger-selected-button" :aria-label="t('uiDiscardSelectedFiles9f246a')" :disabled="busy || !selectedUnstagedPaths.length" @click="requestDiscardSelected"><Trash2 :size="14" />{{ t('uiDiscardSelected3b85e0') }}</button>
+          </div>
         </div>
       </div>
       <div v-if="unstagedFiles.length" class="table-heading" :aria-label="t('uiUnstagedFilesHeader1db7c8')"><span /><span>Path</span><span>Extension</span><span>Status</span><span>Lines added</span><span>Lines removed</span><span>{{ t('uiOperationf3ea6d') }}</span></div>
@@ -356,12 +371,13 @@ async function confirmDiscard(): Promise<void> {
       >
         <div class="dialog-icon"><TriangleAlert :size="20" /></div>
         <div>
-          <h2 id="discard-title">{{ t('uiDiscardFileChangesdeefee') }}</h2>
+          <h2 id="discard-title">{{ pendingDiscard.batch ? t('uiDiscardSelectedFilesQuestion4e73e9') : t('uiDiscardFileChangesdeefee') }}</h2>
           <p id="discard-description">
             {{ t('uiInRepositorya23a72') }} <strong>{{ repositoryStore.snapshot?.name }}</strong>
             {{ t('uidiscardUnstagedContentAtTheFollowingPaths762ae9') }}
+            <span v-if="pendingDiscard.batch">{{ pendingDiscard.paths.length }} {{ t('uiFilesCount203ba1') }}</span>
           </p>
-          <code>{{ pendingDiscard }}</code>
+          <div class="discard-paths"><code v-for="path in pendingDiscard.paths" :key="path">{{ path }}</code></div>
         </div>
         <footer>
           <button
@@ -374,7 +390,7 @@ async function confirmDiscard(): Promise<void> {
           </button>
           <button
             class="danger-button"
-            :aria-label="(t('uiConfirmDiscard800299') + ' ') + pendingDiscard"
+            :aria-label="pendingDiscard.batch ? t('uiConfirmDiscardSelectedFiles12281a') : (t('uiConfirmDiscard800299') + ' ') + pendingDiscard.paths[0]"
             :disabled="busy"
             @click="confirmDiscard"
           >
@@ -479,8 +495,10 @@ async function confirmDiscard(): Promise<void> {
 .review-selection-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 7px; }
 .review-select-all { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; cursor: pointer; }
 .review-select-all span { color: var(--text-muted); }
+.review-batch-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .review-selected-button { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 4px 7px; border: 1px solid var(--primary-border); border-radius: var(--radius-sm); background: var(--primary-soft); color: var(--primary); font-size: 11px; }
 .review-selected-button:disabled { opacity: 0.55; cursor: not-allowed; }
+.danger-selected-button { border-color: var(--danger); background: var(--danger-soft); color: var(--danger); }
 .review-selection-bar small { color: var(--text-muted); font-size: 10px; line-height: 1.5; }
 
 .file-select {
@@ -609,6 +627,7 @@ async function confirmDiscard(): Promise<void> {
   line-height: 1.6;
 }
 
+.discard-paths { max-height: min(220px, 35vh); overflow: auto; }
 .discard-dialog code {
   display: block;
   overflow-wrap: anywhere;
@@ -617,6 +636,7 @@ async function confirmDiscard(): Promise<void> {
   background: var(--surface-muted);
   font-size: 11px;
 }
+.discard-dialog code + code { margin-top: 3px; }
 
 .discard-dialog footer {
   grid-column: 1 / -1;

@@ -236,5 +236,9 @@ export const useStashesStore = defineStore("stashes", () => {
     return mutate((path) => backendClient.stashPop(path, selection(entry)));
   }
 
-  return { snapshot, selectedEntry, detail, selectedFilePath, selectedFileUntracked, fileDiff, loadedRootPath, generation, message, includeUntracked, selectFiles, selectedPaths, availableFiles, loading, detailLoading, diffLoading, submitting, canMutate, error, detailError, diffError, outcome, resetForRepository, ensureLoaded, refresh, applySnapshot, selectEntry, selectFile, create, apply, pop };
+  function drop(entry: StashEntry): Promise<void> {
+    return mutate((path) => backendClient.stashDrop(path, selection(entry)));
+  }
+
+  return { snapshot, selectedEntry, detail, selectedFilePath, selectedFileUntracked, fileDiff, loadedRootPath, generation, message, includeUntracked, selectFiles, selectedPaths, availableFiles, loading, detailLoading, diffLoading, submitting, canMutate, error, detailError, diffError, outcome, resetForRepository, ensureLoaded, refresh, applySnapshot, selectEntry, selectFile, create, apply, pop, drop };
 });

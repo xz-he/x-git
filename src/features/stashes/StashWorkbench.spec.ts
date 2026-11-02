@@ -94,6 +94,31 @@ describe("stash workbench", () => {
     wrapper.unmount();
   });
 
+  it("requires confirmation before deleting the selected stash", async () => {
+    selected();
+    const wrapper = mount(StashDetail, { attachTo: document.body, global: { plugins: [pinia] } });
+    await wrapper.get('[data-action="drop-stash"]').trigger("click");
+    await flushPromises();
+    const dialog = wrapper.get('[role="alertdialog"]');
+    expect(dialog.text()).toContain("不会将其变更应用到工作区");
+    expect(dialog.text()).toContain(entry.selector);
+    expect(document.activeElement).toBe(dialog.get('[data-action="cancel"]').element);
+    await dialog.get('[data-action="cancel"]').trigger("click");
+    expect(backend.stashDrop).not.toHaveBeenCalled();
+    await wrapper.get('[data-action="drop-stash"]').trigger("click");
+    vi.mocked(backend.stashDrop).mockResolvedValue({
+      outcome: "dropped", stashes: { entries: [] },
+      workspace: { repository: useRepositoryStore().snapshot!, changes: { files: [], stagedCount: 0, unstagedCount: 0 } },
+      operationState: { kind: "none", conflicts: [], abortAction: null },
+    });
+    await wrapper.get('[role="alertdialog"] .danger-button').trigger("click");
+    await flushPromises();
+    expect(backend.stashDrop).toHaveBeenCalledWith("C:/repo", { selector: entry.selector, expectedObjectId: entry.objectId });
+    expect(wrapper.find('[role="alertdialog"]').exists()).toBe(false);
+    expect(useStashesStore().selectedEntry).toBeUndefined();
+    wrapper.unmount();
+  });
+
   it("loads selected saved untracked file without stage controls", async () => {
     selected();
     vi.mocked(backend.stashFileDiff).mockResolvedValue({ path: "new file.txt", scope: "commit", binary: false, hunks: [{ index: 0, header: "@@ -0,0 +1 @@", lines: [{ kind: "addition", oldLine: null, newLine: 1, content: "saved text" }] }] });
@@ -114,6 +139,7 @@ describe("stash workbench", () => {
     await flushPromises();
     expect(wrapper.find('[aria-label="重新读取贮藏"]').exists()).toBe(true);
     expect(wrapper.get('[data-action="pop-stash"]').attributes("disabled")).toBeDefined();
+    expect(wrapper.get('[data-action="drop-stash"]').attributes("disabled")).toBeUndefined();
   });
 
   it("disables mutations for persistent conflicts and immediate submission", async () => {
@@ -122,10 +148,12 @@ describe("stash workbench", () => {
     useOperationStore().state.conflicts = [{ path: "file.txt", status: "UU" }];
     await flushPromises();
     expect(wrapper.get('[data-action="apply-stash"]').attributes("disabled")).toBeDefined();
+    expect(wrapper.get('[data-action="drop-stash"]').attributes("disabled")).toBeDefined();
     useOperationStore().reset();
     store.submitting = true;
     await flushPromises();
     expect(wrapper.get('[data-action="pop-stash"]').attributes("disabled")).toBeDefined();
+    expect(wrapper.get('[data-action="drop-stash"]').attributes("disabled")).toBeDefined();
   });
 
   it("renders empty, loading and no-changes states", async () => {

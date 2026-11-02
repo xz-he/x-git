@@ -33,11 +33,11 @@ const recordedActions = new Set([
   "files_ignore", "files_untrack", "files_lfs_track",
   "changes_stage_file", "changes_stage_files", "changes_unstage_file", "changes_unstage_files",
   "changes_stage_hunk", "changes_unstage_hunk", "changes_stage_lines", "changes_unstage_lines",
-  "changes_discard_file", "changes_restore_noise", "changes_commit",
+  "changes_discard_file", "changes_discard_files", "changes_restore_noise", "changes_commit",
   "refs_create_branch", "refs_switch_branch", "refs_delete_branch", "refs_merge", "refs_rebase", "refs_abort",
   "history_checkout", "history_revert", "history_cherry_pick", "history_reset",
   "history_squash",
-  "stash_create", "stash_apply", "stash_pop", "conflicts_resolve", "conflicts_continue", "files_execute",
+  "stash_create", "stash_apply", "stash_pop", "stash_drop", "conflicts_resolve", "conflicts_continue", "files_execute",
   "task_branches_create", "task_branches_run", "task_branches_unlink",
 ]);
 

@@ -62,6 +62,7 @@ pub enum StashMutationOutcome {
     NoChanges,
     Applied,
     Removed,
+    Dropped,
     Retained,
 }
 

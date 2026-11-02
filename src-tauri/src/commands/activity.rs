@@ -119,6 +119,7 @@ pub fn action_title(action: &str) -> Option<&'static str> {
         "changes_stage_lines" => "暂存代码行",
         "changes_unstage_lines" => "取消暂存代码行",
         "changes_discard_file" => "丢弃文件修改",
+        "changes_discard_files" => "批量丢弃文件修改",
         "changes_restore_noise" => "恢复无效变更",
         "changes_commit" => "创建提交",
         "refs_create_branch" => "创建分支",
@@ -135,6 +136,7 @@ pub fn action_title(action: &str) -> Option<&'static str> {
         "stash_create" => "贮藏修改",
         "stash_apply" => "应用贮藏",
         "stash_pop" => "弹出贮藏",
+        "stash_drop" => "删除贮藏",
         "conflicts_resolve" => "解决冲突",
         "conflicts_continue" => "继续 Git 操作",
         "files_execute" => "文件操作",
@@ -237,6 +239,12 @@ fn dispatch<'a>(
                 .discard_file(root, &field::<String>(args, "relativePath")?)
                 .await,
         ),
+        "changes_discard_files" => operation!(
+            state
+                .changes
+                .discard_files(root, &field::<Vec<String>>(args, "relativePaths")?)
+                .await,
+        ),
         "changes_restore_noise" => operation!(
             state
                 .changes
@@ -306,6 +314,7 @@ fn dispatch<'a>(
         "stash_create" => operation!(state.stashes.create(root, field(args, "request")?).await),
         "stash_apply" => operation!(state.stashes.apply(root, field(args, "selection")?).await),
         "stash_pop" => operation!(state.stashes.pop(root, field(args, "selection")?).await),
+        "stash_drop" => operation!(state.stashes.drop(root, field(args, "selection")?).await),
         "conflicts_resolve" => {
             operation!(state.conflicts.resolve(root, field(args, "request")?).await)
         }

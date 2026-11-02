@@ -32,6 +32,7 @@ export type ChangesOperation =
         | "stageLines"
         | "unstageLines"
         | "discardFile"
+        | "discardFiles"
         | "scanNoise"
         | "restoreNoise"
         | "commit";
@@ -269,6 +270,11 @@ export const useChangesStore = defineStore("changes", () => {
     );
   }
 
+  function discardFiles(relativePaths: string[]): Promise<void> {
+    const paths = [...relativePaths];
+    return mutate("discardFiles", root => backendClient.changesDiscardFiles(root, paths));
+  }
+
   function scanNoise(): Promise<NoiseScan> {
     return run("scanNoise", () => backendClient.changesScanNoise(requireRootPath()));
   }
@@ -319,6 +325,7 @@ export const useChangesStore = defineStore("changes", () => {
     stageLines,
     unstageLines,
     discardFile,
+    discardFiles,
     scanNoise,
     restoreNoise,
     commit,

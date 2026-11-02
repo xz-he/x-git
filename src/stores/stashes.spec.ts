@@ -139,6 +139,20 @@ describe("stashes store", () => {
     expect(useRepositoryStore().snapshot?.conflictCount).toBe(1);
   });
 
+  it("uses the selected stash identity for deletion and applies the refreshed list", async () => {
+    const store = useStashesStore();
+    const selected = entry("b", "stash@{1}");
+    store.snapshot = { entries: [entry(), selected] };
+    store.selectedEntry = selected;
+    const dropped = result("dropped");
+    vi.mocked(backend.stashDrop).mockResolvedValue(dropped);
+    await store.drop(selected);
+    expect(backend.stashDrop).toHaveBeenCalledWith(root, { selector: "stash@{1}", expectedObjectId: "b".repeat(40) });
+    expect(store.snapshot).toEqual(dropped.stashes);
+    expect(store.selectedEntry).toBeUndefined();
+    expect(store.outcome).toBe("dropped");
+  });
+
   it("blocks duplicate submissions synchronously", async () => {
     const pending = deferred<StashMutationResult>();
     vi.mocked(backend.stashApply).mockReturnValue(pending.promise);

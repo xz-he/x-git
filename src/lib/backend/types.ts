@@ -432,7 +432,7 @@ export interface ConflictMutationResult {
 export interface StashDetail { entry: StashEntry; files: StashFileSummary[] }
 export interface StashCreateRequest { message?: string | null; includeUntracked: boolean; paths?: string[] }
 export interface StashMutationResult extends MutationWorkspace {
-  outcome: "created" | "noChanges" | "applied" | "removed" | "retained";
+    outcome: "created" | "noChanges" | "applied" | "removed" | "dropped" | "retained";
   stashes: StashSnapshot;
   error?: BackendError | null;
 }

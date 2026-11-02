@@ -69,3 +69,12 @@ pub async fn stash_pop(
 ) -> Result<StashMutationResult, BackendError> {
     state.stashes.pop(Path::new(&path), selection).await
 }
+
+#[tauri::command]
+pub async fn stash_drop(
+    state: State<'_, AppState>,
+    path: String,
+    selection: StashSelection,
+) -> Result<StashMutationResult, BackendError> {
+    state.stashes.drop(Path::new(&path), selection).await
+}

@@ -424,6 +424,19 @@ impl StashService {
         self.restore(requested_root, selection, true).await
     }
 
+    pub async fn drop(
+        &self,
+        requested_root: &Path,
+        selection: StashSelection,
+    ) -> Result<StashMutationResult, BackendError> {
+        let root = self.repository_root(requested_root).await?;
+        let _guard = self.coordinator.write(&root).await;
+        self.ensure_write_allowed(&root).await?;
+        self.resolve_selection(&root, &selection).await?;
+        self.drop_selected(&root, &selection, StashMutationOutcome::Dropped)
+            .await
+    }
+
     async fn restore(
         &self,
         requested_root: &Path,
@@ -464,15 +477,25 @@ impl StashService {
             result.error = Some(error);
             return Ok(result);
         }
+        self.drop_selected(&root, &selection, StashMutationOutcome::Removed)
+            .await
+    }
+
+    async fn drop_selected(
+        &self,
+        root: &Path,
+        selection: &StashSelection,
+        success: StashMutationOutcome,
+    ) -> Result<StashMutationResult, BackendError> {
         // Git has no compare-and-delete stash API. Recheck immediately before drop;
         // an external CLI can still race between this check and Git's reflog lock.
-        let mut expected = self.snapshot_at_root(&root).await?;
+        let mut expected = self.snapshot_at_root(root).await?;
         let selected_index = expected.entries.iter().position(|entry| {
             entry.selector == selection.selector && entry.object_id == selection.expected_object_id
         });
         let Some(selected_index) = selected_index else {
             return self
-                .refresh(&root, StashMutationOutcome::Retained, Some(stale_stash()))
+                .refresh(root, StashMutationOutcome::Retained, Some(stale_stash()))
                 .await;
         };
         expected.entries.remove(selected_index);
@@ -481,17 +504,17 @@ impl StashService {
         }
         let error = self
             .runner
-            .run_allowing_failure(Some(&root), ["stash", "drop", entry.selector.as_str()])
+            .run_allowing_failure(Some(root), ["stash", "drop", selection.selector.as_str()])
             .await
             .and_then(|output| output.into_result())
             .err();
-        result = self
+        let mut result = self
             .refresh(
-                &root,
+                root,
                 if error.is_some() {
                     StashMutationOutcome::Retained
                 } else {
-                    StashMutationOutcome::Removed
+                    success
                 },
                 error,
             )

@@ -424,6 +424,65 @@ impl ChangesService {
         self.refreshed_workspace(&root).await
     }
 
+    pub async fn discard_files(
+        &self,
+        requested_root: &Path,
+        paths: &[String],
+    ) -> Result<MutationWorkspace, BackendError> {
+        if paths.is_empty() {
+            return Err(BackendError::new(
+                ErrorCode::InvalidPath,
+                "Select at least one file.",
+            ));
+        }
+        if let Some(root) = svn_root(&self.svn_runner, requested_root).await? {
+            let _guard = self.coordinator.write(&root).await;
+            let snapshot = self.svn_snapshot_at_root(&root).await?;
+            let selected = validate_discard_paths(paths, &snapshot)?;
+            for (path, untracked) in selected {
+                if untracked {
+                    remove_untracked_path(&root, &path).await?;
+                } else {
+                    self.svn_runner
+                        .run(Some(&root), path_command(&["revert"], &path))
+                        .await?;
+                }
+            }
+            return self.svn_workspace(&root).await;
+        }
+        let root = repository_root(&self.runner, requested_root).await?;
+        let _guard = self.coordinator.write(&root).await;
+        self.ensure_operation_allows(&root, MutationIntent::Changes).await?;
+        let snapshot = self.snapshot_at_root(&root).await?;
+        let selected = validate_discard_paths(paths, &snapshot)?;
+        let tracked = selected
+            .iter()
+            .filter(|(_, untracked)| !untracked)
+            .flat_map(|(path, _)| path_for_transport(path).into_bytes().into_iter().chain([0]))
+            .collect::<Vec<_>>();
+        if !tracked.is_empty() {
+            self.runner
+                .run_with_input(
+                    Some(&root),
+                    [
+                        "--literal-pathspecs",
+                        "restore",
+                        "--worktree",
+                        "--pathspec-from-file=-",
+                        "--pathspec-file-nul",
+                    ],
+                    tracked,
+                )
+                .await?;
+        }
+        for (path, untracked) in selected {
+            if untracked {
+                remove_untracked_path(&root, &path).await?;
+            }
+        }
+        self.refreshed_workspace(&root).await
+    }
+
     pub async fn stage_hunk(
         &self,
         requested_root: &Path,
@@ -800,6 +859,29 @@ async fn remove_untracked_path(root: &Path, relative_path: &Path) -> Result<(), 
         tokio::fs::remove_file(target).await?;
     }
     Ok(())
+}
+
+fn validate_discard_paths(
+    paths: &[String],
+    snapshot: &ChangesSnapshot,
+) -> Result<Vec<(PathBuf, bool)>, BackendError> {
+    let mut selected = std::collections::BTreeMap::new();
+    for path in paths {
+        let relative = validate_relative_path(path)?;
+        let transport = path_for_transport(&relative);
+        let change = snapshot
+            .files
+            .iter()
+            .find(|file| file.path == transport && file.unstaged && !file.conflict)
+            .ok_or_else(|| {
+                BackendError::new(
+                    ErrorCode::StaleFileOperation,
+                    "Selected files changed; refresh and try again.",
+                )
+            })?;
+        selected.insert(transport, (relative, change.worktree_status == "?"));
+    }
+    Ok(selected.into_values().collect())
 }
 
 fn select_hunk_patch(raw_diff: &str, hunk_index: usize) -> Result<Vec<u8>, BackendError> {
@@ -1591,6 +1673,27 @@ mod tests {
             .await
             .unwrap_err();
         assert_eq!(outside.code, ErrorCode::InvalidPath);
+    }
+
+    #[tokio::test]
+    async fn discard_files_restores_only_selected_worktree_changes() {
+        let fixture = modified_text_fixture().await;
+        run_git(fixture.path(), &["add", "note.txt"]).await;
+        std::fs::write(fixture.path().join("note.txt"), "worktree\n").unwrap();
+        std::fs::write(fixture.path().join("scratch.txt"), "temporary\n").unwrap();
+        std::fs::write(fixture.path().join("keep.txt"), "keep\n").unwrap();
+        let service = ChangesService::default();
+
+        let rejected = service.discard_files(fixture.path(), &["note.txt".into(), "../outside.txt".into()]).await.unwrap_err();
+        assert_eq!(rejected.code, ErrorCode::InvalidPath);
+        assert_eq!(std::fs::read_to_string(fixture.path().join("note.txt")).unwrap(), "worktree\n");
+
+        let result = service.discard_files(fixture.path(), &["note.txt".into(), "scratch.txt".into()]).await.unwrap();
+        assert_eq!(std::fs::read_to_string(fixture.path().join("note.txt")).unwrap(), "changed\n");
+        assert!(!fixture.path().join("scratch.txt").exists());
+        assert!(fixture.path().join("keep.txt").exists());
+        assert!(result.changes.files.iter().any(|file| file.path == "note.txt" && file.staged));
+        assert!(result.changes.files.iter().all(|file| file.path != "scratch.txt"));
     }
 
     #[tokio::test]

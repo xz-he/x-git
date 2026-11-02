@@ -171,6 +171,15 @@ pub async fn changes_discard_file(
 }
 
 #[tauri::command]
+pub async fn changes_discard_files(
+    state: State<'_, AppState>,
+    path: String,
+    relative_paths: Vec<String>,
+) -> Result<MutationWorkspace, BackendError> {
+    state.changes.discard_files(Path::new(&path), &relative_paths).await
+}
+
+#[tauri::command]
 pub async fn changes_commit(
     state: State<'_, AppState>,
     path: String,

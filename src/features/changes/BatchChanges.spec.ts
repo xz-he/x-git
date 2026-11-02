@@ -47,6 +47,38 @@ describe("batch stage and unstage", () => {
     expect(backend.changesUnstageFile).not.toHaveBeenCalled();
     expect(wrapper.get('[aria-label="批量取消暂存"]').attributes('disabled')).toBeDefined();
   });
+  it("confirms selected unstaged paths before discarding them in one request", async () => {
+    vi.mocked(backend.changesDiscardFiles).mockResolvedValue(result());
+    const wrapper = mount(ChangesList); await flushPromises();
+    expect(wrapper.get('[aria-label="丢弃所选文件"]').attributes('disabled')).toBeDefined();
+    await wrapper.get('[aria-label="全选未暂存文件"]').setValue(true);
+    await wrapper.get('[aria-label="丢弃所选文件"]').trigger('click');
+    await flushPromises();
+    const dialog = wrapper.get('[role="alertdialog"]');
+    expect(dialog.text()).toContain('2 个文件');
+    expect(dialog.findAll('code').map(path => path.text())).toEqual(['both.ts', 'new.txt']);
+    await dialog.get('[aria-label="取消丢弃"]').trigger('click');
+    expect(backend.changesDiscardFiles).not.toHaveBeenCalled();
+    await wrapper.get('[aria-label="丢弃所选文件"]').trigger('click');
+    await wrapper.get('[aria-label="确认丢弃所选文件"]').trigger('click');
+    await flushPromises();
+    expect(backend.changesDiscardFiles).toHaveBeenCalledExactlyOnceWith('C:/batch', ['both.ts', 'new.txt']);
+    expect(backend.changesDiscardFile).not.toHaveBeenCalled();
+    expect((wrapper.get('[aria-label="全选未暂存文件"]').element as HTMLInputElement).checked).toBe(false);
+  });
+  it("keeps the selected paths and prevents duplicate discards when a batch fails", async () => {
+    let reject!: (reason: unknown) => void;
+    vi.mocked(backend.changesDiscardFiles).mockImplementationOnce(() => new Promise((_, fail) => { reject = fail; }));
+    const wrapper = mount(ChangesList); await flushPromises();
+    await wrapper.get('[aria-label="选择未暂存文件 new.txt"]').setValue(true);
+    await wrapper.get('[aria-label="丢弃所选文件"]').trigger('click');
+    await wrapper.get('[aria-label="确认丢弃所选文件"]').trigger('click');
+    await wrapper.get('[aria-label="确认丢弃所选文件"]').trigger('click');
+    expect(backend.changesDiscardFiles).toHaveBeenCalledTimes(1);
+    reject({ code: 'gitLocked', message: 'index locked' }); await flushPromises();
+    expect(wrapper.get('[role="alertdialog"]').text()).toContain('new.txt');
+    expect(wrapper.get('[role="alert"]').text()).toContain('index locked');
+  });
   it("blocks duplicate batches while pending and retains failed selections for retry", async () => {
     let reject!: (reason: unknown) => void;
     vi.mocked(backend.changesStageFiles).mockImplementationOnce(() => new Promise((_, fail) => { reject = fail; }));

@@ -284,6 +284,48 @@ async fn create_no_changes_does_not_create_entry_and_include_untracked_is_opt_in
 }
 
 #[tokio::test]
+async fn drop_removes_only_selected_stash_without_touching_worktree() {
+    let repo = fixture(true).await;
+    let root = repo.path();
+    let service = StashService::default();
+    std::fs::write(root.join("tracked.txt"), "first\n").unwrap();
+    service.create(root, request(Some("first"), false)).await.unwrap();
+    std::fs::write(root.join("tracked.txt"), "second\n").unwrap();
+    service.create(root, request(Some("second"), false)).await.unwrap();
+    let before = service.snapshot(root).await.unwrap();
+    let older = &before.entries[1];
+    let selected = StashSelection {
+        selector: older.selector.clone(),
+        expected_object_id: older.object_id.clone(),
+    };
+    std::fs::write(root.join("tracked.txt"), "current work\n").unwrap();
+    let result = service.drop(root, selected).await.unwrap();
+    assert_eq!(result.outcome, StashMutationOutcome::Dropped);
+    assert!(result.error.is_none());
+    assert_eq!(result.stashes.entries.len(), 1);
+    assert_eq!(result.stashes.entries[0].object_id, before.entries[0].object_id);
+    assert_eq!(result.stashes.entries[0].selector, "stash@{0}");
+    assert_eq!(std::fs::read_to_string(root.join("tracked.txt")).unwrap(), "current work\n");
+    assert_eq!(git(root, &["show", ":tracked.txt"]).await, "base\n");
+}
+
+#[tokio::test]
+async fn drop_rejects_stale_selector_after_stash_reordering() {
+    let repo = fixture(true).await;
+    let root = repo.path();
+    let service = StashService::default();
+    std::fs::write(root.join("tracked.txt"), "first\n").unwrap();
+    service.create(root, request(Some("first"), false)).await.unwrap();
+    let stale = selection(root).await;
+    std::fs::write(root.join("tracked.txt"), "second\n").unwrap();
+    service.create(root, request(Some("second"), false)).await.unwrap();
+    let before = service.snapshot(root).await.unwrap();
+    let error = service.drop(root, stale).await.unwrap_err();
+    assert_eq!(error.code, ErrorCode::StaleStash);
+    assert_eq!(service.snapshot(root).await.unwrap(), before);
+}
+
+#[tokio::test]
 async fn detail_and_diff_cover_rename_binary_unicode_and_third_parent_files() {
     let repo = fixture(true).await;
     let root = repo.path();
@@ -493,7 +535,11 @@ async fn active_operation_without_conflicts_blocks_every_stash_write() {
         ErrorCode::GitOperationInProgress
     );
     assert_eq!(
-        service.pop(root, selected).await.unwrap_err().code,
+        service.pop(root, selected.clone()).await.unwrap_err().code,
+        ErrorCode::GitOperationInProgress
+    );
+    assert_eq!(
+        service.drop(root, selected).await.unwrap_err().code,
         ErrorCode::GitOperationInProgress
     );
     assert_eq!(service.snapshot(root).await.unwrap().entries.len(), 1);
